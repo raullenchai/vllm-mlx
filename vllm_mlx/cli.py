@@ -114,6 +114,10 @@ def serve_command(args):
 
     print(f"Loading model: {args.model}")
     print(f"Default max tokens: {args.max_tokens}")
+    if args.draft_model:
+        print("Speculative decoding: ENABLED")
+        print(f"  Draft model: {args.draft_model}")
+        print(f"  Draft tokens: {args.num_draft_tokens}")
 
     # Store MCP config path for FastAPI startup
     if args.mcp_config:
@@ -195,6 +199,8 @@ def serve_command(args):
         max_tokens=args.max_tokens,
         force_mllm=args.mllm,
         gpu_memory_utilization=args.gpu_memory_utilization,
+        draft_model=args.draft_model,
+        num_draft_tokens=args.num_draft_tokens,
     )
 
     # Start server
@@ -802,6 +808,19 @@ Examples:
             "deepseek, kimi, granite, nemotron, xlam, functionary, glm47, minimax. "
             "Required for --enable-auto-tool-choice."
         ),
+    )
+    # Speculative decoding options
+    serve_parser.add_argument(
+        "--draft-model",
+        type=str,
+        default=None,
+        help="Draft model for speculative decoding (must use same tokenizer as main model)",
+    )
+    serve_parser.add_argument(
+        "--num-draft-tokens",
+        type=int,
+        default=4,
+        help="Number of tokens to generate speculatively per step (default: 4)",
     )
     # Reasoning parser options - choices loaded dynamically from registry
     from .reasoning import list_parsers

@@ -165,6 +165,7 @@ class BatchedEngine(BaseEngine):
         self._mllm_scheduler = None  # MLLMScheduler for MLLM
         self._mllm_instance = None  # MLXMultimodalLM instance
         self._loaded = False
+        self._engine_started = False  # Track if engine loop is running
 
     @property
     def model_name(self) -> str:
@@ -806,3 +807,52 @@ class BatchedEngine(BaseEngine):
         if self._engine:
             return self._engine.load_cache_from_disk(cache_dir)
         return 0
+
+    async def _inject_shared_model(
+        self,
+        model,
+        tokenizer,
+        start_engine: bool = True,
+    ) -> None:
+        """
+        Inject a pre-loaded shared model instead of loading a new one.
+
+        This is used by HybridEngine to share a single model instance
+        between SimpleEngine and BatchedEngine, saving ~44GB of RAM.
+
+        Args:
+            model: Pre-loaded MLX model
+            tokenizer: Pre-loaded tokenizer
+            start_engine: Whether to start the engine loop immediately.
+                         Set to False for HybridEngine (lazy start on first use).
+        """
+        from ..engine_core import AsyncEngineCore, EngineConfig
+        from ..scheduler import SchedulerConfig
+
+        self._model = model
+        self._tokenizer = tokenizer
+
+        # Create engine config
+        scheduler_config = self._scheduler_config or SchedulerConfig()
+        engine_config = EngineConfig(
+            model_name=self._model_name,
+            scheduler_config=scheduler_config,
+            stream_interval=self._stream_interval,
+        )
+
+        # Create async engine with shared model
+        self._engine = AsyncEngineCore(
+            model=self._model,
+            tokenizer=self._tokenizer,
+            config=engine_config,
+        )
+
+        # Only start engine loop if requested (HybridEngine starts lazily)
+        if start_engine:
+            await self._engine.engine.start()
+
+        self._loaded = True
+        self._engine_started = start_engine
+        logger.info(
+            f"BatchedEngine injected with shared model: {self._model_name} (started={start_engine})"
+        )

@@ -93,16 +93,25 @@ from .api.models import (
 from .api.tool_calling import (
     build_json_system_prompt,
     convert_tools_for_template,
+    extract_json_schema_for_guided,
     parse_json_output,
     parse_tool_calls,
 )
 from .api.utils import (
     SPECIAL_TOKENS_PATTERN,
     clean_output_text,
+    extract_json_from_response,
     extract_multimodal_content,
     is_mllm_model,  # noqa: F401
+    strip_thinking_tags,
 )
-from .engine import BaseEngine, BatchedEngine, GenerationOutput, SimpleEngine
+from .engine import (
+    BaseEngine,
+    BatchedEngine,
+    GenerationOutput,
+    HybridEngine,
+    SimpleEngine,
+)
 from .tool_parsers import ToolParserManager
 
 logging.basicConfig(level=logging.INFO)
@@ -468,6 +477,8 @@ def load_model(
     max_tokens: int = 32768,
     force_mllm: bool = False,
     gpu_memory_utilization: float = 0.90,
+    draft_model: str | None = None,
+    num_draft_tokens: int = 4,
 ):
     """
     Load a model (auto-detects MLLM vs LLM).
@@ -481,6 +492,8 @@ def load_model(
         force_mllm: Force loading as MLLM even if not auto-detected
         gpu_memory_utilization: Fraction of device memory for Metal allocation
             limit and emergency threshold (0.0-1.0, default 0.90)
+        draft_model: Optional draft model for speculative decoding
+        num_draft_tokens: Number of tokens to generate speculatively per step
     """
     global _engine, _model_name, _default_max_tokens, _tool_parser_instance
 
@@ -492,7 +505,28 @@ def load_model(
     if force_mllm:
         logger.info("Force MLLM mode enabled via --mllm flag")
 
-    if use_batching:
+    if draft_model:
+        logger.info(f"Speculative decoding enabled with draft model: {draft_model}")
+        logger.info(f"  num_draft_tokens: {num_draft_tokens}")
+
+    if use_batching and draft_model:
+        # Hybrid mode: shared model with speculative decoding + continuous batching
+        logger.info(f"Loading model with HybridEngine: {model_name}")
+        logger.info(
+            "  Hybrid mode: speculative decoding for single user, "
+            "batching for multiple users"
+        )
+        _engine = HybridEngine(
+            model_name=model_name,
+            draft_model=draft_model,
+            num_draft_tokens=num_draft_tokens,
+            scheduler_config=scheduler_config,
+            stream_interval=stream_interval,
+            force_mllm=force_mllm,
+        )
+        # HybridEngine will be started in lifespan (uvicorn's event loop)
+        logger.info(f"Model loaded (hybrid mode): {model_name}")
+    elif use_batching:
         logger.info(f"Loading model with BatchedEngine: {model_name}")
         _engine = BatchedEngine(
             model_name=model_name,
@@ -506,7 +540,12 @@ def load_model(
         logger.info(f"Model loaded (batched mode): {model_name}")
     else:
         logger.info(f"Loading model with SimpleEngine: {model_name}")
-        _engine = SimpleEngine(model_name=model_name, force_mllm=force_mllm)
+        _engine = SimpleEngine(
+            model_name=model_name,
+            force_mllm=force_mllm,
+            draft_model=draft_model,
+            num_draft_tokens=num_draft_tokens,
+        )
         # Start SimpleEngine synchronously (no background loop)
         # Use new_event_loop() for Python 3.10+ compatibility (get_event_loop() is deprecated)
         loop = asyncio.new_event_loop()
@@ -1374,11 +1413,34 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     start_time = time.perf_counter()
     timeout = request.timeout or _default_timeout
 
-    output = await _wait_with_disconnect(
-        engine.chat(messages=messages, **chat_kwargs),
-        raw_request,
-        timeout=timeout,
-    )
+    # Check if we should use guided generation for JSON schema
+    use_guided = False
+    json_schema = None
+    if response_format and not request.tools:
+        json_schema = extract_json_schema_for_guided(response_format)
+        if json_schema and hasattr(engine, "supports_guided_generation"):
+            use_guided = engine.supports_guided_generation
+            if use_guided:
+                logger.info("Using guided generation for JSON schema enforcement")
+
+    if use_guided and json_schema:
+        # Use guided generation for constrained JSON output
+        output = await _wait_with_disconnect(
+            engine.generate_with_schema(
+                messages=messages,
+                json_schema=json_schema,
+                **chat_kwargs,
+            ),
+            raw_request,
+            timeout=timeout,
+        )
+    else:
+        # Standard generation
+        output = await _wait_with_disconnect(
+            engine.chat(messages=messages, **chat_kwargs),
+            raw_request,
+            timeout=timeout,
+        )
     if output is None:
         return Response(status_code=499)  # Client closed request
 
@@ -1412,12 +1474,22 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # Determine finish reason
     finish_reason = "tool_calls" if tool_calls else output.finish_reason
 
+    # Clean and strip thinking tags from content
+    # Thinking tags break JSON parsing in clients expecting pure content
+    # Also extract JSON if model outputs reasoning text before JSON
+    final_content = None
+    if cleaned_text:
+        final_content = strip_thinking_tags(clean_output_text(cleaned_text))
+        # If response looks like it ends with JSON, extract just the JSON part
+        # This handles Qwen3 reasoning mode: "Let me think... {json}"
+        final_content = extract_json_from_response(final_content)
+
     return ChatCompletionResponse(
         model=request.model,
         choices=[
             ChatCompletionChoice(
                 message=AssistantMessage(
-                    content=clean_output_text(cleaned_text) if cleaned_text else None,
+                    content=final_content,
                     reasoning=reasoning_text,
                     tool_calls=tool_calls,
                 ),
@@ -1436,7 +1508,11 @@ def _inject_json_instruction(messages: list, instruction: str) -> list:
     """
     Inject JSON instruction into messages.
 
-    If a system message exists, append to it. Otherwise, prepend a new system message.
+    PREPENDS instruction to system message for better instruction following.
+    JSON formatting instructions at the beginning of system message are more
+    likely to be followed than instructions at the end.
+
+    If a system message exists, prepend to it. Otherwise, prepend a new system message.
     """
     messages = list(messages)  # Make a copy
 
@@ -1449,14 +1525,15 @@ def _inject_json_instruction(messages: list, instruction: str) -> list:
             break
 
     if system_idx is not None:
-        # Append to existing system message
+        # PREPEND to existing system message (not append!)
+        # Instructions at the start are more effective
         msg = messages[system_idx]
         if isinstance(msg, dict):
             existing = msg.get("content", "")
-            msg["content"] = f"{existing}\n\n{instruction}"
+            msg["content"] = f"{instruction}\n\n{existing}"
         else:
             existing = getattr(msg, "content", "") or ""
-            msg.content = f"{existing}\n\n{instruction}"
+            msg.content = f"{instruction}\n\n{existing}"
     else:
         # Prepend new system message
         messages.insert(0, {"role": "system", "content": instruction})
@@ -2306,6 +2383,18 @@ Examples:
         default=None,
         help="Default top_p for generation when not specified in request",
     )
+    parser.add_argument(
+        "--draft-model",
+        type=str,
+        default=None,
+        help="Draft model for speculative decoding (must use same tokenizer as main model)",
+    )
+    parser.add_argument(
+        "--num-draft-tokens",
+        type=int,
+        default=4,
+        help="Number of tokens to generate speculatively per step (default: 4)",
+    )
 
     args = parser.parse_args()
 
@@ -2363,6 +2452,8 @@ Examples:
         use_batching=args.continuous_batching,
         max_tokens=args.max_tokens,
         force_mllm=args.mllm,
+        draft_model=args.draft_model,
+        num_draft_tokens=args.num_draft_tokens,
     )
 
     # Start server

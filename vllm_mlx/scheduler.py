@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import mlx.core as mx
 from mlx_lm.generate import BatchGenerator
 from mlx_lm.sample_utils import make_sampler
+from mlx_lm.tokenizer_utils import NaiveStreamingDetokenizer
 
 from .memory_cache import MemoryAwarePrefixCache, MemoryCacheConfig
 from .paged_cache import PagedCacheManager
@@ -976,6 +977,9 @@ class Scheduler:
         # Detect if tokenizer is a processor (MLLM) and get the actual tokenizer
         self._actual_tokenizer = self._get_actual_tokenizer(tokenizer)
 
+        # Per-request streaming detokenizers for UTF-8-safe incremental decode
+        self._detokenizer_pool: Dict[str, Any] = {}
+
         # Request management - following vLLM's design
         self.waiting: deque[Request] = deque()  # Waiting queue (FCFS)
         self.running: Dict[str, Request] = {}  # Running requests by ID
@@ -1075,6 +1079,21 @@ class Scheduler:
         Decode token IDs to text, handling both tokenizers and processors.
         """
         return self._actual_tokenizer.decode(token_ids)
+
+    def _get_detokenizer(self, request_id: str) -> Any:
+        """Get or create a streaming detokenizer for a request."""
+        if request_id not in self._detokenizer_pool:
+            if hasattr(self.tokenizer, "detokenizer"):
+                detok = self.tokenizer.detokenizer
+            else:
+                detok = NaiveStreamingDetokenizer(self._actual_tokenizer)
+            detok.reset()
+            self._detokenizer_pool[request_id] = detok
+        return self._detokenizer_pool[request_id]
+
+    def _cleanup_detokenizer(self, request_id: str) -> None:
+        """Remove the streaming detokenizer for a finished request."""
+        self._detokenizer_pool.pop(request_id, None)
 
     def _get_stop_tokens(self) -> Set[int]:
         """Get stop token IDs from tokenizer or processor."""
@@ -1848,11 +1867,13 @@ class Scheduler:
 
                 request.first_token_time = _time.time()
 
-            # Decode the new token (skip stop tokens — they are not content)
+            # Decode the new token using streaming detokenizer (UTF-8 safe)
             if response.finish_reason == "stop":
                 new_text = ""
             else:
-                new_text = self._decode_tokens([response.token])
+                detok = self._get_detokenizer(request_id)
+                detok.add_token(response.token)
+                new_text = detok.last_segment
 
             # Create output
             output = RequestOutput(
@@ -1875,9 +1896,15 @@ class Scheduler:
                 output.finish_reason = response.finish_reason
                 finished_ids.add(request_id)
 
-                # Decode full output
-                output.output_text = self._decode_tokens(request.output_token_ids)
+                # Finalize streaming detokenizer and get full output
+                detok = self._detokenizer_pool.get(request_id)
+                if detok is not None:
+                    detok.finalize()
+                    output.output_text = detok.text
+                else:
+                    output.output_text = self._decode_tokens(request.output_token_ids)
                 request.output_text = output.output_text
+                self._cleanup_detokenizer(request_id)
 
                 # Extract cache for future reuse (critical for agentic multi-turn)
                 if hasattr(response, "prompt_cache"):

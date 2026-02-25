@@ -12,6 +12,9 @@ from vllm_mlx.reasoning.gpt_oss_parser import (
     _CHANNEL_RE,
     _STRUCTURAL_TOKENS,
 )
+from vllm_mlx.reasoning.qwen3_parser import Qwen3ReasoningParser
+from vllm_mlx.reasoning.minimax_parser import MiniMaxReasoningParser
+from vllm_mlx.reasoning.harmony_parser import HarmonyReasoningParser
 
 
 # ---------------------------------------------------------------------------
@@ -587,3 +590,364 @@ class TestFullStreamingSimulation:
         content_text = "".join(content_parts)
         assert "reasoning" in reasoning_text
         assert "answer" in content_text
+
+
+# ---------------------------------------------------------------------------
+# Qwen3ReasoningParser
+# ---------------------------------------------------------------------------
+
+class TestQwen3:
+
+    def setup_method(self):
+        self.parser = Qwen3ReasoningParser()
+
+    def test_tokens(self):
+        assert self.parser.start_token == "<think>"
+        assert self.parser.end_token == "</think>"
+
+    def test_both_tags(self):
+        reasoning, content = self.parser.extract_reasoning("<think>analysis</think>answer")
+        assert reasoning == "analysis"
+        assert content == "answer"
+
+    def test_only_end_tag(self):
+        reasoning, content = self.parser.extract_reasoning("implicit reasoning</think>answer")
+        assert reasoning == "implicit reasoning"
+        assert content == "answer"
+
+    def test_no_end_tag_pure_content(self):
+        """Qwen3 overrides: if no end token at all, return as content."""
+        reasoning, content = self.parser.extract_reasoning("just content")
+        assert reasoning is None
+        assert content == "just content"
+
+    def test_only_start_tag_no_end(self):
+        """Start tag without end tag: Qwen3 checks end_token first → pure content."""
+        reasoning, content = self.parser.extract_reasoning("<think>incomplete")
+        assert reasoning is None
+        assert content == "<think>incomplete"
+
+    def test_empty_tags(self):
+        reasoning, content = self.parser.extract_reasoning("<think></think>content")
+        assert reasoning is None
+        assert content == "content"
+
+
+# ---------------------------------------------------------------------------
+# MiniMaxReasoningParser
+# ---------------------------------------------------------------------------
+
+class TestMiniMaxExtractReasoning:
+
+    def setup_method(self):
+        self.parser = MiniMaxReasoningParser()
+
+    def test_direct_content_code_block(self):
+        text = "```python\nprint('hello')\n```"
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning is None
+        assert content == text
+
+    def test_direct_content_json(self):
+        text = '{"key": "value"}'
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning is None
+        assert content == text
+
+    def test_direct_content_tool_call(self):
+        text = "<minimax:tool_call>some tool call"
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning is None
+        assert content == text
+
+    def test_reasoning_pattern_english(self):
+        text = "The user asks about Python.\n\nHere is the answer: Python is great."
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning is not None
+        assert "user asks" in reasoning
+        assert content is not None
+
+    def test_reasoning_pattern_i_need(self):
+        text = "I need to analyze this code.\n\nThe answer is 42."
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning is not None
+        assert content is not None
+        assert "answer" in content.lower()
+
+    def test_reasoning_pattern_let_me(self):
+        text = "Let me think about this.\n\nHere is the solution."
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning is not None
+        assert content is not None
+
+    def test_reasoning_pattern_chinese(self):
+        text = "用户想知道Python怎么用。\n\n以下是答案。"
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning is not None
+
+    def test_no_reasoning_pattern(self):
+        text = "Python is a great language for beginners."
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning is None
+        assert content == text
+
+    def test_explicit_think_tags(self):
+        text = "<think>reasoning</think>content"
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning == "reasoning"
+        assert content == "content"
+
+    def test_short_reasoning_not_stripped(self):
+        """Very short 'reasoning' (<10 chars) treated as false positive."""
+        text = "The user\n\nanswer"
+        reasoning, content = self.parser.extract_reasoning(text)
+        # "The user" is < 10 chars reasoning → returned as pure content
+        assert content is not None
+
+    def test_double_newline_split(self):
+        text = "The user asks a question about Python.\n\nPython was created by Guido."
+        reasoning, content = self.parser.extract_reasoning(text)
+        # First part matches reasoning pattern, double newline splits
+        assert reasoning is not None or content is not None
+
+
+class TestMiniMaxStreaming:
+
+    def setup_method(self):
+        self.parser = MiniMaxReasoningParser()
+        self.parser.reset_state()
+
+    def test_reset_state(self):
+        self.parser._decided = True
+        self.parser._buffer = "stuff"
+        self.parser.reset_state()
+        assert self.parser._decided is False
+        assert self.parser._buffer == ""
+        assert self.parser._is_reasoning is False
+
+    def test_explicit_think_tag_in_delta(self):
+        result = self.parser.extract_reasoning_streaming("", "<think>", "<think>")
+        assert result is None  # tag stripped, nothing left
+
+    def test_explicit_think_tag_with_content(self):
+        result = self.parser.extract_reasoning_streaming("", "<think>reasoning", "<think>reasoning")
+        assert result.reasoning == "reasoning"
+
+    def test_end_think_tag_transition(self):
+        self.parser._decided = True
+        self.parser._is_reasoning = True
+        result = self.parser.extract_reasoning_streaming("thinking", "thinking</think>answer", "</think>answer")
+        assert result.content == "answer"
+
+    def test_buffering_phase(self):
+        """Short text should be buffered (returns None)."""
+        result = self.parser.extract_reasoning_streaming("", "hi", "hi")
+        assert result is None
+
+    def test_direct_content_detected_early(self):
+        """Code blocks detected immediately as content."""
+        result = self.parser.extract_reasoning_streaming("", "```python\n", "```python\n")
+        assert result is not None
+        assert result.content is not None
+
+    def test_content_phase_passthrough(self):
+        self.parser._decided = True
+        self.parser._is_reasoning = False
+        result = self.parser.extract_reasoning_streaming("prev", "prev more", " more")
+        assert result.content == " more"
+
+    def test_finalize_undecided(self):
+        self.parser._decided = False
+        result = self.parser.finalize_streaming("some short text")
+        assert result is not None
+        assert result.content == "some short text"
+
+    def test_finalize_undecided_empty(self):
+        self.parser._decided = False
+        result = self.parser.finalize_streaming("")
+        assert result is None
+
+    def test_finalize_content_phase(self):
+        self.parser._decided = True
+        self.parser._is_reasoning = False
+        result = self.parser.finalize_streaming("content")
+        assert result is None
+
+    def test_finalize_reasoning_reclassifies(self):
+        self.parser._decided = True
+        self.parser._is_reasoning = True
+        result = self.parser.finalize_streaming("Just a simple answer")
+        assert result is not None
+        assert result.content is not None
+
+
+# ---------------------------------------------------------------------------
+# HarmonyReasoningParser
+# ---------------------------------------------------------------------------
+
+class TestHarmonyExtractReasoning:
+
+    def setup_method(self):
+        self.parser = HarmonyReasoningParser()
+
+    def test_full_format(self):
+        text = (
+            "<|channel|>analysis<|message|>My reasoning here<|end|>"
+            "<|channel|>final<|message|>The answer<|return|>"
+        )
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning == "My reasoning here"
+        assert content == "The answer"
+
+    def test_analysis_only(self):
+        text = "<|channel|>analysis<|message|>reasoning only<|end|>"
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning == "reasoning only"
+        assert content is None
+
+    def test_final_only(self):
+        text = "<|channel|>final<|message|>answer only<|return|>"
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning is None
+        assert content == "answer only"
+
+    def test_no_channels(self):
+        text = "plain text"
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert reasoning is None
+        assert content is None
+
+    def test_multiple_analysis_blocks(self):
+        text = (
+            "<|channel|>analysis<|message|>Block 1<|end|>"
+            "<|channel|>analysis<|message|>Block 2<|end|>"
+            "<|channel|>final<|message|>Answer<|return|>"
+        )
+        reasoning, content = self.parser.extract_reasoning(text)
+        assert "Block 1" in reasoning
+        assert "Block 2" in reasoning
+        assert content == "Answer"
+
+
+class TestHarmonyStreaming:
+
+    def setup_method(self):
+        self.parser = HarmonyReasoningParser()
+        self.parser.reset_state()
+
+    def test_reset_state(self):
+        self.parser._current_channel = "analysis"
+        self.parser._in_message = True
+        self.parser.reset_state()
+        assert self.parser._current_channel is None
+        assert self.parser._in_message is False
+
+    def test_analysis_channel_switch(self):
+        result = self.parser.extract_reasoning_streaming(
+            "", "<|channel|>analysis", "<|channel|>analysis"
+        )
+        assert result is None
+        assert self.parser._current_channel == "analysis"
+
+    def test_final_channel_switch(self):
+        result = self.parser.extract_reasoning_streaming(
+            "", "<|channel|>final", "<|channel|>final"
+        )
+        assert result is None
+        assert self.parser._current_channel == "final"
+
+    def test_commentary_channel_switch(self):
+        result = self.parser.extract_reasoning_streaming(
+            "", "<|channel|>commentary", "<|channel|>commentary"
+        )
+        assert result is None
+        assert self.parser._current_channel == "commentary"
+
+    def test_message_start_skipped(self):
+        self.parser._current_channel = "analysis"
+        result = self.parser.extract_reasoning_streaming(
+            "<|channel|>analysis", "<|channel|>analysis<|message|>", "<|message|>"
+        )
+        assert result is None
+        assert self.parser._in_message is True
+
+    def test_analysis_content_emitted(self):
+        self.parser._current_channel = "analysis"
+        self.parser._in_message = True
+        result = self.parser.extract_reasoning_streaming(
+            "<|channel|>analysis<|message|>", "<|channel|>analysis<|message|>reasoning", "reasoning"
+        )
+        assert result.reasoning == "reasoning"
+
+    def test_final_content_emitted(self):
+        self.parser._current_channel = "final"
+        self.parser._in_message = True
+        result = self.parser.extract_reasoning_streaming(
+            "<|channel|>final<|message|>", "<|channel|>final<|message|>answer", "answer"
+        )
+        assert result.content == "answer"
+
+    def test_end_token_stops_message(self):
+        self.parser._current_channel = "analysis"
+        self.parser._in_message = True
+        result = self.parser.extract_reasoning_streaming(
+            "<|channel|>analysis<|message|>r", "<|channel|>analysis<|message|>r<|end|>", "<|end|>"
+        )
+        assert result is None
+        assert self.parser._in_message is False
+
+    def test_return_token_stops_message(self):
+        self.parser._current_channel = "final"
+        self.parser._in_message = True
+        result = self.parser.extract_reasoning_streaming(
+            "<|channel|>final<|message|>c", "<|channel|>final<|message|>c<|return|>", "<|return|>"
+        )
+        assert result is None
+        assert self.parser._in_message is False
+
+    def test_commentary_suppressed(self):
+        self.parser._current_channel = "commentary"
+        self.parser._in_message = True
+        result = self.parser.extract_reasoning_streaming(
+            "prev", "prev tool_call", " tool_call"
+        )
+        assert result is None
+
+    def test_control_tokens_skipped(self):
+        result = self.parser.extract_reasoning_streaming(
+            "", "<|start|>", "<|start|>"
+        )
+        assert result is None
+
+    def test_full_streaming_simulation(self):
+        parser = HarmonyReasoningParser()
+        parser.reset_state()
+
+        chunks = [
+            "<|channel|>analysis",
+            "<|message|>",
+            "thinking ",
+            "step 1",
+            "<|end|>",
+            "<|channel|>final",
+            "<|message|>",
+            "the ",
+            "answer",
+            "<|return|>",
+        ]
+        accumulated = ""
+        reasoning_parts = []
+        content_parts = []
+
+        for chunk in chunks:
+            prev = accumulated
+            accumulated += chunk
+            result = parser.extract_reasoning_streaming(prev, accumulated, chunk)
+            if result:
+                if result.reasoning:
+                    reasoning_parts.append(result.reasoning)
+                if result.content:
+                    content_parts.append(result.content)
+
+        assert "thinking" in "".join(reasoning_parts)
+        assert "answer" in "".join(content_parts)

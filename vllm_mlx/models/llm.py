@@ -428,10 +428,18 @@ class MLXLanguageModel:
                         should_stop = True
                         break
 
-            finished = should_stop or token_count >= max_tokens
+            # Check if mlx-lm signalled completion (EOS token hit)
+            mlx_finished = getattr(response, "finish_reason", None) is not None
+
+            finished = should_stop or token_count >= max_tokens or mlx_finished
             finish_reason = None
             if finished:
-                finish_reason = "stop" if should_stop else "length"
+                if should_stop:
+                    finish_reason = "stop"
+                elif mlx_finished:
+                    finish_reason = getattr(response, "finish_reason", "stop")
+                else:
+                    finish_reason = "length"
                 # Save cache BEFORE yielding the finished chunk.
                 # The caller may break/abandon this generator after
                 # receiving the finished chunk, so code after yield

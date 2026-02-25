@@ -96,6 +96,8 @@ class MiniMaxToolLogitsProcessor:
         self._active_pattern: str | None = None
         self._pattern_pos = 0  # Position within active pattern's token sequence
         self._last_param_close_pos = -1  # Track last </parameter> position to avoid re-triggering
+        self._consecutive_bias_count = 0  # Safety: escape hatch for stuck patterns
+        self._max_consecutive_bias = 50  # Max tokens to bias before force-resetting
 
     def reset(self) -> None:
         """Reset state for a new generation."""
@@ -103,6 +105,7 @@ class MiniMaxToolLogitsProcessor:
         self._active_pattern = None
         self._pattern_pos = 0
         self._last_param_close_pos = -1
+        self._consecutive_bias_count = 0
 
     def __call__(self, token_ids: Any, logits: Any) -> Any:
         """
@@ -126,6 +129,17 @@ class MiniMaxToolLogitsProcessor:
         if not id_list:
             return logits
 
+        # Safety: escape hatch if stuck in a bias loop
+        if self._consecutive_bias_count >= self._max_consecutive_bias:
+            logger.warning(
+                "Tool logits processor hit max consecutive bias limit "
+                f"({self._max_consecutive_bias}), resetting state"
+            )
+            self._active_pattern = None
+            self._pattern_pos = 0
+            self._consecutive_bias_count = 0
+            return logits
+
         # Decode last token to update recent text
         last_token_text = self.tokenizer.decode(
             [id_list[-1]], skip_special_tokens=False
@@ -141,6 +155,7 @@ class MiniMaxToolLogitsProcessor:
             if self._pattern_pos < len(pattern_tokens):
                 target_token = pattern_tokens[self._pattern_pos]
                 self._pattern_pos += 1
+                self._consecutive_bias_count += 1
 
                 # Add bias to the expected token
                 bias = mx.zeros_like(logits)
@@ -154,7 +169,11 @@ class MiniMaxToolLogitsProcessor:
                 # re-activating on stale _recent_text
                 self._active_pattern = None
                 self._pattern_pos = 0
+                self._consecutive_bias_count = 0
                 return logits
+
+        # Not biasing — reset counter
+        self._consecutive_bias_count = 0
 
         # Check if we should start tracking a pattern
         for pattern, trigger in self.PATTERNS:
@@ -166,6 +185,7 @@ class MiniMaxToolLogitsProcessor:
                     # Bias first token
                     target_token = pattern_tokens[0]
                     self._pattern_pos = 1
+                    self._consecutive_bias_count = 1
 
                     bias = mx.zeros_like(logits)
                     if logits.ndim == 2:

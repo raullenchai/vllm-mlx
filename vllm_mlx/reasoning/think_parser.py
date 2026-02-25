@@ -43,6 +43,12 @@ class BaseThinkingReasoningParser(ReasoningParser):
 
     def __init__(self, tokenizer=None):
         super().__init__(tokenizer)
+        self._saw_any_tag = False
+
+    def reset_state(self):
+        """Reset state for a new streaming request."""
+        super().reset_state()
+        self._saw_any_tag = False
 
     def extract_reasoning(
         self,
@@ -121,6 +127,7 @@ class BaseThinkingReasoningParser(ReasoningParser):
 
         # Case 1: Explicit <think> found in text - standard behavior
         if start_in_current:
+            self._saw_any_tag = True
             return self._handle_explicit_think(
                 previous_text, delta_text, start_in_prev, end_in_prev, end_in_delta
             )
@@ -128,6 +135,7 @@ class BaseThinkingReasoningParser(ReasoningParser):
         # Case 2: No <think> but </think> found - implicit reasoning mode
         # This handles when <think> was injected in the prompt
         if self.end_token in current_text:
+            self._saw_any_tag = True
             return self._handle_implicit_think(delta_text, end_in_prev, end_in_delta)
 
         # Case 3: No think tags seen yet

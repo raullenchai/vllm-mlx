@@ -920,3 +920,127 @@ class TestGptOssParser:
         reasoning, content = parser.extract_reasoning(output)
         assert "<|constrain|>" not in (content or "")
         assert "<|channel|>" not in (content or "")
+
+
+class TestDeepSeekNoTagThreshold:
+    """Tests for the no-tag content threshold in DeepSeek-R1 parser."""
+
+    @pytest.fixture
+    def parser(self):
+        """Create DeepSeek-R1 parser."""
+        return get_parser("deepseek_r1")()
+
+    def test_no_tag_long_output_becomes_content(self, parser):
+        """Long output without any tags should become content after threshold."""
+        parser.reset_state()
+
+        # Generate text longer than 64 chars without any think tags
+        text = "This is a regular response without any thinking tags. " * 3
+        accumulated = ""
+        content_parts = []
+        reasoning_parts = []
+
+        for char in text:
+            prev = accumulated
+            accumulated += char
+            result = parser.extract_reasoning_streaming(prev, accumulated, char)
+            if result:
+                if result.content:
+                    content_parts.append(result.content)
+                if result.reasoning:
+                    reasoning_parts.append(result.reasoning)
+
+        # After threshold, new chars should go to content
+        full_content = "".join(content_parts)
+        assert len(full_content) > 0, "Long no-tag output should have content"
+
+    def test_with_tags_still_separates_correctly(self, parser):
+        """Output with tags should still be correctly separated."""
+        parser.reset_state()
+
+        tokens = ["<think>", "reasoning here", "</think>", "content here"]
+        accumulated = ""
+        reasoning_parts = []
+        content_parts = []
+
+        for token in tokens:
+            prev = accumulated
+            accumulated += token
+            result = parser.extract_reasoning_streaming(prev, accumulated, token)
+            if result:
+                if result.reasoning:
+                    reasoning_parts.append(result.reasoning)
+                if result.content:
+                    content_parts.append(result.content)
+
+        assert "reasoning here" in "".join(reasoning_parts)
+        assert "content here" in "".join(content_parts)
+
+    def test_finalize_corrects_short_no_tag_output(self, parser):
+        """finalize_streaming should correct short no-tag output."""
+        parser.reset_state()
+
+        # Stream a short output (under 64 chars) without tags
+        text = "Short answer."
+        accumulated = ""
+
+        for char in text:
+            prev = accumulated
+            accumulated += char
+            parser.extract_reasoning_streaming(prev, accumulated, char)
+
+        # Finalize should emit correction
+        correction = parser.finalize_streaming(accumulated)
+        assert correction is not None
+        assert correction.content == text
+
+    def test_finalize_no_correction_with_tags(self, parser):
+        """finalize_streaming should not correct when tags were seen."""
+        parser.reset_state()
+
+        text = "<think>thinking</think>answer"
+        accumulated = ""
+
+        for char in text:
+            prev = accumulated
+            accumulated += char
+            parser.extract_reasoning_streaming(prev, accumulated, char)
+
+        # No correction needed - tags were seen
+        correction = parser.finalize_streaming(accumulated)
+        assert correction is None
+
+    def test_finalize_no_correction_for_long_no_tag(self, parser):
+        """finalize_streaming should not correct long no-tag output (already content)."""
+        parser.reset_state()
+
+        text = "A" * 100  # Over threshold
+        accumulated = ""
+
+        for char in text:
+            prev = accumulated
+            accumulated += char
+            parser.extract_reasoning_streaming(prev, accumulated, char)
+
+        # No correction needed - already classified as content past threshold
+        correction = parser.finalize_streaming(accumulated)
+        assert correction is None
+
+    def test_saw_any_tag_flag_persists(self, parser):
+        """_saw_any_tag should persist and reset correctly."""
+        parser.reset_state()
+        assert not parser._saw_any_tag
+
+        # Stream with tags
+        text = "<think>test</think>done"
+        accumulated = ""
+        for char in text:
+            prev = accumulated
+            accumulated += char
+            parser.extract_reasoning_streaming(prev, accumulated, char)
+
+        assert parser._saw_any_tag
+
+        # Reset should clear it
+        parser.reset_state()
+        assert not parser._saw_any_tag

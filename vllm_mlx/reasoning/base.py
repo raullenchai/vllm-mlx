@@ -108,3 +108,21 @@ class ReasoningParser(ABC):
         This is intentionally a default no-op implementation.
         """
         pass
+
+    def finalize_streaming(  # noqa: B027
+        self, accumulated_text: str
+    ) -> "DeltaMessage | None":
+        """
+        Finalize streaming and return optional correction chunk.
+
+        Called after the stream loop completes. Subclasses can override
+        to emit a correction (e.g., reclassifying short no-tag output
+        that was initially treated as reasoning).
+
+        Args:
+            accumulated_text: Complete accumulated text from the stream.
+
+        Returns:
+            DeltaMessage correction chunk, or None if no correction needed.
+        """
+        pass

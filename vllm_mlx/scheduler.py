@@ -960,6 +960,7 @@ class Scheduler:
         model: Any,
         tokenizer: Any,
         config: Optional[SchedulerConfig] = None,
+        tool_logits_processor_factory: Optional[Any] = None,
     ):
         """
         Initialize the scheduler.
@@ -968,10 +969,14 @@ class Scheduler:
             model: The MLX model
             tokenizer: The tokenizer
             config: Scheduler configuration
+            tool_logits_processor_factory: Optional callable that creates a
+                logits processor for tool call structural token biasing.
+                Called with no args, returns a processor or None.
         """
         self.model = model
         self.tokenizer = tokenizer
         self.config = config or SchedulerConfig()
+        self._tool_logits_processor_factory = tool_logits_processor_factory
 
         # Detect if tokenizer is a processor (MLLM) and get the actual tokenizer
         self._actual_tokenizer = self._get_actual_tokenizer(tokenizer)
@@ -1764,11 +1769,19 @@ class Scheduler:
             # Wrap in try/except: if cache shapes are incompatible
             # (e.g. stale entry after BatchGenerator recreation),
             # fall back to no-cache insert instead of crashing.
+            # Create per-request logits processors
+            request_logits_processors = None
+            if self._tool_logits_processor_factory:
+                processor = self._tool_logits_processor_factory()
+                if processor is not None:
+                    request_logits_processors = [[processor]]
+
             try:
                 uids = self.batch_generator.insert(
                     [tokens_to_process],
                     max_tokens=[request.sampling_params.max_tokens],
                     caches=[cache_to_use] if cache_to_use else None,
+                    logits_processors=request_logits_processors,
                 )
             except Exception as e:
                 if cache_to_use is not None:
@@ -1785,6 +1798,7 @@ class Scheduler:
                         [tokens_to_process],
                         max_tokens=[request.sampling_params.max_tokens],
                         caches=None,
+                        logits_processors=request_logits_processors,
                     )
                 else:
                     raise

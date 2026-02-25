@@ -157,6 +157,7 @@ class BatchedEngine(BaseEngine):
         self._stream_interval = stream_interval
         self._gpu_memory_utilization = gpu_memory_utilization
         self._is_mllm = force_mllm or is_mllm_model(model_name)
+        self._tool_logits_processor_factory = None
 
         self._model = None
         self._processor = None  # For MLLM
@@ -308,6 +309,7 @@ class BatchedEngine(BaseEngine):
             scheduler_config=scheduler_config,
             stream_interval=self._stream_interval,
             gpu_memory_utilization=self._gpu_memory_utilization,
+            tool_logits_processor_factory=self._tool_logits_processor_factory,
         )
 
         # Create async engine
@@ -838,6 +840,7 @@ class BatchedEngine(BaseEngine):
             model_name=self._model_name,
             scheduler_config=scheduler_config,
             stream_interval=self._stream_interval,
+            tool_logits_processor_factory=self._tool_logits_processor_factory,
         )
 
         # Create async engine with shared model

@@ -168,6 +168,7 @@ _reasoning_parser = None  # ReasoningParser instance when enabled
 _enable_auto_tool_choice: bool = False
 _tool_call_parser: str | None = None  # Parser name: auto, mistral, qwen, llama, hermes
 _tool_parser_instance = None  # Instantiated parser
+_enable_tool_logits_bias: bool = False  # Jump-forward decoding for tool calls
 
 # GC control (Tier 0 optimization)
 _gc_control: bool = True  # Disable GC during generation to avoid latency spikes
@@ -641,6 +642,37 @@ def load_model(
     _engine.preserve_native_tool_format = _detect_native_tool_support()
     if _engine.preserve_native_tool_format:
         logger.info(f"Native tool format enabled for parser: {_tool_call_parser}")
+
+    # Set up tool logits bias processor factory (jump-forward decoding)
+    if _enable_tool_logits_bias and _enable_auto_tool_choice and _tool_call_parser:
+        try:
+            from .api.tool_logits import create_tool_logits_processor
+
+            tokenizer = None
+            if hasattr(_engine, "_tokenizer"):
+                tokenizer = _engine._tokenizer
+            elif hasattr(_engine, "tokenizer"):
+                tokenizer = _engine.tokenizer
+            if tokenizer is not None:
+                # Create factory that produces fresh processors per request
+                def _make_factory(parser_name, tok):
+                    def factory():
+                        return create_tool_logits_processor(parser_name, tok)
+                    return factory
+
+                factory = _make_factory(_tool_call_parser, tokenizer)
+                # Set on BatchedEngine for use during scheduler init
+                if hasattr(_engine, "_tool_logits_processor_factory"):
+                    _engine._tool_logits_processor_factory = factory
+                logger.info(
+                    f"Tool logits bias enabled for parser: {_tool_call_parser}"
+                )
+            else:
+                logger.warning(
+                    "Tool logits bias requested but tokenizer not available"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to set up tool logits bias: {e}")
 
     logger.info(f"Default max tokens: {_default_max_tokens}")
 
@@ -2317,6 +2349,26 @@ async def stream_chat_completion(
                 usage=get_usage(output) if output.finished else None,
             )
             yield f"data: {chunk.model_dump_json()}\n\n"
+
+    # Finalize reasoning parser: emit correction if short no-tag output
+    # was misclassified as reasoning during streaming.
+    if _reasoning_parser and accumulated_text:
+        correction = _reasoning_parser.finalize_streaming(accumulated_text)
+        if correction and correction.content:
+            correction_chunk = ChatCompletionChunk(
+                id=response_id,
+                model=request.model,
+                choices=[
+                    ChatCompletionChunkChoice(
+                        delta=ChatCompletionChunkDelta(
+                            content=correction.content,
+                        ),
+                        finish_reason=None,
+                    )
+                ],
+                usage=None,
+            )
+            yield f"data: {correction_chunk.model_dump_json()}\n\n"
 
     # Fallback: if tool parser accumulated text but never emitted tool_calls
     # (e.g., closing tag never arrived - incomplete tool call).

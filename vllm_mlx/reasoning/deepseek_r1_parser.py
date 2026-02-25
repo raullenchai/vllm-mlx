@@ -65,6 +65,12 @@ class DeepSeekR1ReasoningParser(BaseThinkingReasoningParser):
         # Use base class for standard case
         return super().extract_reasoning(model_output)
 
+    # Character threshold for no-tag content detection.
+    # If no think tags are seen after this many characters, treat output as
+    # content rather than reasoning. Real reasoning models emit <think> within
+    # the first few tokens; 64 chars (~15-20 tokens) is a safe threshold.
+    NO_TAG_CONTENT_THRESHOLD = 64
+
     def extract_reasoning_streaming(
         self,
         previous_text: str,
@@ -75,6 +81,8 @@ class DeepSeekR1ReasoningParser(BaseThinkingReasoningParser):
         Extract reasoning from streaming delta.
 
         Handles DeepSeek-R1's pattern where <think> may be implicit.
+        If no think tags are seen after NO_TAG_CONTENT_THRESHOLD characters,
+        treats output as content to avoid misclassifying non-reasoning output.
 
         Args:
             previous_text: Text accumulated before this delta.
@@ -84,6 +92,18 @@ class DeepSeekR1ReasoningParser(BaseThinkingReasoningParser):
         Returns:
             DeltaMessage with reasoning/content, or None to skip.
         """
+        # Check if any tags are in the current text
+        has_tags = (
+            self.start_token in current_text or self.end_token in current_text
+        )
+
+        # No tags seen yet and past threshold → treat as content
+        if not has_tags and not self._saw_any_tag:
+            if len(current_text) >= self.NO_TAG_CONTENT_THRESHOLD:
+                return DeltaMessage(content=delta_text)
+            # Under threshold: delegate to base (defaults to reasoning
+            # for early implicit mode, will be corrected by finalize)
+
         # First try base class logic
         result = super().extract_reasoning_streaming(
             previous_text, current_text, delta_text
@@ -106,8 +126,31 @@ class DeepSeekR1ReasoningParser(BaseThinkingReasoningParser):
                     content=content_part if content_part else None,
                 )
 
-            # Note: DeepSeek-R1 may omit <think> but still be in reasoning mode.
-            # However, we can't reliably detect implicit reasoning without context,
-            # so we default to treating unmarked content as regular content.
-
         return result
+
+    def finalize_streaming(
+        self, accumulated_text: str
+    ) -> DeltaMessage | None:
+        """
+        Finalize streaming output.
+
+        If no tags were ever seen and the output was short (under threshold),
+        the base class would have classified it all as reasoning. Emit a
+        correction to reclassify as content.
+
+        Args:
+            accumulated_text: Complete accumulated text from stream.
+
+        Returns:
+            DeltaMessage correction, or None if no correction needed.
+        """
+        if (
+            not self._saw_any_tag
+            and accumulated_text
+            and len(accumulated_text) < self.NO_TAG_CONTENT_THRESHOLD
+        ):
+            # Short no-tag output was misclassified as reasoning.
+            # Return correction: emit as content. The caller should
+            # yield a chunk that moves reasoning → content.
+            return DeltaMessage(content=accumulated_text)
+        return None

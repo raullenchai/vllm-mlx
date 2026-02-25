@@ -235,13 +235,18 @@ class SimpleEngine(BaseEngine):
                 if finished:
                     finish_reason = getattr(chunk, "finish_reason", "stop")
 
+                # Pass current token ID for logprobs extraction
+                current_token = getattr(chunk, "token", 0)
+
                 yield GenerationOutput(
                     text=accumulated_text,
                     new_text=new_text,
+                    tokens=[current_token] if current_token else [],
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                     finished=finished,
                     finish_reason=finish_reason,
+                    logprobs=getattr(chunk, "logprobs", None),
                 )
 
                 if finished:

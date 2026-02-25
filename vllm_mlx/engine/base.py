@@ -25,6 +25,8 @@ class GenerationOutput:
     # For streaming
     new_text: str = ""
     finished: bool = True
+    # Per-token logprobs (mx.array of shape [vocab_size] for current token)
+    logprobs: Any = None
 
 
 class BaseEngine(ABC):

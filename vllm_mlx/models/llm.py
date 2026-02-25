@@ -10,7 +10,7 @@ import copy
 import logging
 import time
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Any, Iterator
 
 import mlx.core as mx
 
@@ -34,6 +34,7 @@ class StreamingOutput:
     token: int
     finished: bool = False
     finish_reason: str | None = None
+    logprobs: Any = None  # mx.array of shape [vocab_size] from mlx-lm
 
 
 class MLXLanguageModel:
@@ -401,6 +402,7 @@ class MLXLanguageModel:
                 token=response.token if hasattr(response, "token") else 0,
                 finished=finished,
                 finish_reason=finish_reason,
+                logprobs=getattr(response, "logprobs", None),
             )
 
             if finished:

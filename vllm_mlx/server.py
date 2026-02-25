@@ -69,6 +69,7 @@ from .api.models import (
     ChatCompletionChunkDelta,  # noqa: F401
     ChatCompletionRequest,
     ChatCompletionResponse,
+    ChoiceLogProbs,
     CompletionChoice,  # noqa: F401
     CompletionRequest,
     CompletionResponse,
@@ -88,7 +89,9 @@ from .api.models import (
     Message,  # noqa: F401
     ModelInfo,  # noqa: F401
     ModelsResponse,
+    TokenLogProb,
     ToolCall,
+    TopLogProb,
     Usage,  # noqa: F401
     VideoUrl,  # noqa: F401
 )
@@ -496,6 +499,51 @@ def _parse_tool_calls_with_parser(
         return parse_tool_calls(output_text, request_dict)
 
 
+def _validate_tool_call_params(
+    tool_calls: list, tools: list
+) -> None:
+    """
+    Validate tool call parameter values against their schemas (post-generation).
+
+    Logs warnings for invalid parameters but does not block the response.
+    This provides graceful degradation for SimpleEngine mode where logits-level
+    constraint is not available.
+    """
+    from .api.tool_logits import _extract_param_schemas, validate_param_value
+
+    tool_defs = [t.model_dump() if hasattr(t, "model_dump") else t for t in tools]
+    schemas = _extract_param_schemas(tool_defs)
+
+    for tc in tool_calls:
+        func = tc.function if hasattr(tc, "function") else tc.get("function", {})
+        func_name = func.name if hasattr(func, "name") else func.get("name", "")
+        args_str = func.arguments if hasattr(func, "arguments") else func.get("arguments", "{}")
+
+        try:
+            args = json.loads(args_str)
+        except (json.JSONDecodeError, ValueError):
+            logger.warning(
+                f"Tool call '{func_name}': arguments is not valid JSON: {args_str!r}"
+            )
+            continue
+
+        if not isinstance(args, dict):
+            continue
+
+        for param_name, param_value in args.items():
+            schema_key = f"{func_name}.{param_name}"
+            schema = schemas.get(schema_key)
+            if not schema:
+                continue
+            is_valid, error = validate_param_value(
+                json.dumps(param_value), schema
+            )
+            if not is_valid:
+                logger.warning(
+                    f"Tool call '{func_name}' param '{param_name}': {error}"
+                )
+
+
 def _detect_native_tool_support() -> bool:
     """
     Detect if the active tool parser supports native tool format.
@@ -655,9 +703,12 @@ def load_model(
                 tokenizer = _engine.tokenizer
             if tokenizer is not None:
                 # Create factory that produces fresh processors per request
+                # Accepts optional tools for parameter value schema constraint
                 def _make_factory(parser_name, tok):
-                    def factory():
-                        return create_tool_logits_processor(parser_name, tok)
+                    def factory(tools=None):
+                        return create_tool_logits_processor(
+                            parser_name, tok, tools=tools
+                        )
                     return factory
 
                 factory = _make_factory(_tool_call_parser, tokenizer)
@@ -675,6 +726,59 @@ def load_model(
             logger.warning(f"Failed to set up tool logits bias: {e}")
 
     logger.info(f"Default max tokens: {_default_max_tokens}")
+
+
+def _extract_token_logprob(
+    logprobs_array, token_id: int, tokenizer, top_k: int
+) -> TokenLogProb:
+    """
+    Convert an mx.array of log-probabilities to a TokenLogProb with top-k alternatives.
+
+    Args:
+        logprobs_array: mx.array of shape [vocab_size] with log-probabilities.
+        token_id: The actually sampled token ID.
+        tokenizer: Tokenizer for decoding token IDs to text.
+        top_k: Number of top alternatives to include.
+
+    Returns:
+        TokenLogProb with the sampled token and top-k alternatives.
+    """
+    import mlx.core as mx
+    import numpy as np
+
+    # Convert to float32 first — mx.array may be bfloat16 which numpy can't handle
+    if hasattr(logprobs_array, "astype"):
+        logprobs_array = logprobs_array.astype(mx.float32)
+    probs = np.array(logprobs_array).flatten()
+    # Get top-k indices
+    top_k = min(top_k, len(probs))
+    top_indices = np.argpartition(probs, -top_k)[-top_k:]
+    top_indices = top_indices[np.argsort(probs[top_indices])][::-1]
+
+    # Build top_logprobs list
+    top_logprobs = []
+    for idx in top_indices:
+        idx = int(idx)
+        tok_text = tokenizer.decode([idx])
+        tok_bytes = list(tok_text.encode("utf-8", errors="replace"))
+        top_logprobs.append(
+            TopLogProb(
+                token=tok_text,
+                logprob=float(probs[idx]),
+                bytes=tok_bytes,
+            )
+        )
+
+    # The sampled token
+    sampled_text = tokenizer.decode([token_id])
+    sampled_bytes = list(sampled_text.encode("utf-8", errors="replace"))
+
+    return TokenLogProb(
+        token=sampled_text,
+        logprob=float(probs[token_id]) if token_id < len(probs) else 0.0,
+        bytes=sampled_bytes,
+        top_logprobs=top_logprobs,
+    )
 
 
 def get_usage(output: GenerationOutput) -> Usage:
@@ -1467,6 +1571,15 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     """
     engine = get_engine()
 
+    # Validate top_logprobs range (OpenAI spec: 0-20)
+    if request.top_logprobs is not None and (
+        request.top_logprobs < 0 or request.top_logprobs > 20
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="top_logprobs must be between 0 and 20",
+        )
+
     # --- Detailed request logging ---
     n_msgs = len(request.messages)
     msg_roles = [m.role for m in request.messages]
@@ -1564,6 +1677,11 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if _gc_control and gc_was_enabled:
         gc.disable()
 
+    # Determine if we need per-token logprobs
+    want_logprobs = request.logprobs and request.top_logprobs
+    top_k_logprobs = request.top_logprobs or 0
+    token_logprobs_list: list[TokenLogProb] = []
+
     # Check if we should use guided generation for JSON schema
     use_guided = False
     json_schema = None
@@ -1575,7 +1693,21 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
                 logger.info("Using guided generation for JSON schema enforcement")
 
     try:
-        if use_guided and json_schema:
+        if want_logprobs and not use_guided:
+            # Use streaming internally to collect per-token logprobs
+            output = None
+            async for chunk in engine.stream_chat(messages=messages, **chat_kwargs):
+                output = chunk
+                if chunk.logprobs is not None and chunk.new_text:
+                    token_id = chunk.tokens[-1] if chunk.tokens else 0
+                    token_logprobs_list.append(
+                        _extract_token_logprob(
+                            chunk.logprobs, token_id, engine.tokenizer, top_k_logprobs
+                        )
+                    )
+            if output is None:
+                return Response(status_code=499)
+        elif use_guided and json_schema:
             # Use guided generation for constrained JSON output
             # Fall back to standard generation if guided fails (bad schema, etc.)
             try:
@@ -1622,6 +1754,10 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # Parse tool calls from output using configured parser
     cleaned_text, tool_calls = _parse_tool_calls_with_parser(output.text, request)
 
+    # Validate tool call parameter values against schemas (SimpleEngine post-generation check)
+    if tool_calls and request.tools:
+        _validate_tool_call_params(tool_calls, request.tools)
+
     # Extract reasoning content FIRST (strips channel tokens before JSON extraction)
     reasoning_text = None
     if _reasoning_parser and not tool_calls:
@@ -1657,6 +1793,11 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
         # This handles Qwen3 reasoning mode: "Let me think... {json}"
         final_content = extract_json_from_response(final_content)
 
+    # Build logprobs for response if requested
+    choice_logprobs = None
+    if want_logprobs and token_logprobs_list:
+        choice_logprobs = ChoiceLogProbs(content=token_logprobs_list)
+
     return ChatCompletionResponse(
         model=request.model,
         choices=[
@@ -1667,6 +1808,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
                     tool_calls=tool_calls,
                 ),
                 finish_reason=finish_reason,
+                logprobs=choice_logprobs,
             )
         ],
         usage=Usage(
@@ -2112,6 +2254,20 @@ async def stream_chat_completion(
     # Check if we should include usage in the final chunk
     include_usage = request.stream_options and request.stream_options.include_usage
 
+    # Logprobs configuration
+    want_logprobs = request.logprobs and request.top_logprobs
+    top_k_logprobs = request.top_logprobs or 0
+
+    def _build_chunk_logprobs(output: GenerationOutput) -> ChoiceLogProbs | None:
+        """Build ChoiceLogProbs for a streaming chunk if logprobs requested."""
+        if not want_logprobs or output.logprobs is None:
+            return None
+        token_id = output.tokens[-1] if output.tokens else 0
+        token_lp = _extract_token_logprob(
+            output.logprobs, token_id, engine.tokenizer, top_k_logprobs
+        )
+        return ChoiceLogProbs(content=[token_lp])
+
     # First chunk with role
     first_chunk = ChatCompletionChunk(
         id=response_id,
@@ -2279,6 +2435,7 @@ async def stream_chat_completion(
                             if (output.finished and tool_calls_detected)
                             else (output.finish_reason if output.finished else None)
                         ),
+                        logprobs=_build_chunk_logprobs(output),
                     )
                 ],
                 usage=get_usage(output) if output.finished else None,
@@ -2355,6 +2512,7 @@ async def stream_chat_completion(
                             if (output.finished and tool_calls_detected)
                             else (output.finish_reason if output.finished else None)
                         ),
+                        logprobs=_build_chunk_logprobs(output),
                     )
                 ],
                 usage=get_usage(output) if output.finished else None,

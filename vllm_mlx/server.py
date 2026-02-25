@@ -1640,6 +1640,18 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 
     has_media = bool(images or videos)
 
+    # Normalize "developer" role to "system" for models that don't support it.
+    # OpenAI's API uses "developer" as a newer alias for "system", but most
+    # open-source chat templates (MiniMax, Qwen, Llama, etc.) only recognize
+    # "system". Without this, the entire system prompt gets silently dropped.
+    for i, m in enumerate(messages):
+        role = m.get("role") if isinstance(m, dict) else getattr(m, "role", None)
+        if role == "developer":
+            if isinstance(m, dict):
+                messages[i]["role"] = "system"
+            else:
+                m.role = "system"
+
     # Auto-inject system prompt suffix for tool use and/or reasoning control
     _inject_suffix = None
     if request.tools and _tool_call_parser:

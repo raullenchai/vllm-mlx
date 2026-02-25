@@ -1514,7 +1514,14 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # Handle response_format - inject system prompt if needed
     response_format = request.response_format
     if response_format:
-        json_instruction = build_json_system_prompt(response_format)
+        try:
+            json_instruction = build_json_system_prompt(response_format)
+        except Exception as e:
+            logger.warning(f"Failed to build JSON system prompt: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid response_format schema: {e}",
+            )
         if json_instruction:
             # Inject JSON instruction into messages
             messages = _inject_json_instruction(messages, json_instruction)
@@ -1626,12 +1633,16 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # Process response_format if specified (after reasoning parser cleaned the text)
     if response_format and not tool_calls:
         json_input = cleaned_text or output.text
-        _, parsed_json, is_valid, error = parse_json_output(json_input, response_format)
-        if parsed_json is not None:
-            # Return JSON as string
-            cleaned_text = json.dumps(parsed_json)
-        if not is_valid:
-            logger.warning(f"JSON validation failed: {error}")
+        try:
+            _, parsed_json, is_valid, error = parse_json_output(json_input, response_format)
+            if parsed_json is not None:
+                # Return JSON as string
+                cleaned_text = json.dumps(parsed_json)
+            if not is_valid:
+                logger.warning(f"JSON validation failed: {error}")
+        except Exception as e:
+            logger.warning(f"JSON output parsing failed: {e}")
+            # Don't crash — return the raw text as-is
 
     # Determine finish reason
     finish_reason = "tool_calls" if tool_calls else output.finish_reason

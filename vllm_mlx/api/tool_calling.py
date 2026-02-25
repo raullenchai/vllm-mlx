@@ -591,8 +591,13 @@ def build_json_system_prompt(
             )
             if description:
                 prompt += f"Purpose: {description}\n"
+            try:
+                schema_str = json.dumps(schema, indent=2)
+            except (TypeError, ValueError) as e:
+                logger.warning(f"Failed to serialize JSON schema: {e}")
+                schema_str = str(schema)
             prompt += (
-                f"\nJSON Schema:\n```json\n{json.dumps(schema, indent=2)}\n```\n\n"
+                f"\nJSON Schema:\n```json\n{schema_str}\n```\n\n"
                 "STRICT RULES:\n"
                 "- Start response with {{ or [\n"
                 "- NO text before or after JSON\n"
@@ -609,8 +614,13 @@ def build_json_system_prompt(
         )
         if description:
             prompt += f"Purpose: {description}\n"
+        try:
+            schema_str = json.dumps(schema, indent=2)
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Failed to serialize JSON schema: {e}")
+            schema_str = str(schema)
         prompt += (
-            f"\nJSON Schema:\n```json\n{json.dumps(schema, indent=2)}\n```\n\n"
+            f"\nJSON Schema:\n```json\n{schema_str}\n```\n\n"
             "RULES:\n"
             "- Start response with { or [\n"
             "- NO text before or after JSON\n"

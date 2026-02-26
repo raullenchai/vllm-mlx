@@ -2842,6 +2842,33 @@ Examples:
             f"Options: {', '.join(reasoning_choices)}."
         ),
     )
+    # Tool call parser options
+    from .tool_parsers.abstract_tool_parser import ToolParserManager
+
+    tool_parser_choices = ToolParserManager.list_registered()
+    parser.add_argument(
+        "--tool-call-parser",
+        type=str,
+        default=None,
+        choices=tool_parser_choices,
+        help=(
+            "Tool call parser to use for structured tool call extraction. "
+            f"Options: {', '.join(tool_parser_choices)}. "
+            "Automatically enables --enable-auto-tool-choice."
+        ),
+    )
+    parser.add_argument(
+        "--enable-auto-tool-choice",
+        action="store_true",
+        default=False,
+        help="Enable automatic tool choice (required with --tool-call-parser)",
+    )
+    parser.add_argument(
+        "--enable-tool-logits-bias",
+        action="store_true",
+        default=False,
+        help="Enable jump-forward decoding bias for tool call structural tokens",
+    )
     parser.add_argument(
         "--embedding-model",
         type=str,
@@ -2930,6 +2957,17 @@ Examples:
     # Set MCP config for lifespan
     if args.mcp_config:
         os.environ["VLLM_MLX_MCP_CONFIG"] = args.mcp_config
+
+    # Initialize tool call parser if specified via CLI
+    if args.tool_call_parser:
+        global _enable_auto_tool_choice, _tool_call_parser, _enable_tool_logits_bias
+        _tool_call_parser = args.tool_call_parser
+        _enable_auto_tool_choice = True  # Implied by --tool-call-parser
+        logger.info(f"Tool call parser enabled: {args.tool_call_parser}")
+    if args.enable_auto_tool_choice:
+        _enable_auto_tool_choice = True
+    if args.enable_tool_logits_bias:
+        _enable_tool_logits_bias = True
 
     # Initialize reasoning parser if specified
     if args.reasoning_parser:

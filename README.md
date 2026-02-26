@@ -1,6 +1,6 @@
 # vLLM-MLX (raullenchai fork)
 
-**vllm-mlx fork optimized for MiniMax-M2.5 on Apple Silicon**
+**vllm-mlx fork optimized for Apple Silicon — tested with MiniMax-M2.5 and Qwen3-Coder-Next**
 
 [![Fork](https://img.shields.io/badge/Fork-raullenchai%2Fvllm--mlx-orange?logo=github)](https://github.com/raullenchai/vllm-mlx)
 [![Upstream](https://img.shields.io/badge/Upstream-waybarrios%2Fvllm--mlx-blue?logo=github)](https://github.com/waybarrios/vllm-mlx)
@@ -52,7 +52,7 @@ Built on [waybarrios/vllm-mlx](https://github.com/waybarrios/vllm-mlx) — GPU-a
 
 ---
 
-## Quick Start: MiniMax-M2.5
+## Quick Start
 
 ### 1. Install
 
@@ -68,29 +68,60 @@ cd vllm-mlx
 pip install -e .
 ```
 
-### 2. Download the model
+### 2. Pick a model and start the server
 
-Using mlx-lm:
+#### Qwen3-Coder-Next (recommended for coding agents)
 
-```bash
-pip install mlx-lm
-python -c "from mlx_lm import load; load('lmstudio-community/MiniMax-M2.5-MLX-4bit')"
-```
-
-Or download via [LM Studio](https://lmstudio.ai/) — search for `MiniMax-M2.5-MLX-4bit`.
-
-### 3. Start the server
+Best balance of speed and intelligence. 32B dense model, excellent tool calling and code generation.
 
 ```bash
+# Download (pick one quantization)
+python -c "from mlx_lm import load; load('lmstudio-community/Qwen3-Coder-Next-MLX-6bit')"
+
+# Start server
 python3.12 -m vllm_mlx.server \
-  --model lmstudio-community/MiniMax-M2.5-MLX-4bit \
-  --reasoning-parser minimax \
+  --model lmstudio-community/Qwen3-Coder-Next-MLX-6bit \
+  --tool-call-parser hermes \
+  --prefill-step-size 8192 \
+  --kv-bits 8 \
   --port 8000
 ```
 
-That's it — `--reasoning-parser minimax` auto-enables the matching tool call parser and auto-tool-choice.
+Also available in 4bit (faster, slightly lower quality) and 8bit (slower, highest quality):
 
-### 4. Test with curl
+```bash
+# 4bit — fastest, 42GB RAM, ~70 tok/s decode
+--model lmstudio-community/Qwen3-Coder-Next-MLX-4bit
+
+# 6bit — sweet spot, 60GB RAM, ~63 tok/s decode (recommended)
+--model lmstudio-community/Qwen3-Coder-Next-MLX-6bit
+
+# 8bit — highest quality, 75GB RAM, ~45 tok/s decode
+--model lmstudio-community/Qwen3-Coder-Next-MLX-8bit
+```
+
+#### MiniMax-M2.5 (best reasoning quality)
+
+229B MoE model with built-in reasoning. Best for complex multi-step reasoning tasks.
+
+```bash
+# Download
+python -c "from mlx_lm import load; load('lmstudio-community/MiniMax-M2.5-MLX-4bit')"
+
+# Start server
+python3.12 -m vllm_mlx.server \
+  --model lmstudio-community/MiniMax-M2.5-MLX-4bit \
+  --reasoning-parser minimax \
+  --prefill-step-size 4096 \
+  --kv-bits 4 \
+  --port 8000
+```
+
+`--reasoning-parser minimax` auto-enables the matching tool call parser and auto-tool-choice — zero extra flags needed.
+
+> **Note:** MiniMax requires ~120GB RAM. Recommended for M3/M4 Ultra with 192GB+.
+
+### 3. Test with curl
 
 ```bash
 curl http://localhost:8000/v1/chat/completions \
@@ -101,7 +132,7 @@ curl http://localhost:8000/v1/chat/completions \
   }'
 ```
 
-### 5. Test with OpenAI SDK
+### 4. Test with OpenAI SDK
 
 ```python
 from openai import OpenAI
@@ -113,13 +144,11 @@ response = client.chat.completions.create(
     messages=[{"role": "user", "content": "What is 15 * 37?"}],
 )
 print(response.choices[0].message.content)       # "555"
-print(response.choices[0].message.reasoning)      # reasoning trace (if any)
 ```
 
-### 6. Tool calling
+### 5. Tool calling
 
 ```python
-import json
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="not-needed")
@@ -154,15 +183,33 @@ print(tool_call.function.arguments)  # '{"city": "Tokyo"}'
 
 ## OpenClaw Integration
 
-This fork was built to power [OpenClaw](https://github.com/openclaw) — an open-source coding agent. Recommended `openclaw.json` config:
+This fork was built to power [OpenClaw](https://github.com/openclaw) — an open-source coding agent.
+
+Recommended `openclaw.json` model config:
 
 ```json
 {
-  "model": "default",
-  "base_url": "http://localhost:8000/v1",
-  "api_key": "not-needed"
+  "models": {
+    "providers": {
+      "vllm-mlx": {
+        "baseUrl": "http://127.0.0.1:8000/v1",
+        "apiKey": "no-key",
+        "api": "openai-completions",
+        "models": [{
+          "id": "Qwen3-Coder-Next-MLX-6bit",
+          "name": "Qwen3 Coder Next 6bit via vllm-mlx",
+          "reasoning": false,
+          "input": ["text"],
+          "contextWindow": 40960,
+          "maxTokens": 8192
+        }]
+      }
+    }
+  }
 }
 ```
+
+> For MiniMax-M2.5, set `"reasoning": true` to get reasoning traces in the response.
 
 What works with OpenClaw:
 - Streaming tool calling with reasoning separation
@@ -180,6 +227,9 @@ What works with OpenClaw:
 | `--host` | Host to bind to | `127.0.0.1` |
 | `--port` | Port to bind to | `8000` |
 | `--reasoning-parser` | Reasoning parser: `minimax`, `qwen3`, `deepseek_r1`, `gpt_oss`, `harmony` | *(none)* |
+| `--tool-call-parser` | Tool call parser: `hermes`, `minimax`, etc. Auto-enables `--enable-auto-tool-choice` | *(none)* |
+| `--enable-auto-tool-choice` | Enable automatic tool choice (implied by `--tool-call-parser`) | off |
+| `--enable-tool-logits-bias` | Jump-forward decoding bias for tool call structural tokens | off |
 | `--continuous-batching` | Enable batched engine for multiple concurrent users | off |
 | `--mllm` | Force loading as multimodal language model | auto-detect |
 | `--mcp-config` | Path to MCP configuration file (JSON/YAML) | *(none)* |
@@ -196,7 +246,18 @@ What works with OpenClaw:
 | `--kv-bits` | KV cache quantization: `4` or `8` bit | *(none — full precision)* |
 | `--kv-group-size` | Group size for KV cache quantization | `64` |
 
-**Example — full MiniMax setup:**
+**Example — Qwen3-Coder-Next:**
+
+```bash
+python3.12 -m vllm_mlx.server \
+  --model lmstudio-community/Qwen3-Coder-Next-MLX-6bit \
+  --tool-call-parser hermes \
+  --prefill-step-size 8192 \
+  --kv-bits 8 \
+  --port 8000
+```
+
+**Example — MiniMax-M2.5:**
 
 ```bash
 python3.12 -m vllm_mlx.server \
@@ -211,26 +272,44 @@ python3.12 -m vllm_mlx.server \
 
 ## Performance
 
-All benchmarks on **Mac Studio M3 Ultra (256GB)** with **MiniMax-M2.5-MLX-4bit** (229B MoE, ~120GB).
+All benchmarks on **Mac Studio M3 Ultra (256GB)** with M3 Ultra's 800 GB/s memory bandwidth.
 
-### Decode Throughput
+### Model Comparison
 
-| Output Length | Speed |
-|---------------|-------|
-| 128 tokens | 53 tok/s |
-| 512 tokens | 52 tok/s |
-| 2048 tokens | 50 tok/s |
-| 8192 tokens | 32 tok/s |
+| Model | Quant | RAM | Decode | Prefill | Best For |
+|-------|-------|-----|--------|---------|----------|
+| Qwen3-Coder-Next | 4bit | 42GB | **70 tok/s** | 1270 tok/s | Speed-first, coding agents |
+| Qwen3-Coder-Next | 6bit | 60GB | 63 tok/s | 1090-1440 tok/s | **Recommended** — best speed/quality balance |
+| Qwen3-Coder-Next | 8bit | 75GB | ~45 tok/s | ~900 tok/s | Highest quality, still fast |
+| MiniMax-M2.5 | 4bit | 120GB | 33-38 tok/s | 430-500 tok/s | Deep reasoning, complex tasks |
 
-### TTFT (Time To First Token)
+> **Why the speed difference?** Decode speed is memory-bandwidth-bound. M3 Ultra's 800 GB/s ÷ model size determines max throughput. Qwen3 6bit (60GB) ≈ 63 tok/s, MiniMax 4bit (120GB) ≈ 35 tok/s.
 
-| Prompt Size | TTFT |
-|-------------|------|
-| Short (~50 tok) | 0.37s |
-| Medium (~500 tok) | 0.79s |
-| Long (~2K tok) | 1.42s |
+### Qwen3-Coder-Next-MLX-6bit (32B dense, 60GB)
+
+| Metric | Value |
+|--------|-------|
+| Decode (non-streaming) | 63.2 tok/s |
+| Decode (streaming) | 40-44 tok/s |
+| Prefill | 1090-1440 tok/s |
+| TTFT (cold, short prompt) | ~0.3s |
+| TTFT (cache hit) | 0.3-0.5s |
+
+### MiniMax-M2.5-MLX-4bit (229B MoE, 120GB)
+
+| Metric | Value |
+|--------|-------|
+| Decode (128 tok) | 53 tok/s |
+| Decode (512 tok) | 52 tok/s |
+| Decode (2048 tok) | 50 tok/s |
+| Decode (8192 tok) | 32 tok/s |
+| TTFT (short ~50 tok) | 0.37s |
+| TTFT (medium ~500 tok) | 0.79s |
+| TTFT (long ~2K tok) | 1.42s |
 
 ### Prompt Cache (Multi-Turn)
+
+SimpleEngine prompt cache (added in this fork) reuses KV cache across requests. On OpenClaw workloads with 22K+ token contexts: **23-30s TTFT → ~2s** (10-15x speedup).
 
 | Turn | Without Cache | With Cache | Improvement |
 |------|---------------|------------|-------------|
@@ -238,8 +317,6 @@ All benchmarks on **Mac Studio M3 Ultra (256GB)** with **MiniMax-M2.5-MLX-4bit**
 | Turn 2 | 0.78s | 0.61s | **22% faster** |
 | Turn 3 | 0.99s | 0.91s | **8% faster** |
 | Turn 4 | 1.12s | 1.06s | **5% faster** |
-
-SimpleEngine prompt cache (added in this fork): multi-turn TTFT goes from 23-30s to ~2s on OpenClaw workloads — **10-15x speedup**.
 
 ### Tool Calling
 
@@ -250,7 +327,7 @@ SimpleEngine prompt cache (added in this fork): multi-turn TTFT goes from 23-30s
 | Code execution | Pass | 4.0s |
 | Multi-tool selection | Pass | 3.0s |
 
-**4/4 accuracy** — avg 2.9s latency.
+**4/4 accuracy** on both MiniMax and Qwen3-Coder-Next.
 
 ### Reasoning Quality (MiniMax Parser)
 

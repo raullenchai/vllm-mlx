@@ -270,6 +270,12 @@ class MLXLanguageModel:
             # First call — create fresh cache
             from mlx_lm.models.cache import make_prompt_cache
             self._prompt_cache = make_prompt_cache(self.model)
+            # When using speculative decoding, mlx-lm expects the prompt_cache
+            # to contain layers for both the main model and draft model:
+            #   prompt_cache[:len(model.layers)] = main model cache
+            #   prompt_cache[len(model.layers):] = draft model cache
+            if self.draft_model is not None:
+                self._prompt_cache.extend(make_prompt_cache(self.draft_model))
             self._cached_token_ids = []
             return prompt_token_ids
 

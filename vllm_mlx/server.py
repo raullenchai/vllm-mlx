@@ -1651,10 +1651,16 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # For MLLM models, keep original messages with embedded images
     # (MLLM.chat() extracts images from message content internally)
     if engine.is_mllm:
-        # Convert Pydantic messages to dicts preserving full content
+        # Convert Pydantic messages to dicts, excluding None fields
+        # to prevent chat templates from misinterpreting key presence
+        # (e.g. image_url: null on text parts triggers Qwen3-VL crash)
         messages = []
         for msg in request.messages:
-            msg_dict = msg.model_dump() if hasattr(msg, "model_dump") else dict(msg)
+            if hasattr(msg, "model_dump"):
+                msg_dict = msg.model_dump(exclude_none=True)
+            else:
+                raw = dict(msg)
+                msg_dict = {k: v for k, v in raw.items() if v is not None}
             messages.append(msg_dict)
         images, videos = [], []  # MLLM extracts these from messages
         logger.debug(f"MLLM: Processing {len(messages)} messages")

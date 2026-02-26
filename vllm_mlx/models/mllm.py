@@ -1072,11 +1072,12 @@ class MLXMultimodalLM:
                         msg_text += item
                         continue
 
-                    # Convert Pydantic models to dicts
+                    # Convert Pydantic models to dicts, excluding None fields
+                    # to avoid null keys like image_url: null on text parts
                     if hasattr(item, "model_dump"):
-                        item = item.model_dump()
+                        item = item.model_dump(exclude_none=True)
                     elif hasattr(item, "dict"):
-                        item = item.dict()
+                        item = {k: v for k, v in item.dict().items() if v is not None}
 
                     if isinstance(item, dict):
                         item_type = item.get("type", "")
@@ -1432,11 +1433,12 @@ class MLXMultimodalLM:
                         msg_text += item
                         continue
 
-                    # Convert Pydantic models to dicts
+                    # Convert Pydantic models to dicts, excluding None fields
+                    # to avoid null keys like image_url: null on text parts
                     if hasattr(item, "model_dump"):
-                        item = item.model_dump()
+                        item = item.model_dump(exclude_none=True)
                     elif hasattr(item, "dict"):
-                        item = item.dict()
+                        item = {k: v for k, v in item.dict().items() if v is not None}
 
                     if isinstance(item, dict):
                         item_type = item.get("type", "")

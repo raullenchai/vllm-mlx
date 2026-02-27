@@ -6,6 +6,7 @@ Tests all request/response models in vllm_mlx/api/models.py.
 These are pure Pydantic models with no MLX dependency.
 """
 
+import json
 import time
 
 from vllm_mlx.api.models import (
@@ -571,10 +572,12 @@ class TestStreamingModels:
         assert delta.role == "assistant"
         assert delta.content is None
 
-    def test_chunk_delta_reasoning(self):
-        delta = ChatCompletionChunkDelta(reasoning="thinking...")
-        assert delta.reasoning == "thinking..."
-        assert delta.reasoning_content == "thinking..."
+    def test_chunk_delta_no_reasoning(self):
+        """Streaming chunks should not have reasoning fields (OpenAI compat)."""
+        delta = ChatCompletionChunkDelta(content="hello")
+        data = json.loads(delta.model_dump_json(exclude_none=True))
+        assert "reasoning" not in data
+        assert "reasoning_content" not in data
 
     def test_chunk_delta_tool_calls(self):
         delta = ChatCompletionChunkDelta(
@@ -646,10 +649,12 @@ class TestModelSerialization:
         assert "test-model" in json_str
         assert "Hi!" in json_str
 
-    def test_chunk_delta_serializes_reasoning_content(self):
-        delta = ChatCompletionChunkDelta(reasoning="thinking")
+    def test_chunk_delta_no_reasoning_fields(self):
+        """Streaming chunk delta should not have reasoning fields."""
+        delta = ChatCompletionChunkDelta(content="hello")
         data = delta.model_dump()
-        assert data["reasoning_content"] == "thinking"
+        assert "reasoning" not in data
+        assert "reasoning_content" not in data
 
     def test_response_format_json_schema_alias(self):
         schema = ResponseFormatJsonSchema(

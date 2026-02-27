@@ -1419,15 +1419,18 @@ async def _disconnect_guard(
             disconnect_task.cancel()
         if anext_task and not anext_task.done():
             anext_task.cancel()
-        # NOTE: Do NOT call generator.aclose() here.  With run_in_executor,
-        # scheduler.step() runs in a background thread.  aclose() would throw
-        # GeneratorExit into the async-generator chain, which can trigger
-        # mlx::core::eval on the main thread while the executor thread is also
-        # mid-eval → Metal assertion failure → SIGABRT.
+        # Close the generator to release resources (e.g., SimpleEngine's
+        # _generation_lock).  Without this, a client disconnect leaves the
+        # async generator suspended inside `async with _generation_lock`,
+        # blocking all subsequent requests on the single-user engine.
         #
-        # Instead, rely on the task cancellation propagation:
-        #   anext_task.cancel() → CancelledError in stream_outputs()
-        #   → finally block → abort_request() → request removed from scheduler
+        # For BatchedEngine with run_in_executor this was previously avoided
+        # due to potential Metal assertion failures, but task cancellation
+        # alone is insufficient for SimpleEngine's sync-loop generators.
+        try:
+            await generator.aclose()
+        except Exception:
+            pass
         logger.info(
             f"[disconnect_guard] CLEANUP done, {chunk_count} chunks total, elapsed={_elapsed()}"
         )
@@ -1582,7 +1585,7 @@ async def create_completion(request: CompletionRequest, raw_request: Request):
         f"Completion: {total_prompt_tokens} prompt + {total_completion_tokens} completion tokens in {elapsed:.2f}s ({tokens_per_sec:.1f} tok/s)"
     )
 
-    return CompletionResponse(
+    comp_response = CompletionResponse(
         model=request.model,
         choices=choices,
         usage=Usage(
@@ -1590,6 +1593,10 @@ async def create_completion(request: CompletionRequest, raw_request: Request):
             completion_tokens=total_completion_tokens,
             total_tokens=total_prompt_tokens + total_completion_tokens,
         ),
+    )
+    return Response(
+        content=comp_response.model_dump_json(exclude_none=True),
+        media_type="application/json",
     )
 
 
@@ -1965,7 +1972,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if want_logprobs and token_logprobs_list:
         choice_logprobs = ChoiceLogProbs(content=token_logprobs_list)
 
-    return ChatCompletionResponse(
+    chat_response = ChatCompletionResponse(
         model=request.model,
         choices=[
             ChatCompletionChoice(
@@ -1983,6 +1990,10 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
             completion_tokens=output.completion_tokens,
             total_tokens=output.prompt_tokens + output.completion_tokens,
         ),
+    )
+    return Response(
+        content=chat_response.model_dump_json(exclude_none=True),
+        media_type="application/json",
     )
 
 
@@ -2445,7 +2456,9 @@ async def stream_chat_completion(
             )
         ],
     )
-    yield f"data: {first_chunk.model_dump_json()}\n\n"
+    _first_sse = f"data: {first_chunk.model_dump_json(exclude_none=True)}\n\n"
+    logger.info(f"[SSE-ROLE] {_first_sse.strip()[:200]}")
+    yield _first_sse
 
     # Track if we need to add <think> prefix for thinking models (when no reasoning parser)
     # The template adds <think> to the prompt, so the model output starts inside the think block
@@ -2463,6 +2476,13 @@ async def stream_chat_completion(
     prompt_tokens = 0
     completion_tokens = 0
     last_output = None
+
+    # Think-tag suppression for streaming (strip <think>...</think> from content)
+    # MiniMax M2.5 may omit <think> but always emits </think> before the answer.
+    # Buffer content until </think> is found, then emit only the answer.
+    _in_think = False
+    _think_done = False  # True after </think> seen or determined no thinking
+    _think_buffer = ""
 
     # Tool call streaming state
     global _tool_parser_instance
@@ -2562,22 +2582,6 @@ async def stream_chat_completion(
 
                     if tool_result is None:
                         # Inside tool markup - suppress content output
-                        if reasoning:
-                            # Still emit reasoning while buffering tool call
-                            chunk = ChatCompletionChunk(
-                                id=response_id,
-                                model=request.model,
-                                choices=[
-                                    ChatCompletionChunkChoice(
-                                        delta=ChatCompletionChunkDelta(
-                                            reasoning=reasoning,
-                                        ),
-                                        finish_reason=None,
-                                    )
-                                ],
-                                usage=None,
-                            )
-                            yield f"data: {chunk.model_dump_json()}\n\n"
                         continue
 
                     if "tool_calls" in tool_result:
@@ -2590,7 +2594,6 @@ async def stream_chat_completion(
                                 ChatCompletionChunkChoice(
                                     delta=ChatCompletionChunkDelta(
                                         tool_calls=tool_result["tool_calls"],
-                                        reasoning=reasoning,
                                     ),
                                     finish_reason=(
                                         "tool_calls" if output.finished else None
@@ -2599,11 +2602,22 @@ async def stream_chat_completion(
                             ],
                             usage=get_usage(output) if output.finished else None,
                         )
-                        yield f"data: {chunk.model_dump_json()}\n\n"
+                        _tc_sse = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                        logger.info(f"[SSE-TC] {_tc_sse.strip()[:300]}")
+                        yield _tc_sse
                         continue
 
                     # Normal content from tool parser
                     content = tool_result.get("content", "")
+
+            # Skip empty deltas (e.g. reasoning-only chunks with no content)
+            finish_reason = (
+                "tool_calls"
+                if (output.finished and tool_calls_detected)
+                else (output.finish_reason if output.finished else None)
+            )
+            if not content and not finish_reason:
+                continue
 
             chunk = ChatCompletionChunk(
                 id=response_id,
@@ -2612,19 +2626,16 @@ async def stream_chat_completion(
                     ChatCompletionChunkChoice(
                         delta=ChatCompletionChunkDelta(
                             content=content if content else None,
-                            reasoning=reasoning,
                         ),
-                        finish_reason=(
-                            "tool_calls"
-                            if (output.finished and tool_calls_detected)
-                            else (output.finish_reason if output.finished else None)
-                        ),
+                        finish_reason=finish_reason,
                         logprobs=_build_chunk_logprobs(output),
                     )
                 ],
                 usage=get_usage(output) if output.finished else None,
             )
-            yield f"data: {chunk.model_dump_json()}\n\n"
+            sse_line = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+            logger.info(f"[SSE] {sse_line.strip()[:300]}")
+            yield sse_line
         else:
             # Standard path without reasoning parsing
             content = delta_text
@@ -2677,11 +2688,60 @@ async def stream_chat_completion(
                             ],
                             usage=get_usage(output) if output.finished else None,
                         )
-                        yield f"data: {chunk.model_dump_json()}\n\n"
+                        _tc_sse = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                        logger.info(f"[SSE-TC] {_tc_sse.strip()[:300]}")
+                        yield _tc_sse
                         continue
 
                     # Normal content from tool parser
                     content = tool_result.get("content", "")
+
+            # Strip <think>...</think> from streaming content when no reasoning parser.
+            # MiniMax M2.5 often omits <think> but outputs </think> before the answer.
+            # Strategy: buffer until </think> seen, then emit only content after it.
+            if content and not _reasoning_parser and not _think_done:
+                _think_buffer += content
+                content = None
+
+                # Check for </think> in accumulated buffer
+                end_idx = _think_buffer.find("</think>")
+                if end_idx >= 0:
+                    _think_done = True
+                    after = _think_buffer[end_idx + len("</think>"):]
+                    _think_buffer = ""
+                    content = after.lstrip("\n") if after.strip() else None
+                elif "<think>" in _think_buffer:
+                    # Explicit <think> tag found — mark as in-think
+                    _in_think = True
+                    _think_buffer = _think_buffer[_think_buffer.find("<think>") + len("<think>"):]
+                elif len(_think_buffer) > 2000:
+                    # Safety: if 2000+ chars without </think>, model isn't thinking
+                    _think_done = True
+                    content = _think_buffer
+                    _think_buffer = ""
+
+            # Flush think buffer on generation end if </think> was never seen.
+            # This handles responses without thinking (e.g., after tool results)
+            # where content would otherwise be permanently stuck in the buffer.
+            if output.finished and _think_buffer and not _think_done:
+                _think_done = True
+                content = _think_buffer
+                _think_buffer = ""
+
+            # Skip whitespace-only content chunks (no meaningful content)
+            if content and not content.strip():
+                content = None
+
+            # Compute finish reason
+            finish_reason = (
+                "tool_calls"
+                if (output.finished and tool_calls_detected)
+                else (output.finish_reason if output.finished else None)
+            )
+
+            # Skip empty chunks (no content and no finish)
+            if not content and not finish_reason:
+                continue
 
             chunk = ChatCompletionChunk(
                 id=response_id,
@@ -2691,17 +2751,13 @@ async def stream_chat_completion(
                         delta=ChatCompletionChunkDelta(
                             content=content if content else None
                         ),
-                        finish_reason=(
-                            "tool_calls"
-                            if (output.finished and tool_calls_detected)
-                            else (output.finish_reason if output.finished else None)
-                        ),
+                        finish_reason=finish_reason,
                         logprobs=_build_chunk_logprobs(output),
                     )
                 ],
                 usage=get_usage(output) if output.finished else None,
             )
-            yield f"data: {chunk.model_dump_json()}\n\n"
+            yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     # Finalize reasoning parser: emit correction if short no-tag output
     # was misclassified as reasoning during streaming.
@@ -2721,7 +2777,7 @@ async def stream_chat_completion(
                 ],
                 usage=None,
             )
-            yield f"data: {correction_chunk.model_dump_json()}\n\n"
+            yield f"data: {correction_chunk.model_dump_json(exclude_none=True)}\n\n"
 
     # Fallback: if tool parser accumulated text but never emitted tool_calls
     # (e.g., closing tag never arrived - incomplete tool call).
@@ -2761,7 +2817,9 @@ async def stream_chat_completion(
                     )
                 ],
             )
-            yield f"data: {tool_chunk.model_dump_json()}\n\n"
+            _fb_sse = f"data: {tool_chunk.model_dump_json(exclude_none=True)}\n\n"
+            logger.info(f"[SSE-FALLBACK-TC] {_fb_sse.strip()[:300]}")
+            yield _fb_sse
 
     # Log throughput
     elapsed = time.perf_counter() - start_time
@@ -2782,7 +2840,7 @@ async def stream_chat_completion(
                 total_tokens=prompt_tokens + completion_tokens,
             ),
         )
-        yield f"data: {usage_chunk.model_dump_json()}\n\n"
+        yield f"data: {usage_chunk.model_dump_json(exclude_none=True)}\n\n"
 
     yield "data: [DONE]\n\n"
 

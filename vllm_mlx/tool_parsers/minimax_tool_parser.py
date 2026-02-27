@@ -17,6 +17,8 @@ from collections.abc import Sequence
 from typing import Any
 
 from .abstract_tool_parser import (
+    TEXT_TOOL_CALL_FN_PATTERN,
+    TEXT_TOOL_CALL_KV_PATTERN,
     ExtractedToolCallInformation,
     ToolParser,
     ToolParserManager,
@@ -56,7 +58,11 @@ class MiniMaxToolParser(ToolParser):
     THINK_PATTERN = re.compile(r"<think>.*?</think>", re.DOTALL)
 
     def has_pending_tool_call(self, text: str) -> bool:
-        return "<minimax:tool_call>" in text or "<invoke name=" in text
+        return (
+            "<minimax:tool_call>" in text
+            or "<invoke name=" in text
+            or self.has_text_format_tool_call(text)
+        )
 
     def _extract_invokes(self, text: str) -> list[dict[str, Any]]:
         """Extract tool calls from invoke elements, with or without wrapper.
@@ -140,14 +146,28 @@ class MiniMaxToolParser(ToolParser):
                 content=cleaned if cleaned else None,
             )
 
+        # Fallback: text-format tool calls (general degradation at low quantization)
+        text_tool_calls = self.extract_text_format_tool_calls(model_output)
+        if text_tool_calls:
+            cleaned = TEXT_TOOL_CALL_KV_PATTERN.sub("", model_output)
+            cleaned = TEXT_TOOL_CALL_FN_PATTERN.sub("", cleaned).strip()
+            cleaned = self.THINK_PATTERN.sub("", cleaned).strip()
+            return ExtractedToolCallInformation(
+                tools_called=True,
+                tool_calls=text_tool_calls,
+                content=cleaned if cleaned else None,
+            )
+
         return ExtractedToolCallInformation(
             tools_called=False, tool_calls=[], content=model_output
         )
 
     def _has_tool_start(self, text: str) -> bool:
         """Check if text contains the start of a tool call block."""
-        return "<minimax:tool_call>" in text or (
-            '<invoke name="' in text and self.INVOKE_PATTERN.search(text) is not None
+        return (
+            "<minimax:tool_call>" in text
+            or ('<invoke name="' in text and self.INVOKE_PATTERN.search(text) is not None)
+            or self.has_text_format_tool_call(text)
         )
 
     def _has_tool_end(self, current: str, previous: str) -> bool:
@@ -159,6 +179,14 @@ class MiniMaxToolParser(ToolParser):
             )
         # Bare invoke: new </invoke> appeared
         if current.count("</invoke>") > previous.count("</invoke>"):
+            return True
+        # Text-format: [Calling tool="..." ...] or [Calling tool: name({...})]
+        def _text_tc_count(text: str) -> int:
+            return (len(TEXT_TOOL_CALL_KV_PATTERN.findall(text))
+                    + len(TEXT_TOOL_CALL_FN_PATTERN.findall(text)))
+        cur_count = _text_tc_count(current)
+        prev_count = _text_tc_count(previous)
+        if cur_count > prev_count:
             return True
         return False
 
@@ -181,15 +209,16 @@ class MiniMaxToolParser(ToolParser):
             result = self.extract_tool_calls(current_text)
             if result.tools_called:
                 # Count previously completed blocks to only emit NEW tool calls.
-                # Use completed closing-tag count (not extract_tool_calls on
-                # previous_text, which would match partial/bare invokes too).
                 prev_complete = previous_text.count("</minimax:tool_call>")
                 if prev_complete == 0:
-                    # Also check bare </invoke> completions
-                    prev_complete = previous_text.count("</invoke>")
-                    # But only if we're not in wrapped mode
-                    if "<minimax:tool_call>" in previous_text:
-                        prev_complete = 0
+                    # Check bare </invoke> completions (not in wrapped mode)
+                    if "<minimax:tool_call>" not in previous_text:
+                        prev_complete = previous_text.count("</invoke>")
+                # Also count text-format completions from previous text
+                prev_complete += (
+                    len(TEXT_TOOL_CALL_KV_PATTERN.findall(previous_text))
+                    + len(TEXT_TOOL_CALL_FN_PATTERN.findall(previous_text))
+                )
                 new_calls = result.tool_calls[prev_complete:]
                 if new_calls:
                     return {

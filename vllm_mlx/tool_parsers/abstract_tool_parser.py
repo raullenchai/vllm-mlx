@@ -6,7 +6,9 @@ Inspired by vLLM's tool parser architecture but simplified for MLX backend.
 """
 
 import importlib
+import json
 import re
+import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -21,6 +23,20 @@ from transformers import PreTrainedTokenizerBase
 # 2. Only closing tag: ...content before...</think> (when <think> is in prompt)
 THINK_TAG_PATTERN = re.compile(r"<think>.*?</think>", re.DOTALL)
 IMPLICIT_THINK_PATTERN = re.compile(r"^.*?</think>", re.DOTALL)
+
+# General fallback: model outputs tool calls as text instead of structured format.
+# Common degradation at low quantization after multiple tool rounds.
+# Variant 1: [Calling tool="name" param1="val1" param2="val2"]
+TEXT_TOOL_CALL_KV_PATTERN = re.compile(
+    r'\[Calling\s+tool="([^"]+)"((?:\s+\w+="(?:[^"\\]|\\.)*")*)\s*\]'
+)
+TEXT_TOOL_CALL_KV_PARAM = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
+# Variant 2: [Calling tool: name(json_args)]  or  [Calling tool: name({...})]
+TEXT_TOOL_CALL_FN_PATTERN = re.compile(
+    r'\[Calling\s+tool:\s*(\w+)\((\{.*?\})\)\s*\]'
+)
+# Combined check for either variant
+TEXT_TOOL_CALL_ANY = re.compile(r'\[Calling\s+tool[=:]')
 
 
 @dataclass
@@ -165,7 +181,73 @@ class ToolParser(ABC):
         Used as a fallback when streaming ends before the parser's closing
         tag arrives.  Subclasses should override for non-standard markers.
         """
-        return "<tool_call>" in text
+        return "<tool_call>" in text or self.has_text_format_tool_call(text)
+
+    # -----------------------------------------------------------------
+    # General text-format tool call fallback
+    # -----------------------------------------------------------------
+    # Models at low quantization sometimes degrade after multiple tool
+    # rounds and output tool calls as plain text instead of structured
+    # format.  These methods detect and convert the common
+    # [Calling tool="name" key="value" ...] pattern.
+
+    @staticmethod
+    def has_text_format_tool_call(text: str) -> bool:
+        """Check if text contains a text-format tool call.
+
+        Detects two common degradation patterns:
+          [Calling tool="name" key="value" ...]
+          [Calling tool: name({json})]
+        """
+        return TEXT_TOOL_CALL_ANY.search(text) is not None
+
+    @staticmethod
+    def extract_text_format_tool_calls(text: str) -> list[dict[str, Any]]:
+        """Extract tool calls from text-format patterns.
+
+        Handles two variants:
+          Variant 1: [Calling tool="name" key="value" key2="value2"]
+          Variant 2: [Calling tool: name({"key": "value"})]
+
+        Returns list of dicts with 'id', 'name', 'arguments' keys.
+        """
+        tool_calls: list[dict[str, Any]] = []
+
+        # Variant 1: key="value" pairs
+        for match in TEXT_TOOL_CALL_KV_PATTERN.finditer(text):
+            func_name = match.group(1)
+            params_str = match.group(2)
+            arguments: dict[str, Any] = {}
+            for pm in TEXT_TOOL_CALL_KV_PARAM.finditer(params_str):
+                key = pm.group(1)
+                value = pm.group(2).replace('\\"', '"')
+                try:
+                    arguments[key] = json.loads(value)
+                except (json.JSONDecodeError, ValueError):
+                    arguments[key] = value
+            if arguments:
+                tool_calls.append({
+                    "id": f"call_{uuid.uuid4().hex[:8]}",
+                    "name": func_name.strip(),
+                    "arguments": json.dumps(arguments, ensure_ascii=False),
+                })
+
+        # Variant 2: name({json})
+        for match in TEXT_TOOL_CALL_FN_PATTERN.finditer(text):
+            func_name = match.group(1)
+            json_str = match.group(2)
+            try:
+                arguments = json.loads(json_str)
+                if isinstance(arguments, dict) and arguments:
+                    tool_calls.append({
+                        "id": f"call_{uuid.uuid4().hex[:8]}",
+                        "name": func_name.strip(),
+                        "arguments": json.dumps(arguments, ensure_ascii=False),
+                    })
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        return tool_calls
 
     def reset(self) -> None:
         """Reset parser state for a new request."""

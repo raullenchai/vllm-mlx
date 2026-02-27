@@ -1,6 +1,6 @@
 # vLLM-MLX
 
-**Production-grade OpenAI-compatible LLM server for Apple Silicon**
+**Production-grade agent inference server for Apple Silicon**
 
 [![Fork](https://img.shields.io/badge/Fork-raullenchai%2Fvllm--mlx-orange?logo=github)](https://github.com/raullenchai/vllm-mlx)
 [![Upstream](https://img.shields.io/badge/Upstream-waybarrios%2Fvllm--mlx-blue?logo=github)](https://github.com/waybarrios/vllm-mlx)
@@ -9,7 +9,15 @@
 [![Tests](https://img.shields.io/badge/tests-1500%2B-brightgreen.svg)](tests/)
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1%20|%20M2%20|%20M3%20|%20M4-black.svg?logo=apple)](https://support.apple.com/en-us/HT211814)
 
-GPU-accelerated LLM inference on Mac via [MLX](https://github.com/ml-explore/mlx). Built on [waybarrios/vllm-mlx](https://github.com/waybarrios/vllm-mlx), this fork adds **40+ commits** with tool calling, reasoning separation, prompt caching, smart cloud routing, and 1500+ tests.
+Run local LLMs as a **drop-in replacement for OpenAI** — with the reliability that agent frameworks demand. GPU-accelerated on Mac via [MLX](https://github.com/ml-explore/mlx), built for tools like **Claude Code, Cursor, OpenClaw, Aider, LangChain, and any OpenAI-compatible client**.
+
+The upstream [waybarrios/vllm-mlx](https://github.com/waybarrios/vllm-mlx) is a solid MLX inference wrapper. This fork transforms it into a **production agent server** — the kind of infrastructure you need when AI agents call tools, reason through problems, and run multi-turn sessions that last hours.
+
+### Why This Fork?
+
+Local models are fast and private, but they break in agent workflows. Quantized models forget their tool format after a few rounds. Streaming responses leak XML into content. Disconnected clients lock the server. Multi-turn conversations re-prefill the entire context every time.
+
+**We fix all of that at the server level**, so every client — Cursor, Claude Code, your custom agent — just works.
 
 ---
 
@@ -17,15 +25,27 @@ GPU-accelerated LLM inference on Mac via [MLX](https://github.com/ml-explore/mlx
 
 | Capability | Upstream | This Fork |
 |-----------|----------|-----------|
-| Tool calling | Not supported | Streaming + non-streaming, 7 parser formats |
-| Reasoning separation | Not supported | Clean `reasoning_content` field (0% leak rate) |
-| Multi-turn TTFT | Full prefill every turn | **10-30x faster** — persistent prompt cache |
-| Long-context prefill | 50s for 52K tokens | **<1s** — smart cloud routing offloads to GPT-5/Claude |
-| Decode speed | Baseline | 65-70 tok/s on M3 Ultra (Qwen3-Coder-Next-6bit) |
-| KV cache quantization | Not available | 4-bit and 8-bit, halves memory for long contexts |
-| Speculative decoding | Not available | `--draft-model` with prompt cache compatibility |
-| Logprobs API | Not available | Per-token `logprobs` + `top_logprobs` |
-| Test coverage | Minimal | **1500+ tests** |
+| **Tool calling** | Not supported | 7 parser formats, streaming, **auto-recovery of degraded outputs** |
+| **Agent reliability** | N/A | Disconnect guard, think-tag filtering, text-format tool call recovery |
+| **Reasoning separation** | Not supported | Clean `reasoning_content` field (0% leak rate) |
+| **Multi-turn TTFT** | Full prefill every turn | **10-30x faster** — persistent prompt cache |
+| **Long-context prefill** | 50s for 52K tokens | **<1s** — smart cloud routing offloads to GPT-5/Claude |
+| **Decode speed** | Baseline | 65-100 tok/s on M3 Ultra |
+| **KV cache quantization** | Not available | 4-bit and 8-bit, halves memory for long contexts |
+| **Speculative decoding** | Not available | `--draft-model` with prompt cache compatibility |
+| **Logprobs API** | Not available | Per-token `logprobs` + `top_logprobs` |
+| **Test coverage** | Minimal | **1500+ tests** (unit + end-to-end agent simulation) |
+
+### Tested With
+
+| Client | Status | Notes |
+|--------|--------|-------|
+| [OpenClaw](https://github.com/nicepkg/openclaw) | Verified | 14 tools, multi-round, streaming |
+| [Aider](https://aider.chat) | Verified | Code editing agent |
+| [LangChain](https://langchain.com) | Compatible | Standard OpenAI client |
+| [Claude Code](https://claude.ai/claude-code) | Planned | OpenAI-compatible endpoint |
+| [Cursor](https://cursor.com) | Planned | OpenAI-compatible endpoint |
+| Any OpenAI SDK client | Compatible | Drop-in `base_url` swap |
 
 ---
 
@@ -57,7 +77,7 @@ python -m vllm_mlx.server \
   --port 8000
 ```
 
-That's it. You now have an OpenAI-compatible server on `localhost:8000`.
+That's it. You now have an OpenAI-compatible agent server on `localhost:8000`.
 
 ### 3. Use it
 
@@ -72,15 +92,28 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-Works with any OpenAI-compatible client — Cursor, Continue, Aider, LangChain, or your own code.
+Works as a drop-in backend for any OpenAI-compatible client:
+
+```bash
+# Claude Code
+OPENAI_BASE_URL=http://localhost:8000/v1 claude
+
+# Cursor — set in Settings > Models > OpenAI API Base
+# http://localhost:8000/v1
+
+# Aider
+aider --openai-api-base http://localhost:8000/v1
+
+# Any OpenAI SDK — just set base_url
+```
 
 ---
 
 ## Features
 
-### Tool Calling
+### Tool Calling (Any Model, Any Quantization)
 
-Full OpenAI-compatible tool calling with streaming support. Works out of the box with 7 parser formats.
+Full OpenAI-compatible tool calling with streaming support. 7 parser formats built in, and **automatic recovery when models break**.
 
 ```python
 tools = [{
@@ -110,6 +143,29 @@ print(tool_call.function.arguments)  # '{"city": "Tokyo"}'
 ```
 
 Supported parsers: `hermes`, `minimax`, `qwen`, `qwen3_coder`, `llama`, `deepseek`, `functionary`, and more. Use `--tool-call-parser <name>` to select.
+
+#### Robust Tool Call Recovery
+
+A common pain point with local models: **quantized models (4-bit, 6-bit) degrade after multiple tool call rounds** and start outputting tool calls as plain text instead of structured format. This breaks agent frameworks like OpenClaw, Claude Code, Cursor, and LangChain — the client receives text instead of a `tool_calls` response.
+
+vllm-mlx solves this at the server level. **All parsers** automatically detect and recover degraded tool calls — no configuration needed, works with any model:
+
+```
+# Model outputs broken text instead of structured XML/JSON:
+[Calling tool="web_search" query="weather tonight"]
+[Calling tool: exec({"command":"python3 --version"})]
+
+# vllm-mlx auto-detects and converts to proper OpenAI tool_calls:
+→ finish_reason: "tool_calls"
+→ tool_calls: [{"name": "web_search", "arguments": "{\"query\": \"weather tonight\"}"}]
+```
+
+This is especially important for:
+- **MoE models at 4-bit** (MiniMax-M2.5, Qwen3.5-122B, Qwen3-Coder-Next) — most prone to degradation
+- **Long agent sessions** (8+ tool rounds) — where models run out of "structured output stamina"
+- **Multi-tool setups** (10+ tools) — where tool choice complexity increases error rates
+
+Tested end-to-end with 14 tools across 8+ rounds — see [`tests/test_tool_call_e2e.py`](tests/test_tool_call_e2e.py) for the full agent simulation.
 
 ### Reasoning Separation
 
@@ -165,29 +221,79 @@ Disabled by default. Cost estimate: ~$0.02-0.05 per cloud-routed request with GP
 
 ### Recommended
 
-| Model | Quant | RAM | Decode | Best For |
-|-------|-------|-----|--------|----------|
-| Qwen3-Coder-Next | 4bit | 42GB | **70 tok/s** | Speed-first |
-| Qwen3-Coder-Next | 6bit | 60GB | 65 tok/s | **Best balance** |
-| Qwen3-Coder-Next | 8bit | 75GB | ~45 tok/s | Highest quality |
-| MiniMax-M2.5 | 4bit | 120GB | 33-38 tok/s | Deep reasoning (192GB+ recommended) |
+| Model | Params | Quant | RAM | Decode | Tool Parser | Best For |
+|-------|--------|-------|-----|--------|-------------|----------|
+| [Qwen3.5-122B-A10B](https://huggingface.co/nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx) | 122B/10B | mxfp4 | 72GB | ~35-50 tok/s | `hermes` | **Best tool calling** (BFCL 72.2) |
+| [Qwen3-Coder-Next](https://huggingface.co/lmstudio-community/Qwen3-Coder-Next-MLX-4bit) | 80B/3B | 4bit | 42GB | **~80-100 tok/s** | `hermes` | Speed + coding |
+| [Qwen3-Coder-Next](https://huggingface.co/lmstudio-community/Qwen3-Coder-Next-MLX-6bit) | 80B/3B | 6bit | 60GB | ~65 tok/s | `hermes` | **Best balance** |
+| [MiniMax-M2.5](https://huggingface.co/lmstudio-community/MiniMax-M2.5-MLX-4bit) | 229B/10B | 4bit | 120GB | 33-38 tok/s | `minimax` | Deep reasoning (192GB+) |
 
 Benchmarks on Mac Studio M3 Ultra (256GB), 800 GB/s memory bandwidth.
 
-### Any MLX Model
-
-Any model from [mlx-community](https://huggingface.co/mlx-community) works:
+### Quick Start Commands
 
 ```bash
-# Llama
-python -m vllm_mlx.server --model mlx-community/Llama-3.2-3B-Instruct-4bit
+# Qwen3.5-122B — best tool calling + reasoning, fits 192GB Macs
+python -m vllm_mlx.server \
+  --model nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx \
+  --tool-call-parser hermes \
+  --max-tokens 4096 \
+  --port 8000
 
-# Mistral
-python -m vllm_mlx.server --model mlx-community/Mistral-7B-Instruct-v0.3-4bit
+# Qwen3-Coder-Next — fast coding agent (3B active, ~100 tok/s)
+python -m vllm_mlx.server \
+  --model lmstudio-community/Qwen3-Coder-Next-MLX-4bit \
+  --tool-call-parser hermes \
+  --prefill-step-size 8192 \
+  --port 8000
 
-# Vision models
-python -m vllm_mlx.server --model mlx-community/Qwen3-VL-4B-Instruct-MLX-4bit --mllm
+# MiniMax-M2.5 — deep reasoning with tool calling
+python -m vllm_mlx.server \
+  --model lmstudio-community/MiniMax-M2.5-MLX-4bit \
+  --tool-call-parser minimax \
+  --reasoning-parser minimax \
+  --max-tokens 2048 \
+  --port 8000
+
+# Llama 3.2 — lightweight, fast
+python -m vllm_mlx.server \
+  --model mlx-community/Llama-3.2-3B-Instruct-4bit \
+  --tool-call-parser llama \
+  --port 8000
+
+# Mistral — general purpose
+python -m vllm_mlx.server \
+  --model mlx-community/Mistral-7B-Instruct-v0.3-4bit \
+  --tool-call-parser hermes \
+  --port 8000
+
+# DeepSeek-R1 — reasoning-focused
+python -m vllm_mlx.server \
+  --model mlx-community/DeepSeek-R1-Distill-Qwen-14B-4bit \
+  --tool-call-parser deepseek \
+  --reasoning-parser deepseek_r1 \
+  --port 8000
+
+# Qwen3 VL — vision + language
+python -m vllm_mlx.server \
+  --model mlx-community/Qwen3-VL-4B-Instruct-MLX-4bit \
+  --mllm \
+  --port 8000
 ```
+
+### Tool Parser Selection Guide
+
+| Model Family | `--tool-call-parser` | `--reasoning-parser` | Notes |
+|-------------|---------------------|---------------------|-------|
+| Qwen3.5, Qwen3-Coder-Next | `hermes` | *(none)* | Non-thinking mode, fast |
+| Qwen3 (thinking) | `qwen` or `qwen3_coder` | `qwen3` | With `<think>` tags |
+| MiniMax-M2.5 | `minimax` | `minimax` | XML tool format |
+| Llama 3.x | `llama` | *(none)* | JSON tool format |
+| DeepSeek-R1 | `deepseek` | `deepseek_r1` | With reasoning |
+| Mistral | `hermes` | *(none)* | Hermes-compatible |
+| Functionary | `functionary` | *(none)* | Custom format |
+
+All parsers include automatic text-format tool call recovery — if a quantized model degrades and outputs tool calls as plain text, they're automatically converted back to structured `tool_calls`.
 
 ---
 
@@ -249,7 +355,19 @@ python -m vllm_mlx.server --model mlx-community/Qwen3-VL-4B-Instruct-MLX-4bit --
 
 ## Full Example Configurations
 
-**Qwen3-Coder-Next — coding agent setup:**
+**Production agent setup (best tool calling):**
+
+```bash
+python -m vllm_mlx.server \
+  --model nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx \
+  --tool-call-parser hermes \
+  --prefill-step-size 8192 \
+  --kv-bits 8 \
+  --max-tokens 4096 \
+  --port 8000
+```
+
+**Fast coding agent:**
 
 ```bash
 python -m vllm_mlx.server \
@@ -260,11 +378,12 @@ python -m vllm_mlx.server \
   --port 8000
 ```
 
-**MiniMax-M2.5 — deep reasoning setup:**
+**Deep reasoning + tool calling:**
 
 ```bash
 python -m vllm_mlx.server \
   --model lmstudio-community/MiniMax-M2.5-MLX-4bit \
+  --tool-call-parser minimax \
   --reasoning-parser minimax \
   --prefill-step-size 4096 \
   --kv-bits 4 \
@@ -275,10 +394,10 @@ python -m vllm_mlx.server \
 
 ```bash
 OPENAI_API_KEY=sk-... python -m vllm_mlx.server \
-  --model lmstudio-community/Qwen3-Coder-Next-MLX-6bit \
+  --model nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx \
   --tool-call-parser hermes \
   --cloud-model openai/gpt-5 \
-  --cloud-threshold 15000 \
+  --cloud-threshold 20000 \
   --port 8000
 ```
 
@@ -325,20 +444,27 @@ OPENAI_API_KEY=sk-... python -m vllm_mlx.server \
 
 ## What This Fork Adds (vs. Upstream)
 
-### Tool Calling & Reasoning (12 features)
+### Agent-Grade Tool Calling (13 features)
 
-- MiniMax reasoning parser — heuristic no-tag stripping (0% leak rate, was 60%)
+- **Text-format tool call recovery** — quantized models degrade and output tool calls as plain text; server auto-detects and converts back to structured `tool_calls` (works with any model, any parser)
+- 7 tool parsers — Hermes, MiniMax, Qwen, Qwen3-Coder, Llama, DeepSeek, Functionary
 - MiniMax tool call parser — streaming + non-streaming XML extraction
 - `--tool-call-parser` flag — explicit parser selection for any model
 - Auto-infer tool parser — `--reasoning-parser minimax` auto-selects matching tool parser
-- Chunk-boundary leak fix — prevents XML leaking into reasoning stream
-- Chinese reasoning pattern recognition
 - Tool-use system prompt auto-injection (100% tool call rate, was 67%)
 - Tool logits bias — jump-forward decoding for 2-5x faster structured output
-- Hermes, Qwen, Qwen3-Coder, Llama, DeepSeek, Functionary parser support
+- Streaming disconnect guard — client disconnects release server locks instead of deadlocking
+- Think-tag streaming filter — `<think>...</think>` blocks stripped from content, never leaked to clients
+- Chunk-boundary leak fix — prevents XML leaking into reasoning stream
 - `developer` role normalization for chat template compatibility
 - Logprobs API — per-token `logprobs` + `top_logprobs`
-- Streaming disconnect guard — graceful handling of client disconnects
+- End-to-end agent simulation tests — 14 tools, 8+ rounds, verified with OpenClaw
+
+### Reasoning Separation (3 features)
+
+- MiniMax reasoning parser — heuristic no-tag stripping (0% leak rate, was 60%)
+- Chinese reasoning pattern recognition
+- Clean `reasoning_content` field — reasoning never mixed into `content`
 
 ### Performance (6 features)
 
@@ -356,7 +482,7 @@ OPENAI_API_KEY=sk-... python -m vllm_mlx.server \
 - Server crash prevention on malformed `response_format`
 - GC control during generation to avoid latency spikes
 - System prompt pinning in prefix cache
-- **1500+ unit tests** across parsers, engine, server, and tool calling
+- **1500+ tests** — unit tests + end-to-end agent simulation with real tool execution
 
 ---
 

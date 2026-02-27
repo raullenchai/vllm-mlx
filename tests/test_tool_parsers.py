@@ -1160,3 +1160,395 @@ class TestHermesStreamingFixes:
         assert len(emitted_calls) == 2
         assert emitted_calls[0]["function"]["name"] == "func1"
         assert emitted_calls[1]["function"]["name"] == "func2"
+
+
+class TestTextFormatToolCallFallback:
+    """Test text-format tool call fallback parser.
+
+    Models at low quantization (e.g., 4-bit) sometimes degrade after multiple
+    tool call rounds and output tool calls as plain text instead of structured
+    format.  The base ToolParser class provides general detection and extraction
+    for two common degradation patterns:
+
+    Variant 1 (KV style):  [Calling tool="name" key="value" ...]
+    Variant 2 (function call style):  [Calling tool: name({"key": "value"})]
+    """
+
+    # -- Fixtures --
+
+    @pytest.fixture
+    def minimax_parser(self):
+        from vllm_mlx.tool_parsers import MiniMaxToolParser
+        return MiniMaxToolParser()
+
+    @pytest.fixture
+    def hermes_parser(self):
+        return HermesToolParser()
+
+    # -- Helpers --
+
+    def _assert_tool_call(self, tc, name, **expected_args):
+        """Assert a tool call dict has the expected name and arguments."""
+        assert tc["id"].startswith("call_"), f"Tool call id should start with 'call_', got {tc['id']}"
+        assert tc["name"] == name
+        args = json.loads(tc["arguments"])
+        for k, v in expected_args.items():
+            assert args[k] == v, f"Expected {k}={v!r}, got {args[k]!r}"
+
+    # =================================================================
+    # Variant 1 - KV style
+    # =================================================================
+
+    def test_variant1_simple_kv(self):
+        """Test basic KV-style text-format tool call."""
+        text = '[Calling tool="web_search" query="weather palo alto"]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        self._assert_tool_call(calls[0], "web_search", query="weather palo alto")
+
+    def test_variant1_multiple_params(self):
+        """Test KV-style with multiple parameters."""
+        text = '[Calling tool="exec" command="ls -la" timeout="5000"]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        self._assert_tool_call(calls[0], "exec", command="ls -la")
+        args = json.loads(calls[0]["arguments"])
+        # timeout should be parsed as int by json.loads
+        assert args["timeout"] == 5000
+
+    def test_variant1_escaped_quotes(self):
+        """Test KV-style with escaped quotes in value."""
+        text = r'[Calling tool="exec" command="curl -s \"https://example.com\""]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        assert calls[0]["name"] == "exec"
+        args = json.loads(calls[0]["arguments"])
+        assert "https://example.com" in args["command"]
+
+    def test_variant1_single_param(self):
+        """Test KV-style with a single parameter."""
+        text = '[Calling tool="read" path="/tmp/file.txt"]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        self._assert_tool_call(calls[0], "read", path="/tmp/file.txt")
+
+    # =================================================================
+    # Variant 2 - Function call style
+    # =================================================================
+
+    def test_variant2_json_args(self):
+        """Test function-call style with JSON arguments."""
+        text = '[Calling tool: process({"action":"poll", "sessionId":"clear-haven", "timeout":5000})]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        self._assert_tool_call(
+            calls[0], "process",
+            action="poll", sessionId="clear-haven", timeout=5000,
+        )
+
+    def test_variant2_simple_json(self):
+        """Test function-call style with simple JSON."""
+        text = '[Calling tool: web_search({"query":"weather tonight"})]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        self._assert_tool_call(calls[0], "web_search", query="weather tonight")
+
+    def test_variant2_single_key(self):
+        """Test function-call style with single key."""
+        text = '[Calling tool: exec({"command":"python3 --version"})]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        self._assert_tool_call(calls[0], "exec", command="python3 --version")
+
+    # =================================================================
+    # Edge cases
+    # =================================================================
+
+    def test_inside_think_tags(self):
+        """Text-format tool call embedded inside <think>...</think> tags."""
+        text = '<think>I should search for this.\n[Calling tool="web_search" query="test"]</think>'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        # The raw extraction should still find it inside think tags
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        self._assert_tool_call(calls[0], "web_search", query="test")
+
+    def test_content_before(self):
+        """Text-format tool call with content BEFORE it."""
+        text = 'Let me check the weather for you. [Calling tool="web_search" query="weather"]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        self._assert_tool_call(calls[0], "web_search", query="weather")
+
+    def test_content_after(self):
+        """Text-format tool call with content AFTER it."""
+        text = '[Calling tool="web_search" query="weather"] I will get the results.'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        self._assert_tool_call(calls[0], "web_search", query="weather")
+
+    def test_multiple_text_format_calls(self):
+        """Multiple text-format tool calls in same output."""
+        text = (
+            '[Calling tool="web_search" query="weather"]\n'
+            '[Calling tool="exec" command="date"]'
+        )
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 2
+        assert calls[0]["name"] == "web_search"
+        assert calls[1]["name"] == "exec"
+
+    def test_mixed_xml_and_text_format(self):
+        """Mixed: one XML tool call + one text-format tool call in same output."""
+        # The text-format extractor only extracts text-format calls,
+        # not XML ones.  Verify it does not pick up the XML call.
+        text = (
+            '<minimax:tool_call><invoke name="func1"><parameter name="a">1</parameter></invoke></minimax:tool_call>\n'
+            '[Calling tool="func2" b="2"]'
+        )
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        assert calls[0]["name"] == "func2"
+
+    def test_unicode_in_arguments(self):
+        """Unicode in arguments (Chinese, emoji)."""
+        text = '[Calling tool="translate" text="\u4f60\u597d\u4e16\u754c"]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        args = json.loads(calls[0]["arguments"])
+        assert args["text"] == "\u4f60\u597d\u4e16\u754c"
+
+    def test_unicode_emoji_in_arguments(self):
+        """Emoji characters in arguments."""
+        text = '[Calling tool="react" emoji="\U0001f680\U0001f525"]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        args = json.loads(calls[0]["arguments"])
+        assert args["emoji"] == "\U0001f680\U0001f525"
+
+    def test_variant2_nested_json(self):
+        """Nested JSON in variant 2."""
+        text = '[Calling tool: configure({"key": {"nested": true}})]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 1
+        args = json.loads(calls[0]["arguments"])
+        assert args["key"]["nested"] is True
+
+    def test_has_text_format_tool_call_true(self):
+        """has_text_format_tool_call() returns True for matching text."""
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        assert ToolParser.has_text_format_tool_call('[Calling tool="web_search" q="x"]')
+        assert ToolParser.has_text_format_tool_call('[Calling tool: func({"a":1})]')
+
+    def test_has_text_format_tool_call_false(self):
+        """has_text_format_tool_call() returns False for non-matching text."""
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        assert not ToolParser.has_text_format_tool_call("Hello, world!")
+        assert not ToolParser.has_text_format_tool_call("[Calling out to the void]")
+        assert not ToolParser.has_text_format_tool_call('<tool_call>{"name":"f"}</tool_call>')
+
+    def test_has_pending_tool_call_text_format(self):
+        """has_pending_tool_call() on base ToolParser returns True for text-format."""
+        # Use a concrete subclass (HermesToolParser inherits from ToolParser)
+        parser = HermesToolParser()
+        assert parser.has_pending_tool_call('[Calling tool="search" q="test"]')
+
+    def test_variant1_no_params_should_not_match(self):
+        """Variant 1 with no params (just tool name) should NOT produce a tool call."""
+        # The pattern requires at least one key="value" param, and extract
+        # also checks `if arguments:` before appending.
+        text = '[Calling tool="web_search"]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 0
+
+    def test_partial_incomplete_should_not_match(self):
+        """Partial/incomplete text-format (missing closing ']') should NOT match."""
+        text = '[Calling tool="web_search" query="test"'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 0
+
+    def test_both_variants_in_same_text(self):
+        """Both variant 1 and variant 2 in the same text."""
+        text = (
+            '[Calling tool="read" path="/tmp/data.txt"]\n'
+            '[Calling tool: exec({"command":"cat /tmp/data.txt"})]'
+        )
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 2
+        names = {c["name"] for c in calls}
+        assert names == {"read", "exec"}
+        # Verify unique IDs
+        ids = [c["id"] for c in calls]
+        assert len(ids) == len(set(ids))
+
+    # =================================================================
+    # MiniMax-specific integration
+    # =================================================================
+
+    def test_minimax_extract_falls_back_to_text_format(self, minimax_parser):
+        """MiniMax extract_tool_calls() falls back to text-format when no XML found."""
+        text = '[Calling tool="web_search" query="weather"]'
+        result = minimax_parser.extract_tool_calls(text)
+        assert result.tools_called
+        assert len(result.tool_calls) == 1
+        self._assert_tool_call(result.tool_calls[0], "web_search", query="weather")
+
+    def test_minimax_extract_text_format_variant2(self, minimax_parser):
+        """MiniMax extract_tool_calls() handles variant 2 text-format."""
+        text = '[Calling tool: exec({"command":"ls -la"})]'
+        result = minimax_parser.extract_tool_calls(text)
+        assert result.tools_called
+        assert len(result.tool_calls) == 1
+        self._assert_tool_call(result.tool_calls[0], "exec", command="ls -la")
+
+    def test_minimax_extract_text_format_with_content(self, minimax_parser):
+        """MiniMax extracts text-format and preserves surrounding content."""
+        text = 'Let me check that for you. [Calling tool="web_search" query="test"]'
+        result = minimax_parser.extract_tool_calls(text)
+        assert result.tools_called
+        assert result.content == "Let me check that for you."
+
+    def test_minimax_has_pending_text_format(self, minimax_parser):
+        """MiniMax has_pending_tool_call() detects text-format."""
+        assert minimax_parser.has_pending_tool_call('[Calling tool="search" q="x"]')
+        assert not minimax_parser.has_pending_tool_call("Just regular text.")
+
+    def test_minimax_has_tool_start_text_format(self, minimax_parser):
+        """MiniMax _has_tool_start() detects [Calling tool="..."."""
+        assert minimax_parser._has_tool_start('[Calling tool="web_search" q="x"]')
+        assert not minimax_parser._has_tool_start("Regular text without tool calls.")
+
+    def test_minimax_has_tool_end_text_format(self, minimax_parser):
+        """MiniMax _has_tool_end() detects text-format completion."""
+        previous = 'Some text [Calling tool="search" q="te'
+        current = '[Calling tool="search" q="test"]'
+        assert minimax_parser._has_tool_end(current, previous)
+
+    def test_minimax_has_tool_end_no_new_match(self, minimax_parser):
+        """MiniMax _has_tool_end() returns False when no new match appeared."""
+        text = '[Calling tool="search" q="test"]'
+        assert not minimax_parser._has_tool_end(text, text)
+
+    def test_minimax_streaming_text_format(self, minimax_parser):
+        """MiniMax streaming: text-format tool call suppressed until complete, then emitted."""
+        chunks = [
+            'Let me check. ',
+            '[Calling tool="web_search"',
+            ' query="weather palo alto"',
+            ']',
+        ]
+
+        accumulated = ""
+        content_parts = []
+        tool_calls_found = []
+        for chunk in chunks:
+            prev = accumulated
+            accumulated += chunk
+            r = minimax_parser.extract_tool_calls_streaming(
+                previous_text=prev,
+                current_text=accumulated,
+                delta_text=chunk,
+            )
+            if r is not None:
+                if "content" in r:
+                    content_parts.append(r["content"])
+                if "tool_calls" in r:
+                    tool_calls_found.extend(r["tool_calls"])
+
+        # Content before the tool call should have been emitted
+        assert any("Let me check." in c for c in content_parts)
+        # Tool call should have been emitted once complete
+        assert len(tool_calls_found) == 1
+        assert tool_calls_found[0]["function"]["name"] == "web_search"
+        args = json.loads(tool_calls_found[0]["function"]["arguments"])
+        assert args["query"] == "weather palo alto"
+
+    def test_minimax_streaming_text_format_variant2(self, minimax_parser):
+        """MiniMax streaming: variant 2 text-format is detected when complete."""
+        chunks = [
+            '[Calling tool: exec(',
+            '{"command":"python3 --version"}',
+            ')]',
+        ]
+
+        accumulated = ""
+        tool_calls_found = []
+        for chunk in chunks:
+            prev = accumulated
+            accumulated += chunk
+            r = minimax_parser.extract_tool_calls_streaming(
+                previous_text=prev,
+                current_text=accumulated,
+                delta_text=chunk,
+            )
+            if r is not None and "tool_calls" in r:
+                tool_calls_found.extend(r["tool_calls"])
+
+        assert len(tool_calls_found) == 1
+        assert tool_calls_found[0]["function"]["name"] == "exec"
+
+    # =================================================================
+    # General ToolParser integration
+    # =================================================================
+
+    def test_hermes_inherits_has_pending_text_format(self, hermes_parser):
+        """HermesToolParser inherits has_pending_tool_call detecting text-format."""
+        assert hermes_parser.has_pending_tool_call(
+            '[Calling tool="search" query="test"]'
+        )
+
+    def test_hermes_has_pending_false_for_plain_text(self, hermes_parser):
+        """HermesToolParser has_pending_tool_call returns False for plain text."""
+        assert not hermes_parser.has_pending_tool_call("Just a regular message.")
+
+    def test_variant2_empty_json_should_not_match(self):
+        """Variant 2 with empty JSON object should NOT produce a tool call."""
+        text = '[Calling tool: func({})]'
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        # Empty dict check: `if isinstance(arguments, dict) and arguments:`
+        assert len(calls) == 0
+
+    def test_tool_call_ids_are_unique(self):
+        """Each extracted tool call gets a unique ID."""
+        text = (
+            '[Calling tool="func1" a="1"]\n'
+            '[Calling tool="func2" b="2"]\n'
+            '[Calling tool: func3({"c":"3"})]'
+        )
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        calls = ToolParser.extract_text_format_tool_calls(text)
+        assert len(calls) == 3
+        ids = [c["id"] for c in calls]
+        assert len(ids) == len(set(ids)), "All tool call IDs should be unique"
+
+    def test_arguments_are_valid_json(self):
+        """Extracted arguments field is always valid JSON."""
+        texts = [
+            '[Calling tool="read" path="/tmp/file.txt"]',
+            '[Calling tool: search({"query":"hello world"})]',
+            '[Calling tool="exec" command="echo hello" timeout="30"]',
+        ]
+        from vllm_mlx.tool_parsers.abstract_tool_parser import ToolParser
+        for text in texts:
+            calls = ToolParser.extract_text_format_tool_calls(text)
+            for call in calls:
+                parsed = json.loads(call["arguments"])
+                assert isinstance(parsed, dict)

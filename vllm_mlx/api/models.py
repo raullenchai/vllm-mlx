@@ -456,16 +456,7 @@ class ChatCompletionChunkDelta(BaseModel):
 
     role: str | None = None
     content: str | None = None
-    reasoning: str | None = (
-        None  # Reasoning/thinking content (when --reasoning-parser is used)
-    )
     tool_calls: list[dict] | None = None
-
-    @computed_field
-    @property
-    def reasoning_content(self) -> str | None:
-        """Alias for reasoning field. Serialized for backwards compatibility with clients expecting reasoning_content."""
-        return self.reasoning
 
 
 class ChatCompletionChunkChoice(BaseModel):

@@ -57,8 +57,28 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
         if "TokenizersBackend" in str(e) or "Tokenizer class" in str(e):
             logger.warning(f"Standard tokenizer loading failed, using fallback: {e}")
             return _load_with_tokenizer_fallback(model_name)
+        # Fallback for multimodal models loaded as text-only (skip vision weights)
+        elif "parameters not in model" in str(e):
+            logger.warning(f"Model has extra parameters (likely vision weights), retrying with strict=False: {e}")
+            return _load_non_strict(model_name, tokenizer_config)
         else:
             raise
+
+
+def _load_non_strict(model_name: str, tokenizer_config: dict = None):
+    """Load model with strict=False to skip extra weights (e.g., vision tower)."""
+    from mlx_lm.utils import load_model, load_tokenizer
+
+    local_path = Path(model_name)
+    if local_path.is_dir():
+        model_path = local_path
+    else:
+        from huggingface_hub import snapshot_download
+        model_path = Path(snapshot_download(model_name))
+
+    model, _ = load_model(model_path, strict=False)
+    tokenizer = load_tokenizer(model_path, tokenizer_config or {})
+    return model, tokenizer
 
 
 def _load_with_tokenizer_fallback(model_name: str):

@@ -66,13 +66,15 @@ if [ -d "$INSTALL_DIR" ]; then
     echo "  Existing installation found at $INSTALL_DIR"
     echo "  Upgrading..."
     "$INSTALL_DIR/bin/pip" install --upgrade pip -q
-    "$INSTALL_DIR/bin/pip" install --upgrade "vllm-mlx @ git+${REPO}" -q
+    "$INSTALL_DIR/bin/pip" install --upgrade --no-cache-dir "vllm-mlx @ git+${REPO}"
 else
     echo ""
     echo "  Installing to $INSTALL_DIR ..."
+    echo "  (This may take a few minutes — MLX and dependencies need to compile)"
+    echo ""
     "$PYTHON" -m venv "$INSTALL_DIR"
     "$INSTALL_DIR/bin/pip" install --upgrade pip -q
-    "$INSTALL_DIR/bin/pip" install "vllm-mlx @ git+${REPO}" -q
+    "$INSTALL_DIR/bin/pip" install "vllm-mlx @ git+${REPO}"
 fi
 
 # 5. Create symlinks
@@ -108,7 +110,12 @@ if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
 fi
 
 # 7. Verify installation
-VERSION=$("$INSTALL_DIR/bin/vllm-mlx" --help 2>&1 | head -1 || echo "installed")
+if ! "$INSTALL_DIR/bin/vllm-mlx" --help &>/dev/null; then
+    echo ""
+    echo "  Warning: vllm-mlx installed but CLI verification failed."
+    echo "  Try running: $INSTALL_DIR/bin/vllm-mlx --help"
+    echo ""
+fi
 
 echo ""
 echo "  vllm-mlx installed successfully!"

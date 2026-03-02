@@ -9,6 +9,7 @@ Supports implicit reasoning mode where <think> is injected in the prompt
 by AI agents (e.g., OpenCode) and only </think> appears in the output.
 """
 
+from .base import DeltaMessage
 from .think_parser import BaseThinkingReasoningParser
 
 
@@ -62,3 +63,27 @@ class Qwen3ReasoningParser(BaseThinkingReasoningParser):
 
         # Use base class implementation (handles both explicit and implicit)
         return super().extract_reasoning(model_output)
+
+    def finalize_streaming(
+        self, accumulated_text: str
+    ) -> DeltaMessage | None:
+        """
+        Finalize streaming output.
+
+        If no tags were ever seen, the base class classified everything as
+        reasoning (to support implicit think mode where <think> is in the
+        prompt). But if </think> never appeared either, the model simply
+        doesn't use think tags — all output should have been content.
+
+        Emit a correction chunk with the full text as content. The server
+        emits this as a final SSE chunk so the client receives the complete
+        response.
+
+        This is safe because:
+        - Explicit think (<think>...<think>content): _saw_any_tag is True, no correction
+        - Implicit think (reasoning</think>content): _saw_any_tag is True, no correction
+        - No tags at all: _saw_any_tag is False, correction emitted
+        """
+        if not self._saw_any_tag and accumulated_text:
+            return DeltaMessage(content=accumulated_text)
+        return None

@@ -2567,10 +2567,6 @@ async def stream_chat_completion(
             if tool_parser and content:
                 if not tool_markup_possible and "<" not in content:
                     tool_accumulated_text += content
-                    # Suppress whitespace-only content when tools are active;
-                    # avoids emitting stray newlines before tool call XML.
-                    if not content.strip():
-                        continue
                 else:
                     if not tool_markup_possible:
                         tool_markup_possible = True
@@ -2728,8 +2724,9 @@ async def stream_chat_completion(
                 content = _think_buffer
                 _think_buffer = ""
 
-            # Skip whitespace-only content chunks (no meaningful content)
-            if content and not content.strip():
+            # Skip empty-string content but preserve whitespace/newlines
+            # (newlines are significant for markdown formatting)
+            if content is not None and content == "":
                 content = None
 
             # Compute finish reason

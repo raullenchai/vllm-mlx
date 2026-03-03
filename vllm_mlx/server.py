@@ -1678,6 +1678,19 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     )
     logger.info(f"[REQUEST] last user message preview: {last_user_preview!r}")
 
+    # Save original messages (clean dicts) for cloud routing BEFORE
+    # local mutations (extract_multimodal_content, developer→system, suffix injection).
+    # Cloud APIs expect standard OpenAI-format messages.
+    if _cloud_router:
+        _cloud_original_messages = [
+            msg.model_dump(exclude_none=True)
+            if hasattr(msg, "model_dump")
+            else {k: v for k, v in dict(msg).items() if v is not None}
+            for msg in request.messages
+        ]
+    else:
+        _cloud_original_messages = None
+
     # For MLLM models, keep original messages with embedded images
     # (MLLM.chat() extracts images from message content internally)
     if engine.is_mllm:
@@ -1799,13 +1812,17 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
                     f"> threshold {_cloud_router.threshold}, "
                     f"routing to {_cloud_router.cloud_model}"
                 )
-                # Pass original dict-format messages to cloud (not template-applied prompt)
-                cloud_messages = messages
+                # Use pre-mutation messages for cloud (standard OpenAI format)
+                cloud_messages = _cloud_original_messages
                 cloud_kwargs = {
                     "temperature": chat_kwargs.get("temperature"),
                     "max_tokens": chat_kwargs.get("max_tokens"),
                     "top_p": chat_kwargs.get("top_p"),
                 }
+                if request.stop:
+                    cloud_kwargs["stop"] = request.stop
+                if request.tool_choice is not None:
+                    cloud_kwargs["tool_choice"] = request.tool_choice
                 if request.response_format:
                     rf = request.response_format
                     cloud_kwargs["response_format"] = (

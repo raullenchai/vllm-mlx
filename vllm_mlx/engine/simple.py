@@ -593,6 +593,12 @@ class SimpleEngine(BaseEngine):
         self._model.trust_remote_code = self._trust_remote_code
         self._model.draft_model_name = self._draft_model_name
         self._model.num_draft_tokens = self._num_draft_tokens
+        self._model.prefill_step_size = 2048
+        self._model.kv_bits = None
+        self._model.kv_group_size = 64
+        self._model._prompt_cache = None
+        self._model._cached_token_ids = []
+        self._model._cache_lock = False
         self._model.model = model
         self._model.tokenizer = tokenizer
         self._model.draft_model = None

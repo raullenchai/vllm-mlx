@@ -377,6 +377,13 @@ class PrefixCacheManager:
         if entry is None:
             logger.warning(f"Cannot pin prefix: not found in cache")
             return False
+        # Reject if pinning would make capacity unenforceable
+        if key not in self._pinned and len(self._pinned) >= self.max_size:
+            logger.warning(
+                f"Cannot pin prefix: pinned count ({len(self._pinned)}) "
+                f"already at capacity ({self.max_size})"
+            )
+            return False
         try:
             self._lru.remove(key)
         except ValueError:

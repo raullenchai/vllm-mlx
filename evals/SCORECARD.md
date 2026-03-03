@@ -1,6 +1,6 @@
 # vllm-mlx Model Scorecard
 
-*Auto-generated on 2026-03-03 05:10 UTC*
+*Auto-generated on 2026-03-03 05:32 UTC*
 
 > **Methodology**: All evals run with `enable_thinking: false` across all models for fair comparison. See [README](README.md) for details.
 
@@ -8,7 +8,9 @@
 
 | Model | Quant | Hardware | Decode (s) | Decode (l) | Tools | Coding | Reasoning | General | Parser | Date |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GLM-4.7-Flash-8bit | 8bit | Apple M3 Ultra (256GB) | 31.3 t/s | 58 t/s | 73% | 100% | 80% | 90% | glm47 | 2026-03-03 |
 | GPT-OSS-20B-mxfp4-q8 | mxfp4-q8 | Apple M3 Ultra (256GB) | 89.1 t/s | 124 t/s | 77% | 90% | 90% | 100% | harmony | 2026-03-03 |
+| Hermes-3-Llama-3.1-8B-4bit | 4bit | Apple M3 Ultra (256GB) | 70.5 t/s | 123.2 t/s | 17% | 100% | 70% | 60% | hermes | 2026-03-03 |
 | MiniMax-M2.5-4bit | 4bit | Apple M3 Ultra (256GB) | 44.9 t/s | 50.6 t/s | 87% | 40% | 60% | 90% | minimax | 2026-03-03 |
 | Qwen3-0.6B-4bit | 4bit | Apple M3 Ultra (256GB) | 293.8 t/s | 372.3 t/s | 50% | 0% | 30% | 50% | hermes | 2026-03-03 |
 | Qwen3-Coder-Next-4bit | 4bit | Apple M3 Ultra (256GB) | 35.5 t/s | 73.9 t/s | 90% | 100% | 80% | 100% | hermes | 2026-03-03 |
@@ -19,6 +21,19 @@
 | Qwen3.5-35B-A3B-8bit | 8bit | Apple M3 Ultra (256GB) | 34.2 t/s | 81.5 t/s | 77% | 100% | 90% | 90% | hermes | 2026-03-03 |
 
 ## Details
+
+### GLM-4.7-Flash-8bit
+
+- **Hardware**: Apple M3 Ultra (256GB)
+- **Parser**: glm47
+- **Date**: 2026-03-03
+- **TTFT**: cold=1.1s, warm=0.4s
+- **Decode**: short=31.3 t/s, long=58 t/s
+- **Tool Calling**: 73% (22/30)
+- **Coding**: 100% (10/10)
+- **Reasoning**: 80% (8/10)
+- **General**: 90% (9/10)
+- **Eval time**: 130.7s
 
 ### GPT-OSS-20B-mxfp4-q8
 
@@ -33,6 +48,19 @@
 - **Reasoning**: 90% (9/10)
 - **General**: 100% (10/10)
 - **Eval time**: 98.5s
+
+### Hermes-3-Llama-3.1-8B-4bit
+
+- **Hardware**: Apple M3 Ultra (256GB)
+- **Parser**: hermes
+- **Date**: 2026-03-03
+- **TTFT**: cold=0.4s, warm=0.2s
+- **Decode**: short=70.5 t/s, long=123.2 t/s
+- **Tool Calling**: 17% (5/30)
+- **Coding**: 100% (10/10)
+- **Reasoning**: 70% (7/10)
+- **General**: 60% (6/10)
+- **Eval time**: 79.6s
 
 ### MiniMax-M2.5-4bit
 

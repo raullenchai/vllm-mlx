@@ -256,6 +256,93 @@ class TestPrefixCacheManager:
         assert cache_124 == ["cache_124"]
 
 
+class TestPrefixCachePinning:
+    """Tests for pin/unpin prefix functionality."""
+
+    @pytest.fixture
+    def mock_model(self):
+        return MagicMock()
+
+    def test_pin_survives_store(self, mock_model):
+        """Pinned entry stays pinned after store_cache re-stores same key (regression)."""
+        mgr = PrefixCacheManager(mock_model, max_entries=3)
+        mgr.store_cache([1, 2], ["cache_a"])
+        assert mgr.pin_prefix([1, 2]) is True
+
+        # Re-store same tokens — pin must not be silently undone
+        mgr.store_cache([1, 2], ["cache_b"])
+
+        # Fill remaining capacity and overflow — pinned entry must survive
+        mgr.store_cache([3], ["cache_c"])
+        mgr.store_cache([4], ["cache_d"])
+        mgr.store_cache([5], ["cache_e"])  # would evict [1,2] if it were in LRU
+
+        cache, _ = mgr.fetch_cache([1, 2])
+        assert cache is not None, "Pinned entry was evicted after store_cache"
+
+    def test_pin_survives_touch(self, mock_model):
+        """Pinned entry stays pinned after fetch_cache touches it (regression)."""
+        mgr = PrefixCacheManager(mock_model, max_entries=3)
+        mgr.store_cache([1, 2], ["cache_a"])
+        mgr.pin_prefix([1, 2])
+
+        # Access pinned entry — must not re-add to LRU
+        mgr.fetch_cache([1, 2])
+
+        # Overflow — pinned entry must survive
+        mgr.store_cache([3], ["c"])
+        mgr.store_cache([4], ["d"])
+        mgr.store_cache([5], ["e"])
+        mgr.store_cache([6], ["f"])
+
+        cache, _ = mgr.fetch_cache([1, 2])
+        assert cache is not None, "Pinned entry was evicted after fetch_cache touch"
+
+    def test_pin_capacity_guard(self, mock_model):
+        """pin_prefix rejects when pinned count reaches max_size (regression)."""
+        mgr = PrefixCacheManager(mock_model, max_entries=2)
+        mgr.store_cache([1], ["a"])
+        mgr.store_cache([2], ["b"])
+        assert mgr.pin_prefix([1]) is True
+        assert mgr.pin_prefix([2]) is True
+
+        # Now at capacity — next pin must fail
+        mgr.store_cache([3], ["c"])  # won't fit in LRU, but trie entry exists
+        # Actually [3] can't be stored because LRU+pinned > max_size and LRU is empty
+        # So test with existing entries:
+        # Unpin one, store a new entry, try to pin 3 total
+        mgr.unpin_prefix([2])
+        mgr.store_cache([3], ["c"])
+        assert mgr.pin_prefix([3]) is True  # now 2 pinned (max_size=2)
+
+        mgr.store_cache([4], ["d"])
+        assert mgr.pin_prefix([4]) is False, "Pin should fail when at capacity"
+
+    def test_unpin_restores_lru(self, mock_model):
+        """Unpinned entry becomes evictable again."""
+        mgr = PrefixCacheManager(mock_model, max_entries=2)
+        mgr.store_cache([1], ["a"])
+        mgr.store_cache([2], ["b"])
+        mgr.pin_prefix([1])
+
+        mgr.unpin_prefix([1])
+
+        # Now [1] is back in LRU and can be evicted
+        mgr.store_cache([3], ["c"])
+        mgr.store_cache([4], ["d"])
+
+        cache, _ = mgr.fetch_cache([1])
+        assert cache is None, "Unpinned entry should be evictable"
+
+    def test_clear_resets_pinned(self, mock_model):
+        """clear() removes pinned entries too."""
+        mgr = PrefixCacheManager(mock_model, max_entries=5)
+        mgr.store_cache([1], ["a"])
+        mgr.pin_prefix([1])
+        mgr.clear()
+        assert len(mgr) == 0
+
+
 class TestSchedulerIntegration:
     """Test integration with scheduler."""
 

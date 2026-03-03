@@ -364,6 +364,11 @@ class PrefixCacheManager:
         For the trie-based cache, this removes the entry from the LRU queue
         so it is never evicted. The entry remains accessible for lookups.
 
+        Note: Pinned entries count toward max_size capacity. If the number of
+        pinned entries already equals max_size, this method returns False to
+        prevent capacity from becoming unenforceable. Unpin existing entries
+        first to make room.
+
         Args:
             tokens: Token sequence of the prefix to pin
 

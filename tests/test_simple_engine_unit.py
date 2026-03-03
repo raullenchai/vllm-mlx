@@ -323,3 +323,45 @@ class TestPreserveNativeToolFormat:
         engine.preserve_native_tool_format = True
         engine.preserve_native_tool_format = False
         assert engine.preserve_native_tool_format is False
+
+
+# ---------------------------------------------------------------------------
+# _inject_shared_model config propagation
+# ---------------------------------------------------------------------------
+
+
+class TestInjectSharedModelConfig:
+    """Tests for _inject_shared_model using engine config values."""
+
+    @pytest.mark.asyncio
+    async def test_inject_propagates_engine_config(self):
+        """Injected model uses engine's config, not hardcoded defaults (regression)."""
+        engine = SimpleEngine(
+            model_name="test",
+            prefill_step_size=4096,
+            kv_bits=4,
+            kv_group_size=128,
+        )
+
+        mock_model = MagicMock()
+        mock_tokenizer = MagicMock()
+
+        await engine._inject_shared_model(mock_model, mock_tokenizer)
+
+        assert engine._model.prefill_step_size == 4096
+        assert engine._model.kv_bits == 4
+        assert engine._model.kv_group_size == 128
+
+    @pytest.mark.asyncio
+    async def test_inject_default_config(self):
+        """Injected model uses default config when engine uses defaults."""
+        engine = SimpleEngine(model_name="test")
+
+        mock_model = MagicMock()
+        mock_tokenizer = MagicMock()
+
+        await engine._inject_shared_model(mock_model, mock_tokenizer)
+
+        assert engine._model.prefill_step_size == 2048
+        assert engine._model.kv_bits is None
+        assert engine._model.kv_group_size == 64

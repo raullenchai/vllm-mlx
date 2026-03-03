@@ -170,6 +170,37 @@ class TestCloudRouterBuildCallKwargs:
 
         assert "unsupported_param" not in kwargs
 
+    def test_passes_through_response_format(self):
+        """response_format is forwarded to litellm (regression: was silently dropped)."""
+        from vllm_mlx.cloud_router import CloudRouter
+
+        router = CloudRouter(cloud_model="test-model", threshold=1000)
+        messages = [{"role": "user", "content": "Hello"}]
+        rf = {"type": "json_schema", "json_schema": {"name": "out", "schema": {"type": "object"}}}
+
+        kwargs = router._build_call_kwargs(
+            messages=messages,
+            stream=False,
+            response_format=rf,
+        )
+
+        assert kwargs["response_format"] == rf
+
+    def test_response_format_none_omitted(self):
+        """response_format=None is not included in kwargs."""
+        from vllm_mlx.cloud_router import CloudRouter
+
+        router = CloudRouter(cloud_model="test-model", threshold=1000)
+        messages = [{"role": "user", "content": "Hello"}]
+
+        kwargs = router._build_call_kwargs(
+            messages=messages,
+            stream=False,
+            response_format=None,
+        )
+
+        assert "response_format" not in kwargs
+
 
 class TestCloudRouterLazyImport:
     """Tests for CloudRouter lazy litellm import."""

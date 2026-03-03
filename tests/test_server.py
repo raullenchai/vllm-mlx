@@ -676,6 +676,29 @@ class TestRateLimiterHTTPResponse:
         allowed, _ = limiter.is_allowed("test_client")
         assert allowed is True
 
+    def test_rate_limiter_stale_key_purge(self):
+        """Stale client keys are purged when dict exceeds 100 entries (regression)."""
+        from vllm_mlx.server import RateLimiter
+        import time
+
+        limiter = RateLimiter(requests_per_minute=10, enabled=True)
+
+        # Seed 101 unique clients with expired timestamps
+        old_time = time.time() - 120  # 2 minutes ago (outside window)
+        with limiter._lock:
+            for i in range(101):
+                limiter._requests[f"stale_client_{i}"] = [old_time]
+
+        assert len(limiter._requests) == 101
+
+        # One more request triggers purge (len > 100)
+        limiter.is_allowed("new_client")
+
+        # Stale keys should be purged
+        assert len(limiter._requests) < 101
+        # new_client should still be present
+        assert "new_client" in limiter._requests
+
 
 # =============================================================================
 # Integration Tests (require running server)

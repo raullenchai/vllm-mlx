@@ -321,3 +321,40 @@ class TestValidateToolCallParams:
             self._make_tool_calls(),
             tools,
         )
+
+
+# ---------------------------------------------------------------------------
+# extract_json_from_response guard tests
+# ---------------------------------------------------------------------------
+
+
+class TestExtractJsonFromResponse:
+    """Tests for extract_json_from_response showing why guard is needed."""
+
+    def test_extracts_json_from_reasoning_text(self):
+        """Correctly extracts JSON from reasoning prefix."""
+        from vllm_mlx.api.utils import extract_json_from_response
+
+        text = 'Let me think... {"result": 42}'
+        assert extract_json_from_response(text) == '{"result": 42}'
+
+    def test_corrupts_plain_text_ending_with_json(self):
+        """Without guard, plain text ending with JSON-like braces gets corrupted.
+
+        This documents why server.py wraps the call with `if response_format`.
+        """
+        from vllm_mlx.api.utils import extract_json_from_response
+
+        # Plain text that happens to end with balanced braces
+        plain = 'The config looks like {"debug": true}'
+        result = extract_json_from_response(plain)
+        # The function extracts '{"debug": true}' — losing the prefix
+        assert result == '{"debug": true}'
+        assert result != plain
+
+    def test_returns_original_when_no_json(self):
+        """Returns original text when no JSON structure found."""
+        from vllm_mlx.api.utils import extract_json_from_response
+
+        text = "Hello, world!"
+        assert extract_json_from_response(text) == text

@@ -112,7 +112,8 @@ def detect_hardware() -> dict:
 
 def chat_request(host: str, port: int, messages: list, *, tools=None,
                  max_tokens: int = 512, temperature: float = 0.0,
-                 stream: bool = False, timeout: float = 120.0) -> dict:
+                 stream: bool = False, timeout: float = 120.0,
+                 enable_thinking: bool | None = None) -> dict:
     """Send a chat completion request (non-streaming by default)."""
     body = {
         "model": "default",
@@ -120,8 +121,9 @@ def chat_request(host: str, port: int, messages: list, *, tools=None,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "stream": stream,
-        "enable_thinking": False,
     }
+    if enable_thinking is not None:
+        body["enable_thinking"] = enable_thinking
     if tools:
         body["tools"] = tools
 
@@ -136,7 +138,8 @@ def chat_request(host: str, port: int, messages: list, *, tools=None,
 
 def stream_chat(host: str, port: int, messages: list, *, tools=None,
                 max_tokens: int = 512, temperature: float = 0.0,
-                timeout: float = 120.0):
+                timeout: float = 120.0,
+                enable_thinking: bool | None = None):
     """Stream a chat completion. Returns (content, tool_calls, ttft, elapsed)."""
     body = {
         "model": "default",
@@ -144,8 +147,9 @@ def stream_chat(host: str, port: int, messages: list, *, tools=None,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "stream": True,
-        "enable_thinking": False,
     }
+    if enable_thinking is not None:
+        body["enable_thinking"] = enable_thinking
     if tools:
         body["tools"] = tools
 
@@ -1114,6 +1118,7 @@ def run_general_suite(host: str, port: int, verbose: bool = False) -> dict:
                 host, port,
                 [no_think_sys, {"role": "user", "content": task["prompt"]}],
                 max_tokens=2048, temperature=0.0,
+                enable_thinking=False,
             )
             output = _strip_thinking(resp["choices"][0]["message"]["content"])
             ok, reason = check_general_response(output, task.get("checks", {}))
@@ -1212,20 +1217,37 @@ Examples:
 
     start_time = time.perf_counter()
 
+    def _bust_cache(host, port):
+        """Clear server prompt cache between suites."""
+        try:
+            url = f"http://{host}:{port}/v1/cache/clear"
+            if _HTTPX:
+                httpx.post(url, timeout=10)
+            else:
+                import urllib.request
+                req = urllib.request.Request(url, method="POST")
+                urllib.request.urlopen(req, timeout=10)
+        except Exception:
+            pass
+
     # Run selected suites
     if "speed" in args.suite:
         result["speed"] = run_speed_suite(args.host, args.port, verbose=args.verbose)
 
     if "tool_calling" in args.suite:
+        _bust_cache(args.host, args.port)
         result["tool_calling"] = run_tool_calling_suite(args.host, args.port, verbose=args.verbose)
 
     if "coding" in args.suite:
+        _bust_cache(args.host, args.port)
         result["coding"] = run_coding_suite(args.host, args.port, verbose=args.verbose)
 
     if "reasoning" in args.suite:
+        _bust_cache(args.host, args.port)
         result["reasoning"] = run_reasoning_suite(args.host, args.port, verbose=args.verbose)
 
     if "general" in args.suite:
+        _bust_cache(args.host, args.port)
         result["general"] = run_general_suite(args.host, args.port, verbose=args.verbose)
 
     total_time = time.perf_counter() - start_time

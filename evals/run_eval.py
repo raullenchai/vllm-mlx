@@ -397,6 +397,8 @@ def _check_parallel_calls(tool_calls, scenario) -> dict:
 
 def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
     """Run tool-calling scenarios with multi-turn, parallel, irrelevance, and error recovery support."""
+    # TODO: GPT-OSS-20B scores 17% tools and 20% reasoning despite 60% coding / 90% general.
+    #       Likely a minimax parser compatibility issue — try hermes parser or inspect raw responses.
     print("\n--- Suite B: Tool Calling ---")
 
     prompts_file = PROMPTS_DIR / "tool_calling.json"
@@ -679,6 +681,8 @@ def extract_python_code(text: str) -> str:
 
 def run_coding_suite(host: str, port: int, verbose: bool = False) -> dict:
     """Run 10 coding tasks, auto-grade by executing test code."""
+    # TODO: MiniMax-M2.5 scores 10% coding despite 87% tools / 80% reasoning / 90% general.
+    #       Likely a code extraction or formatting issue — investigate response format.
     print("\n--- Suite C: Coding ---")
 
     prompts_file = PROMPTS_DIR / "coding.json"
@@ -1095,6 +1099,8 @@ def check_general_response(response: str, checks: dict) -> tuple[bool, str]:
 
 def run_general_suite(host: str, port: int, verbose: bool = False) -> dict:
     """Run 10 general knowledge / instruction following tasks."""
+    # TODO: GLM-4.7-Flash scores 50% general despite 100% coding / 90% reasoning.
+    #       May struggle with MMLU-Pro 10-option multiple choice format — check answer extraction.
     print("\n--- Suite E: General Knowledge ---")
 
     prompts_file = PROMPTS_DIR / "general.json"

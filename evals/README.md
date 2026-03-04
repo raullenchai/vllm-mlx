@@ -25,24 +25,28 @@ Different models require different server flags for tool calling. Use the correc
 | Model Family | Server Flags |
 |-------------|-------------|
 | **Qwen / Hermes** | `vllm-mlx serve <model> --port 8000 --enable-auto-tool-choice --tool-call-parser hermes` |
-| **GPT-OSS** | `vllm-mlx serve <model> --port 8000 --enable-auto-tool-choice --tool-call-parser minimax` |
+| **GPT-OSS / Seed-OSS** | `vllm-mlx serve <model> --port 8000 --enable-auto-tool-choice --tool-call-parser seed_oss` |
 | **MiniMax** | `vllm-mlx serve <model> --port 8000 --enable-auto-tool-choice --tool-call-parser minimax` |
+| **DeepSeek V3.1 / R1-0528** | `vllm-mlx serve <model> --port 8000 --enable-auto-tool-choice --tool-call-parser deepseek_v31` |
 | **GLM-4** | `vllm-mlx serve <model> --port 8000 --enable-auto-tool-choice --tool-call-parser glm47` |
+| **Qwen3-Coder (XML)** | `vllm-mlx serve <model> --port 8000 --enable-auto-tool-choice --tool-call-parser qwen3_coder_xml` |
 | **Other / No tools** | `vllm-mlx serve <model> --port 8000` |
 
 Then pass the matching `--parser` to the eval script:
 ```bash
 python evals/run_eval.py --model "X" --parser hermes    # for Qwen/Hermes models
-python evals/run_eval.py --model "X" --parser minimax   # for GPT-OSS models
+python evals/run_eval.py --model "X" --parser seed_oss   # for GPT-OSS / Seed-OSS models
 python evals/run_eval.py --model "X" --parser minimax   # for MiniMax models
+python evals/run_eval.py --model "X" --parser deepseek_v31  # for DeepSeek V3.1 / R1-0528
 python evals/run_eval.py --model "X" --parser glm47     # for GLM-4 models
+python evals/run_eval.py --model "X" --parser qwen3_coder_xml  # for Qwen3-Coder (XML)
 ```
 
 ## Eval Suites
 
 | Suite | Items | What it tests | Scoring |
 |-------|-------|---------------|---------|
-| **Speed** | 4 metrics | TTFT cold/warm, decode tok/s short/long | Absolute numbers |
+| **Speed** | 6 metrics | TTFT cold/warm, decode tok/s short/long, RAM active/peak | Absolute numbers |
 | **Tool Calling** | 30 scenarios | Tool detection, parallel calls, irrelevance, error recovery | % fully correct |
 | **Coding** | 10 tasks | HumanEval+ problems (medium-hard) | % tests pass |
 | **Reasoning** | 10 problems | MATH-500 competition math (levels 2-5, fractions + integers) | % correct answer |

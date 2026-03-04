@@ -19,6 +19,9 @@ Available parsers:
 - functionary/meetkai: MeetKai Functionary models
 - glm47/glm4: GLM-4.7 and GLM-4.7-Flash models
 - harmony/gpt-oss: GPT-OSS models (Harmony format with channels)
+- seed_oss/seed/gpt_oss: Seed-OSS / GPT-OSS models (XML format)
+- deepseek_v31/deepseek_r1_0528: DeepSeek V3.1 / R1-0528 models
+- qwen3_coder_xml/qwen3_xml: Qwen3-Coder models (XML format)
 
 Usage:
     from vllm_mlx.tool_parsers import ToolParserManager
@@ -58,6 +61,9 @@ from .xlam_tool_parser import xLAMToolParser
 from .glm47_tool_parser import Glm47ToolParser
 from .harmony_tool_parser import HarmonyToolParser
 from .minimax_tool_parser import MiniMaxToolParser
+from .seed_oss_tool_parser import SeedOssToolParser
+from .deepseekv31_tool_parser import DeepSeekV31ToolParser
+from .qwen3coder_tool_parser import Qwen3CoderToolParser
 
 __all__ = [
     # Base classes
@@ -79,4 +85,7 @@ __all__ = [
     "Glm47ToolParser",
     "HarmonyToolParser",
     "MiniMaxToolParser",
+    "SeedOssToolParser",
+    "DeepSeekV31ToolParser",
+    "Qwen3CoderToolParser",
 ]

@@ -113,7 +113,7 @@ def detect_hardware() -> dict:
 def chat_request(host: str, port: int, messages: list, *, tools=None,
                  max_tokens: int = 512, temperature: float = 0.0,
                  stream: bool = False, timeout: float = 120.0,
-                 enable_thinking: bool | None = None) -> dict:
+                 enable_thinking: bool = False) -> dict:
     """Send a chat completion request (non-streaming by default)."""
     body = {
         "model": "default",
@@ -121,9 +121,8 @@ def chat_request(host: str, port: int, messages: list, *, tools=None,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "stream": stream,
+        "enable_thinking": enable_thinking,
     }
-    if enable_thinking is not None:
-        body["enable_thinking"] = enable_thinking
     if tools:
         body["tools"] = tools
 
@@ -139,7 +138,7 @@ def chat_request(host: str, port: int, messages: list, *, tools=None,
 def stream_chat(host: str, port: int, messages: list, *, tools=None,
                 max_tokens: int = 512, temperature: float = 0.0,
                 timeout: float = 120.0,
-                enable_thinking: bool | None = None):
+                enable_thinking: bool = False):
     """Stream a chat completion. Returns (content, tool_calls, ttft, elapsed)."""
     body = {
         "model": "default",
@@ -147,9 +146,8 @@ def stream_chat(host: str, port: int, messages: list, *, tools=None,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "stream": True,
+        "enable_thinking": enable_thinking,
     }
-    if enable_thinking is not None:
-        body["enable_thinking"] = enable_thinking
     if tools:
         body["tools"] = tools
 
@@ -699,6 +697,7 @@ def run_coding_suite(host: str, port: int, verbose: bool = False) -> dict:
                 host, port,
                 [{"role": "user", "content": task["prompt"]}],
                 max_tokens=1200, temperature=0.0,
+                enable_thinking=False,
             )
             output = _strip_thinking(resp["choices"][0]["message"]["content"])
             code = extract_python_code(output)
@@ -863,6 +862,7 @@ def run_reasoning_suite(host: str, port: int, verbose: bool = False) -> dict:
                     {"role": "user", "content": prompt},
                 ],
                 max_tokens=1024, temperature=0.0,
+                enable_thinking=False,
             )
             output = _strip_thinking(resp["choices"][0]["message"]["content"])
             extracted = extract_answer(output)

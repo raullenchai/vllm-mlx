@@ -12,14 +12,14 @@
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
   "speed": {
-    "ttft_cold_s": 0.487,
-    "ttft_warm_s": 0.028,
-    "decode_short_tps": 73.0,
-    "decode_long_tps": 81.1
+    "ttft_cold_s": 0.471,
+    "ttft_warm_s": 0.027,
+    "decode_short_tps": 32.9,
+    "decode_long_tps": 81.6
   },
   "tool_calling": {
-    "score": 0.87,
-    "passed": 26,
+    "score": 0.9,
+    "passed": 27,
     "total": 30,
     "details": [
       {
@@ -31,7 +31,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.37,
+        "elapsed_s": 1.09,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -45,7 +45,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.29,
+        "elapsed_s": 0.64,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -59,7 +59,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.23,
+        "elapsed_s": 0.58,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -73,7 +73,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.46,
+        "elapsed_s": 0.79,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -87,7 +87,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 0.5,
-        "elapsed_s": 1.35,
+        "elapsed_s": 0.76,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -101,7 +101,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.91,
+        "elapsed_s": 0.52,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -115,7 +115,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.14,
+        "elapsed_s": 0.55,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -129,7 +129,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.26,
+        "elapsed_s": 0.78,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -143,7 +143,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.63,
+        "elapsed_s": 0.68,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -157,7 +157,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.24,
+        "elapsed_s": 0.72,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -171,7 +171,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.6,
+        "elapsed_s": 0.76,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -185,7 +185,7 @@
         "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.86,
+        "elapsed_s": 0.49,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -199,7 +199,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.59,
+        "elapsed_s": 1.0,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -217,7 +217,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 1.4
+        "elapsed_s": 0.86
       },
       {
         "id": "tc15",
@@ -232,7 +232,7 @@
         "expected_count": 3,
         "actual_count": 3,
         "fully_correct": true,
-        "elapsed_s": 2.1
+        "elapsed_s": 1.52
       },
       {
         "id": "tc16",
@@ -247,7 +247,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 1.85
+        "elapsed_s": 0.9
       },
       {
         "id": "tc17",
@@ -262,7 +262,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 1.31
+        "elapsed_s": 0.81
       },
       {
         "id": "tc18",
@@ -272,7 +272,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.71
+        "elapsed_s": 0.27
       },
       {
         "id": "tc19",
@@ -282,7 +282,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.66
+        "elapsed_s": 1.16
       },
       {
         "id": "tc20",
@@ -292,7 +292,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.81
+        "elapsed_s": 0.33
       },
       {
         "id": "tc21",
@@ -303,7 +303,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.11,
+        "elapsed_s": 0.55,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -313,14 +313,14 @@
         "level": 4,
         "description": "Sequential — read then exec",
         "category": "sequential",
-        "tool_detected": false,
-        "correct_name": false,
-        "valid_json_args": false,
-        "arg_score": 0.0,
-        "elapsed_s": 1.97,
-        "fully_correct": false,
-        "steps_passed": 0,
-        "steps_total": 1
+        "tool_detected": true,
+        "correct_name": true,
+        "valid_json_args": true,
+        "arg_score": 1.0,
+        "elapsed_s": 0.51,
+        "fully_correct": true,
+        "steps_passed": 2,
+        "steps_total": 2
       },
       {
         "id": "tc23",
@@ -328,13 +328,13 @@
         "description": "Sequential 3-step — exec + memory_store + send_message",
         "category": "sequential",
         "tool_detected": true,
-        "correct_name": false,
+        "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.53,
-        "fully_correct": false,
-        "steps_passed": 0,
-        "steps_total": 1
+        "elapsed_s": 0.52,
+        "fully_correct": true,
+        "steps_passed": 3,
+        "steps_total": 3
       },
       {
         "id": "tc24",
@@ -345,7 +345,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.28,
+        "elapsed_s": 0.56,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -355,10 +355,10 @@
         "level": 3,
         "description": "Missing params — send_message with no recipient or text",
         "category": "missing_params",
-        "fully_correct": true,
-        "no_tool_called": true,
+        "fully_correct": false,
+        "no_tool_called": false,
         "has_content": true,
-        "elapsed_s": 1.17
+        "elapsed_s": 0.66
       },
       {
         "id": "tc26",
@@ -368,20 +368,19 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.67
+        "elapsed_s": 0.38
       },
       {
         "id": "tc27",
         "level": 4,
         "description": "Error recovery — permission denied, model should explain or retry",
         "category": "error_recovery",
-        "tool_detected": true,
-        "correct_name": true,
-        "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 1.11,
-        "recovery_text": true,
-        "fully_correct": true
+        "tool_detected": false,
+        "correct_name": false,
+        "valid_json_args": false,
+        "arg_score": 0.0,
+        "elapsed_s": 0.89,
+        "fully_correct": false
       },
       {
         "id": "tc28",
@@ -392,7 +391,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.99,
+        "elapsed_s": 0.56,
         "recovery_tool_called": false,
         "recovery_text": true,
         "fully_correct": true
@@ -406,7 +405,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.11,
+        "elapsed_s": 0.5,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -417,19 +416,19 @@
         "description": "Nested dependent — exec output becomes memory_store value",
         "category": "nested_dependent",
         "tool_detected": true,
-        "correct_name": false,
+        "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.24,
-        "fully_correct": false,
-        "steps_passed": 0,
-        "steps_total": 1
+        "elapsed_s": 0.52,
+        "fully_correct": true,
+        "steps_passed": 2,
+        "steps_total": 2
       }
     ]
   },
   "coding": {
-    "score": 0.2,
-    "passed": 2,
+    "score": 0.9,
+    "passed": 9,
     "total": 10,
     "details": [
       {
@@ -445,39 +444,35 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp9hvkrstv.py\", line 1\n    The user is asking me to write a Python function, but the prompt seems to have some corrupted text in it. Looking at "
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp_dlhc9_n.py\", line 35, in <module>\n    assert skjkasdkd([0,3,2,1,3,5,7,4,5,5,5,2,181,32,4,32,3,2,32,324,4"
       },
       {
         "id": "code03",
         "description": "HE/116 — Sort by binary 1-count",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpswuopmyr.py\", line 4\n    *   Input: A Python function `sort_array(arr)` is described in the prompt's hidden instructions (actually, looking cl"
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code04",
         "description": "HE/119 — Parentheses match (two strings)",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp4zs6yy1b.py\", line 39\n    *   Empty strings? The prompt says \"consisting of open '(' and close ')' parentheses only\". It doesn't explicitly fo"
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code05",
         "description": "HE/124 — Valid date mm-dd-yyyy",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp3pnoj1g3.py\", line 15\n    \"Write a Python function `valid_date(date)` that validates a date string in mm-dd-yyyy format. Return True if the da"
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code06",
         "description": "HE/130 — Custom tribonacci sequence",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpg4qhvg_a.py\", line 12\n    *   Let's look at the example: `tri(3) => [1, 3, 2.0, 8.0]`.\n           ^\nSyntaxError: unterminated string literal ("
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code07",
@@ -489,81 +484,78 @@
       {
         "id": "code08",
         "description": "HE/145 — Order by digit sum (negative first digit)",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpble1v13p.py\", line 10\n    *   Wait, let's verify the example logic provided in the prompt.\n                 ^\nSyntaxError: unterminated string"
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code09",
         "description": "HE/114 — Minimum subarray sum",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpu3su6fbq.py\", line 10\n    *   `[-1, -2, -3, 2, -10]` -> `-14` (Subarray `[-1, -2, -3, 2, -10]` sum is -14? Let's check: -1-2-3+2-10 = -14. Yes"
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code10",
         "description": "HE/147 — Max triples divisible by 3",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpufwv5r07.py\", line 12\n    *   Let's analyze `a[i] % 3`.\n           ^\nSyntaxError: unterminated string literal (detected at line 12)"
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       }
     ]
   },
   "reasoning": {
-    "score": 0.1,
-    "passed": 1,
+    "score": 0.8,
+    "passed": 8,
     "total": 10,
     "details": [
       {
         "id": "math01",
         "expected": "3/2",
-        "got": "5",
-        "correct": false
+        "got": "3/2",
+        "correct": true
       },
       {
         "id": "math02",
         "expected": "3",
-        "got": "15",
-        "correct": false
+        "got": "3",
+        "correct": true
       },
       {
         "id": "math03",
         "expected": "14/3",
-        "got": "0",
-        "correct": false
+        "got": "14/3",
+        "correct": true
       },
       {
         "id": "math04",
         "expected": "2220",
-        "got": "2",
-        "correct": false
+        "got": "2220",
+        "correct": true
       },
       {
         "id": "math05",
         "expected": "3",
-        "got": "1",
+        "got": "29/10",
         "correct": false
       },
       {
         "id": "math06",
         "expected": "9",
-        "got": "5",
+        "got": "1",
         "correct": false
       },
       {
         "id": "math07",
         "expected": "11/36",
-        "got": "5",
-        "correct": false
+        "got": "11/36",
+        "correct": true
       },
       {
         "id": "math08",
         "expected": "121",
-        "got": "4",
-        "correct": false
+        "got": "121",
+        "correct": true
       },
       {
         "id": "math09",
@@ -574,8 +566,8 @@
       {
         "id": "math10",
         "expected": "144",
-        "got": "3",
-        "correct": false
+        "got": "144",
+        "correct": true
       }
     ]
   },
@@ -646,5 +638,5 @@
       }
     ]
   },
-  "total_eval_time_s": 331.3
+  "total_eval_time_s": 183.5
 }

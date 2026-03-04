@@ -12,10 +12,10 @@
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
   "speed": {
-    "ttft_cold_s": 0.458,
-    "ttft_warm_s": 0.031,
-    "decode_short_tps": 40.8,
-    "decode_long_tps": 73.1
+    "ttft_cold_s": 0.457,
+    "ttft_warm_s": 0.03,
+    "decode_short_tps": 41.5,
+    "decode_long_tps": 73.6
   },
   "tool_calling": {
     "score": 0.9,
@@ -59,7 +59,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.53,
+        "elapsed_s": 0.52,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -73,7 +73,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.7,
+        "elapsed_s": 0.71,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -87,7 +87,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.71,
+        "elapsed_s": 0.7,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -157,7 +157,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.65,
+        "elapsed_s": 0.64,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -217,7 +217,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.81
+        "elapsed_s": 0.82
       },
       {
         "id": "tc15",
@@ -247,7 +247,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.83
+        "elapsed_s": 0.84
       },
       {
         "id": "tc17",
@@ -272,7 +272,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.24
+        "elapsed_s": 0.23
       },
       {
         "id": "tc19",
@@ -282,7 +282,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.21
+        "elapsed_s": 1.2
       },
       {
         "id": "tc20",
@@ -303,7 +303,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.5,
+        "elapsed_s": 0.49,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -331,7 +331,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.47,
+        "elapsed_s": 0.46,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -379,7 +379,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.5,
+        "elapsed_s": 0.49,
         "recovery_text": true,
         "fully_correct": true
       },
@@ -501,7 +501,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmppks9619z.py\", line 1\n    i=1: 1 - 1 + 1 = 1 → 1 mod 3\n                       ^\nSyntaxError: invalid character '→' (U+2192)"
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpjc6zdo4a.py\", line 1\n    i=1: 1 - 1 + 1 = 1 → 1 mod 3\n                       ^\nSyntaxError: invalid character '→' (U+2192)"
       }
     ]
   },
@@ -639,5 +639,5 @@
       }
     ]
   },
-  "total_eval_time_s": 216.7
+  "total_eval_time_s": 216.6
 }

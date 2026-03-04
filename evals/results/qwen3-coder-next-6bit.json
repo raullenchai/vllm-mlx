@@ -12,10 +12,10 @@
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
   "speed": {
-    "ttft_cold_s": 0.621,
-    "ttft_warm_s": 0.029,
-    "decode_short_tps": 35.0,
-    "decode_long_tps": 66.7
+    "ttft_cold_s": 0.629,
+    "ttft_warm_s": 0.028,
+    "decode_short_tps": 34.8,
+    "decode_long_tps": 66.8
   },
   "tool_calling": {
     "score": 0.87,
@@ -45,7 +45,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.62,
+        "elapsed_s": 0.61,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -87,7 +87,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 0.5,
-        "elapsed_s": 0.76,
+        "elapsed_s": 0.75,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -101,7 +101,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.51,
+        "elapsed_s": 0.5,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -185,7 +185,7 @@
         "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.47,
+        "elapsed_s": 0.46,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -199,7 +199,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.05,
+        "elapsed_s": 1.04,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -217,7 +217,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.89
+        "elapsed_s": 0.88
       },
       {
         "id": "tc15",
@@ -232,7 +232,7 @@
         "expected_count": 3,
         "actual_count": 3,
         "fully_correct": true,
-        "elapsed_s": 1.52
+        "elapsed_s": 1.5
       },
       {
         "id": "tc16",
@@ -247,7 +247,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.91
+        "elapsed_s": 0.9
       },
       {
         "id": "tc17",
@@ -292,7 +292,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.34
+        "elapsed_s": 0.33
       },
       {
         "id": "tc21",
@@ -317,7 +317,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.5,
+        "elapsed_s": 0.49,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -358,7 +358,7 @@
         "fully_correct": false,
         "no_tool_called": false,
         "has_content": true,
-        "elapsed_s": 0.73
+        "elapsed_s": 0.72
       },
       {
         "id": "tc26",
@@ -368,7 +368,7 @@
         "fully_correct": false,
         "no_tool_called": false,
         "has_content": true,
-        "elapsed_s": 0.69
+        "elapsed_s": 0.68
       },
       {
         "id": "tc27",
@@ -501,7 +501,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpog1xsl4m.py\", line 27\n    `a[i] = i² - i + 1 = i(i-1) + 1`\n             ^\nSyntaxError: invalid character '²' (U+00B2)"
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmprtkjps2a.py\", line 27\n    `a[i] = i² - i + 1 = i(i-1) + 1`\n             ^\nSyntaxError: invalid character '²' (U+00B2)"
       }
     ]
   },
@@ -639,5 +639,5 @@
       }
     ]
   },
-  "total_eval_time_s": 249.0
+  "total_eval_time_s": 248.5
 }

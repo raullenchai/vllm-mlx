@@ -12,14 +12,14 @@
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser minimax",
   "speed": {
-    "ttft_cold_s": 1.295,
-    "ttft_warm_s": 0.132,
-    "decode_short_tps": 47.0,
-    "decode_long_tps": 51.0
+    "ttft_cold_s": 1.3,
+    "ttft_warm_s": 0.134,
+    "decode_short_tps": 46.7,
+    "decode_long_tps": 50.5
   },
   "tool_calling": {
-    "score": 0.83,
-    "passed": 25,
+    "score": 0.87,
+    "passed": 26,
     "total": 30,
     "details": [
       {
@@ -31,7 +31,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 3.02,
+        "elapsed_s": 3.03,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -45,7 +45,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.36,
+        "elapsed_s": 1.35,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -59,7 +59,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.82,
+        "elapsed_s": 1.83,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -87,7 +87,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 0.5,
-        "elapsed_s": 1.55,
+        "elapsed_s": 1.56,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -143,7 +143,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 10.69,
+        "elapsed_s": 10.6,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -171,7 +171,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 10.7,
+        "elapsed_s": 10.74,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -199,7 +199,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.98,
+        "elapsed_s": 1.97,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -247,7 +247,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 2.75
+        "elapsed_s": 2.76
       },
       {
         "id": "tc17",
@@ -272,7 +272,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.04
+        "elapsed_s": 1.05
       },
       {
         "id": "tc19",
@@ -292,7 +292,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.09
+        "elapsed_s": 1.08
       },
       {
         "id": "tc21",
@@ -303,7 +303,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.59,
+        "elapsed_s": 1.58,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -317,7 +317,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.37,
+        "elapsed_s": 1.36,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -331,7 +331,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.92,
+        "elapsed_s": 1.91,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -345,9 +345,9 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.0,
-        "fully_correct": false,
-        "steps_passed": 2,
+        "elapsed_s": 1.99,
+        "fully_correct": true,
+        "steps_passed": 3,
         "steps_total": 3
       },
       {
@@ -358,7 +358,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.76
+        "elapsed_s": 1.77
       },
       {
         "id": "tc26",
@@ -392,7 +392,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.39,
+        "elapsed_s": 1.4,
         "recovery_tool_called": false,
         "recovery_text": true,
         "fully_correct": true
@@ -406,7 +406,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.37,
+        "elapsed_s": 1.36,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -420,7 +420,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.53,
+        "elapsed_s": 1.52,
         "fully_correct": false,
         "steps_passed": 1,
         "steps_total": 2
@@ -438,7 +438,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpvm9r39mc.py\", line 3\n    We need to interpret \"swap case\" means convert uppercase to lowercase and vice versa. Then replace vowels (both upper"
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpzd3bpjij.py\", line 3\n    We need to interpret \"swap case\" means convert uppercase to lowercase and vice versa. Then replace vowels (both upper"
       },
       {
         "id": "code02",
@@ -446,7 +446,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmptoqy5lks.py\", line 7\n    Edge cases: If there is no prime number? The problem doesn't specify. But we can assume there is at least one prime. "
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmptjxjv4j6.py\", line 7\n    Edge cases: If there is no prime number? The problem doesn't specify. But we can assume there is at least one prime. "
       },
       {
         "id": "code03",
@@ -454,7 +454,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpiln8jo92.py\", line 9\n    We can use Python's built-in sorted with key lambda x: (bin(abs(x)).count('1'), x). But note that bin(0) is '0b0', co"
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp8m2yxrep.py\", line 9\n    We can use Python's built-in sorted with key lambda x: (bin(abs(x)).count('1'), x). But note that bin(0) is '0b0', co"
       },
       {
         "id": "code04",
@@ -462,7 +462,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpwesobond.py\", line 1\n    **Solution Explanation**\n    ^^\nSyntaxError: invalid syntax"
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp_jrq2noa.py\", line 1\n    **Solution Explanation**\n    ^^\nSyntaxError: invalid syntax"
       },
       {
         "id": "code05",
@@ -470,7 +470,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpz1rnvb5x.py\", line 26, in <module>\n    assert valid_date('03-11-2000') == True\n           ^^^^^^^^^^^^^^^"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpr96m48f5.py\", line 26, in <module>\n    assert valid_date('03-11-2000') == True\n           ^^^^^^^^^^^^^^^"
       },
       {
         "id": "code06",
@@ -478,7 +478,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpu8wetlpr.py\", line 17\n    We need to interpret the definition correctly. Let's examine the examples:\n                                         "
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpellp7x3b.py\", line 17\n    We need to interpret the definition correctly. Let's examine the examples:\n                                         "
       },
       {
         "id": "code07",
@@ -486,7 +486,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp8cjsj_5c.py\", line 2\n    \"\"\"\n    ^\nSyntaxError: unterminated triple-quoted string literal (detected at line 24)"
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp37nindlx.py\", line 2\n    \"\"\"\n    ^\nSyntaxError: unterminated triple-quoted string literal (detected at line 24)"
       },
       {
         "id": "code08",
@@ -494,7 +494,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpiaqlt_qb.py\", line 3\n    We need to sort the list by this sum, stable sort (preserve original order for equal sums). Python's sort is stable, "
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmphybw6f51.py\", line 3\n    We need to sort the list by this sum, stable sort (preserve original order for equal sums). Python's sort is stable, "
       },
       {
         "id": "code09",
@@ -509,7 +509,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp7n1ou_qe.py\", line 11\n    - If i ≡ 0 (mod 3): i = 3k. Then i-1 ≡ -1 ≡ 2 (mod 3). So i(i-1) ≡ 0*2 = 0 (mod 3). So a[i] ≡ 0 + 1 = 1 (mod 3).\n   "
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp2tl2hrku.py\", line 11\n    - If i ≡ 0 (mod 3): i = 3k. Then i-1 ≡ -1 ≡ 2 (mod 3). So i(i-1) ≡ 0*2 = 0 (mod 3). So a[i] ≡ 0 + 1 = 1 (mod 3).\n   "
       }
     ]
   },
@@ -647,5 +647,5 @@
       }
     ]
   },
-  "total_eval_time_s": 605.4
+  "total_eval_time_s": 603.0
 }

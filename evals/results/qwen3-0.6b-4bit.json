@@ -12,14 +12,14 @@
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
   "speed": {
-    "ttft_cold_s": 0.104,
-    "ttft_warm_s": 0.075,
-    "decode_short_tps": 290.4,
-    "decode_long_tps": 372.6
+    "ttft_cold_s": 0.097,
+    "ttft_warm_s": 0.072,
+    "decode_short_tps": 78.4,
+    "decode_long_tps": 370.4
   },
   "tool_calling": {
-    "score": 0.5,
-    "passed": 15,
+    "score": 0.3,
+    "passed": 9,
     "total": 30,
     "details": [
       {
@@ -31,7 +31,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.68,
+        "elapsed_s": 0.24,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -41,13 +41,13 @@
         "level": 1,
         "description": "Single tool, simple args — translate",
         "category": "single_tool",
-        "tool_detected": true,
-        "correct_name": true,
-        "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 0.51,
-        "fully_correct": true,
-        "steps_passed": 1,
+        "tool_detected": false,
+        "correct_name": false,
+        "valid_json_args": false,
+        "arg_score": 0.0,
+        "elapsed_s": 0.15,
+        "fully_correct": false,
+        "steps_passed": 0,
         "steps_total": 1
       },
       {
@@ -59,7 +59,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.51,
+        "elapsed_s": 0.17,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -69,13 +69,13 @@
         "level": 1,
         "description": "Single tool, explicit code — code_run",
         "category": "single_tool",
-        "tool_detected": false,
-        "correct_name": false,
-        "valid_json_args": false,
-        "arg_score": 0.0,
-        "elapsed_s": 1.51,
-        "fully_correct": false,
-        "steps_passed": 0,
+        "tool_detected": true,
+        "correct_name": true,
+        "valid_json_args": true,
+        "arg_score": 1.0,
+        "elapsed_s": 0.19,
+        "fully_correct": true,
+        "steps_passed": 1,
         "steps_total": 1
       },
       {
@@ -87,7 +87,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 1.51,
+        "elapsed_s": 0.19,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -97,13 +97,13 @@
         "level": 2,
         "description": "Function selection — browse not web_search",
         "category": "function_selection",
-        "tool_detected": true,
-        "correct_name": true,
-        "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 0.95,
-        "fully_correct": true,
-        "steps_passed": 1,
+        "tool_detected": false,
+        "correct_name": false,
+        "valid_json_args": false,
+        "arg_score": 0.0,
+        "elapsed_s": 0.17,
+        "fully_correct": false,
+        "steps_passed": 0,
         "steps_total": 1
       },
       {
@@ -115,7 +115,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.71,
+        "elapsed_s": 0.13,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -127,11 +127,11 @@
         "category": "function_selection",
         "tool_detected": true,
         "correct_name": true,
-        "valid_json_args": false,
-        "arg_score": 0.0,
-        "elapsed_s": 0.91,
-        "fully_correct": false,
-        "steps_passed": 0,
+        "valid_json_args": true,
+        "arg_score": 1.0,
+        "elapsed_s": 0.19,
+        "fully_correct": true,
+        "steps_passed": 1,
         "steps_total": 1
       },
       {
@@ -139,11 +139,11 @@
         "level": 2,
         "description": "Function selection — create_reminder not calendar_create or send_message",
         "category": "function_selection",
-        "tool_detected": true,
-        "correct_name": true,
+        "tool_detected": false,
+        "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.57,
+        "elapsed_s": 0.16,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -153,13 +153,13 @@
         "level": 3,
         "description": "Complex args — write file with multi-line code content",
         "category": "complex_args",
-        "tool_detected": true,
-        "correct_name": true,
-        "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 0.63,
-        "fully_correct": true,
-        "steps_passed": 1,
+        "tool_detected": false,
+        "correct_name": false,
+        "valid_json_args": false,
+        "arg_score": 0.0,
+        "elapsed_s": 0.19,
+        "fully_correct": false,
+        "steps_passed": 0,
         "steps_total": 1
       },
       {
@@ -167,13 +167,13 @@
         "level": 3,
         "description": "Complex args — calendar with natural date/time",
         "category": "complex_args",
-        "tool_detected": false,
-        "correct_name": false,
-        "valid_json_args": false,
-        "arg_score": 0.0,
-        "elapsed_s": 1.51,
-        "fully_correct": false,
-        "steps_passed": 0,
+        "tool_detected": true,
+        "correct_name": true,
+        "valid_json_args": true,
+        "arg_score": 1.0,
+        "elapsed_s": 0.19,
+        "fully_correct": true,
+        "steps_passed": 1,
         "steps_total": 1
       },
       {
@@ -182,12 +182,12 @@
         "description": "Complex args — exec with piped command",
         "category": "complex_args",
         "tool_detected": true,
-        "correct_name": true,
+        "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.51,
-        "fully_correct": true,
-        "steps_passed": 1,
+        "elapsed_s": 0.17,
+        "fully_correct": false,
+        "steps_passed": 0,
         "steps_total": 1
       },
       {
@@ -195,13 +195,13 @@
         "level": 3,
         "description": "Complex args — code_run with multi-line Python and imports",
         "category": "complex_args",
-        "tool_detected": true,
-        "correct_name": true,
-        "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 1.31,
-        "fully_correct": true,
-        "steps_passed": 1,
+        "tool_detected": false,
+        "correct_name": false,
+        "valid_json_args": false,
+        "arg_score": 0.0,
+        "elapsed_s": 0.24,
+        "fully_correct": false,
+        "steps_passed": 0,
         "steps_total": 1
       },
       {
@@ -217,7 +217,7 @@
         "expected_count": 2,
         "actual_count": 0,
         "fully_correct": false,
-        "elapsed_s": 0.49
+        "elapsed_s": 0.23
       },
       {
         "id": "tc15",
@@ -225,14 +225,14 @@
         "description": "Parallel — three translations",
         "category": "parallel",
         "tool_detected": true,
-        "correct_name": true,
+        "correct_name": false,
         "valid_json_args": true,
-        "arg_score": 1.0,
-        "matched": 3,
+        "arg_score": 0.33,
+        "matched": 1,
         "expected_count": 3,
-        "actual_count": 3,
-        "fully_correct": true,
-        "elapsed_s": 0.77
+        "actual_count": 1,
+        "fully_correct": false,
+        "elapsed_s": 0.2
       },
       {
         "id": "tc16",
@@ -247,7 +247,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.69
+        "elapsed_s": 0.22
       },
       {
         "id": "tc17",
@@ -255,14 +255,14 @@
         "description": "Parallel — two file reads",
         "category": "parallel",
         "tool_detected": true,
-        "correct_name": true,
+        "correct_name": false,
         "valid_json_args": true,
-        "arg_score": 1.0,
-        "matched": 2,
+        "arg_score": 0.0,
+        "matched": 0,
         "expected_count": 2,
-        "actual_count": 2,
-        "fully_correct": true,
-        "elapsed_s": 1.06
+        "actual_count": 1,
+        "fully_correct": false,
+        "elapsed_s": 0.18
       },
       {
         "id": "tc18",
@@ -272,7 +272,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.37
+        "elapsed_s": 0.11
       },
       {
         "id": "tc19",
@@ -282,7 +282,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.64
+        "elapsed_s": 0.22
       },
       {
         "id": "tc20",
@@ -292,35 +292,35 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.42
+        "elapsed_s": 0.12
       },
       {
         "id": "tc21",
         "level": 4,
         "description": "Sequential — web_search then browse",
         "category": "sequential",
-        "tool_detected": true,
-        "correct_name": true,
-        "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 0.85,
+        "tool_detected": false,
+        "correct_name": false,
+        "valid_json_args": false,
+        "arg_score": 0.0,
+        "elapsed_s": 0.17,
         "fully_correct": false,
-        "steps_passed": 1,
-        "steps_total": 2
+        "steps_passed": 0,
+        "steps_total": 1
       },
       {
         "id": "tc22",
         "level": 4,
         "description": "Sequential — read then exec",
         "category": "sequential",
-        "tool_detected": false,
-        "correct_name": false,
-        "valid_json_args": false,
-        "arg_score": 0.0,
-        "elapsed_s": 1.51,
+        "tool_detected": true,
+        "correct_name": true,
+        "valid_json_args": true,
+        "arg_score": 1.0,
+        "elapsed_s": 0.17,
         "fully_correct": false,
-        "steps_passed": 0,
-        "steps_total": 1
+        "steps_passed": 1,
+        "steps_total": 2
       },
       {
         "id": "tc23",
@@ -331,7 +331,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 1.51,
+        "elapsed_s": 0.13,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -341,24 +341,24 @@
         "level": 5,
         "description": "Sequential 3-step — web_search + code_run + write",
         "category": "sequential",
-        "tool_detected": false,
-        "correct_name": false,
-        "valid_json_args": false,
-        "arg_score": 0.0,
-        "elapsed_s": 1.51,
+        "tool_detected": true,
+        "correct_name": true,
+        "valid_json_args": true,
+        "arg_score": 1.0,
+        "elapsed_s": 0.16,
         "fully_correct": false,
-        "steps_passed": 0,
-        "steps_total": 1
+        "steps_passed": 1,
+        "steps_total": 2
       },
       {
         "id": "tc25",
         "level": 3,
         "description": "Missing params — send_message with no recipient or text",
         "category": "missing_params",
-        "fully_correct": true,
-        "no_tool_called": true,
+        "fully_correct": false,
+        "no_tool_called": false,
         "has_content": true,
-        "elapsed_s": 0.38
+        "elapsed_s": 0.17
       },
       {
         "id": "tc26",
@@ -368,7 +368,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.46
+        "elapsed_s": 0.17
       },
       {
         "id": "tc27",
@@ -379,7 +379,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.64,
+        "elapsed_s": 0.16,
         "fully_correct": false
       },
       {
@@ -387,28 +387,26 @@
         "level": 4,
         "description": "Error recovery — 404 not found, model should try alternative",
         "category": "error_recovery",
-        "tool_detected": true,
-        "correct_name": true,
-        "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 0.46,
-        "recovery_tool_called": false,
-        "recovery_text": true,
-        "fully_correct": true
+        "tool_detected": false,
+        "correct_name": false,
+        "valid_json_args": false,
+        "arg_score": 0.0,
+        "elapsed_s": 0.19,
+        "fully_correct": false
       },
       {
         "id": "tc29",
         "level": 4,
         "description": "Nested dependent — read URL from file then browse it",
         "category": "nested_dependent",
-        "tool_detected": false,
-        "correct_name": false,
-        "valid_json_args": false,
-        "arg_score": 0.0,
-        "elapsed_s": 1.5,
+        "tool_detected": true,
+        "correct_name": true,
+        "valid_json_args": true,
+        "arg_score": 1.0,
+        "elapsed_s": 0.15,
         "fully_correct": false,
-        "steps_passed": 0,
-        "steps_total": 1
+        "steps_passed": 1,
+        "steps_total": 2
       },
       {
         "id": "tc30",
@@ -419,7 +417,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 1.5,
+        "elapsed_s": 0.18,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -427,8 +425,8 @@
     ]
   },
   "coding": {
-    "score": 0.0,
-    "passed": 0,
+    "score": 0.2,
+    "passed": 2,
     "total": 10,
     "details": [
       {
@@ -437,7 +435,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpbnsu05dm.py\", line 2\n    Okay, let's tackle this problem. So, the task is to write a Python function called encode that takes a message string"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp6tc3wox7.py\", line 2, in <module>\n    result = encode(message)\n             ^^^^^^\nNameError: name 'encod"
       },
       {
         "id": "code02",
@@ -445,23 +443,21 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpnf7ewx9n.py\", line 45\n    Yes, that's correct.\n             ^\nSyntaxError: unterminated string literal (detected at line 45)"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmph6k63gxi.py\", line 9, in <module>\n    assert skjkasdkd([0,3,2,1,3,5,7,4,5,5,5,2,181,32,4,32,3,2,32,324,4,"
       },
       {
         "id": "code03",
         "description": "HE/116 — Sort by binary 1-count",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp2gnx8yij.py\", line 2\n    Okay, I need to write a Python function called sort_array that takes an array of non-negative integers and sorts them"
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code04",
         "description": "HE/119 — Parentheses match (two strings)",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpa1dqv_50.py\", line 8\n    Wait, but the problem says that the two strings are given. So the function is given two strings, and we need to check"
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code05",
@@ -469,7 +465,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpn8mk3pho.py\", line 2\n    Okay, I need to write a Python function called valid_date that checks if a date string is valid according to the give"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpg8nql7nu.py\", line 27, in <module>\n    assert valid_date('03-11-2000') == True\n           ^^^^^^^^^^^^^^^"
       },
       {
         "id": "code06",
@@ -477,7 +473,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpaziygth2.py\", line 4\n    First, let's recall the sequence definition:\n              ^\nSyntaxError: unterminated string literal (detected at li"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp31owo9be.py\", line 23, in <module>\n    assert tri(3) == [1, 3, 2.0, 8.0]\n           ^^^^^^^^^^^^^^^^^^^^^"
       },
       {
         "id": "code07",
@@ -485,7 +481,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpg6eyu1ef.py\", line 4\n    First, the function needs to return 'Yes' or 'No' based on the validity of the file name. Let's go through each condi"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp1kgnaq5x.py\", line 20, in <module>\n    assert file_name_check('example.txt') == 'Yes'\n           ^^^^^^^^"
       },
       {
         "id": "code08",
@@ -493,7 +489,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp9427_m49.py\", line 4\n    Let me think about the example given. For example, in the first example, the list is [1, 11, -1, -11, -12]. After sor"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpc56dxf6t.py\", line 12, in <module>\n    assert order_by_points([1, 11, -1, -11, -12]) == [-1, -11, 1, -12,"
       },
       {
         "id": "code09",
@@ -501,7 +497,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp9cbydxju.py\", line 6\n    Wait, but what's the approach here? Oh right, the minimum subarray sum is the same as the minimum subarray sum in the"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpxs5par7t.py\", line 11, in <module>\n    assert minSubArraySum([2, 3, 4, 1, 2, 4]) == 1\n           ^^^^^^^^"
       },
       {
         "id": "code10",
@@ -509,13 +505,13 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp5nosv7ah.py\", line 2\n    Okay, let's tackle this problem. We need to find the number of triples (a[i], a[j], a[k]) where i < j < k, and the su"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp91vyicwv.py\", line 3, in <module>\n    assert get_max_triples(5) == 1\n           ^^^^^^^^^^^^^^^\nNameError"
       }
     ]
   },
   "reasoning": {
-    "score": 0.1,
-    "passed": 1,
+    "score": 0.2,
+    "passed": 2,
     "total": 10,
     "details": [
       {
@@ -527,43 +523,43 @@
       {
         "id": "math02",
         "expected": "3",
-        "got": "1/3",
-        "correct": false
+        "got": "3",
+        "correct": true
       },
       {
         "id": "math03",
         "expected": "14/3",
-        "got": "2",
+        "got": "1",
         "correct": false
       },
       {
         "id": "math04",
         "expected": "2220",
-        "got": "6",
+        "got": "10",
         "correct": false
       },
       {
         "id": "math05",
         "expected": "3",
-        "got": "1",
+        "got": "0",
         "correct": false
       },
       {
         "id": "math06",
         "expected": "9",
-        "got": "169",
+        "got": "2",
         "correct": false
       },
       {
         "id": "math07",
         "expected": "11/36",
-        "got": "1",
+        "got": "1/18",
         "correct": false
       },
       {
         "id": "math08",
         "expected": "121",
-        "got": "36",
+        "got": "11",
         "correct": false
       },
       {
@@ -647,5 +643,5 @@
       }
     ]
   },
-  "total_eval_time_s": 96.7
+  "total_eval_time_s": 38.5
 }

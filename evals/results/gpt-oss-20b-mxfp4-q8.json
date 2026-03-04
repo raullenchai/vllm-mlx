@@ -12,10 +12,10 @@
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser minimax",
   "speed": {
-    "ttft_cold_s": 0.292,
-    "ttft_warm_s": 0.104,
-    "decode_short_tps": 98.3,
-    "decode_long_tps": 10.7
+    "ttft_cold_s": 0.301,
+    "ttft_warm_s": 0.11,
+    "decode_short_tps": 97.4,
+    "decode_long_tps": 10.6
   },
   "tool_calling": {
     "score": 0.17,
@@ -73,7 +73,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.5,
+        "elapsed_s": 0.51,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -101,7 +101,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.17,
+        "elapsed_s": 0.18,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -115,7 +115,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.16,
+        "elapsed_s": 0.17,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -129,7 +129,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.25,
+        "elapsed_s": 0.26,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -143,7 +143,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.3,
+        "elapsed_s": 0.32,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -171,7 +171,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.33,
+        "elapsed_s": 0.34,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -185,7 +185,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.18,
+        "elapsed_s": 0.19,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -199,7 +199,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.22,
+        "elapsed_s": 0.23,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -232,7 +232,7 @@
         "expected_count": 3,
         "actual_count": 0,
         "fully_correct": false,
-        "elapsed_s": 0.25
+        "elapsed_s": 0.26
       },
       {
         "id": "tc16",
@@ -262,7 +262,7 @@
         "expected_count": 2,
         "actual_count": 0,
         "fully_correct": false,
-        "elapsed_s": 0.28
+        "elapsed_s": 0.29
       },
       {
         "id": "tc18",
@@ -272,7 +272,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.18
+        "elapsed_s": 0.17
       },
       {
         "id": "tc19",
@@ -282,7 +282,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.3
+        "elapsed_s": 0.31
       },
       {
         "id": "tc20",
@@ -345,7 +345,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.2,
+        "elapsed_s": 0.19,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -358,7 +358,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.2
+        "elapsed_s": 0.21
       },
       {
         "id": "tc26",
@@ -368,7 +368,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.19
+        "elapsed_s": 0.2
       },
       {
         "id": "tc27",
@@ -456,7 +456,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp6qi3r7od.py\", line 1, in <module>\n    a + b          or          b + a\n    ^\nNameError: name 'a' is not d"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp0bx4sbrm.py\", line 1, in <module>\n    a + b          or          b + a\n    ^\nNameError: name 'a' is not d"
       },
       {
         "id": "code05",
@@ -464,7 +464,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpi7cblcve.py\", line 10\n    | Month | `1 ≤ month ≤ 12` |\n                 ^\nSyntaxError: invalid character '≤' (U+2264)"
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp1r_0tja6.py\", line 10\n    | Month | `1 ≤ month ≤ 12` |\n                 ^\nSyntaxError: invalid character '≤' (U+2264)"
       },
       {
         "id": "code06",
@@ -486,7 +486,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpdee2x_8_.py\", line 10, in <module>\n    assert order_by_points([1, 11, -1, -11, -12]) == [-1, -11, 1, -12,"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpdt9wv8mj.py\", line 10, in <module>\n    assert order_by_points([1, 11, -1, -11, -12]) == [-1, -11, 1, -12,"
       },
       {
         "id": "code09",
@@ -501,7 +501,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpvx_o8pc4.py\", line 6\n    return x*(x-1)*(\n                   ^\nSyntaxError: '(' was never closed"
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpbm9ej61d.py\", line 6\n    return x*(x-1)*(\n                   ^\nSyntaxError: '(' was never closed"
       }
     ]
   },
@@ -639,5 +639,5 @@
       }
     ]
   },
-  "total_eval_time_s": 171.5
+  "total_eval_time_s": 172.6
 }

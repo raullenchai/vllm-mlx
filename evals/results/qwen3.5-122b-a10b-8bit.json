@@ -12,14 +12,14 @@
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
   "speed": {
-    "ttft_cold_s": 1.777,
-    "ttft_warm_s": 0.03,
-    "decode_short_tps": 39.5,
+    "ttft_cold_s": 1.727,
+    "ttft_warm_s": 0.028,
+    "decode_short_tps": 19.8,
     "decode_long_tps": 42.9
   },
   "tool_calling": {
-    "score": 0.97,
-    "passed": 29,
+    "score": 0.87,
+    "passed": 26,
     "total": 30,
     "details": [
       {
@@ -31,7 +31,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 3.5,
+        "elapsed_s": 2.65,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -45,7 +45,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.23,
+        "elapsed_s": 1.11,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -59,7 +59,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.8,
+        "elapsed_s": 1.01,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -73,7 +73,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.52,
+        "elapsed_s": 1.38,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -86,8 +86,8 @@
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
-        "arg_score": 0.5,
-        "elapsed_s": 2.02,
+        "arg_score": 1.0,
+        "elapsed_s": 1.38,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -101,7 +101,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.69,
+        "elapsed_s": 0.91,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -115,7 +115,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.22,
+        "elapsed_s": 0.93,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -129,7 +129,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.38,
+        "elapsed_s": 1.4,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -143,7 +143,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.34,
+        "elapsed_s": 1.22,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -157,7 +157,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 3.05,
+        "elapsed_s": 1.3,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -171,7 +171,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 4.94,
+        "elapsed_s": 1.35,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -185,7 +185,7 @@
         "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.71,
+        "elapsed_s": 0.83,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -199,7 +199,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.69,
+        "elapsed_s": 1.83,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -217,7 +217,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 2.48
+        "elapsed_s": 1.55
       },
       {
         "id": "tc15",
@@ -232,7 +232,7 @@
         "expected_count": 3,
         "actual_count": 3,
         "fully_correct": true,
-        "elapsed_s": 3.69
+        "elapsed_s": 2.82
       },
       {
         "id": "tc16",
@@ -247,7 +247,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 3.14
+        "elapsed_s": 1.62
       },
       {
         "id": "tc17",
@@ -262,7 +262,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 2.53
+        "elapsed_s": 1.46
       },
       {
         "id": "tc18",
@@ -272,7 +272,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.28
+        "elapsed_s": 0.43
       },
       {
         "id": "tc19",
@@ -282,7 +282,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 2.95
+        "elapsed_s": 1.97
       },
       {
         "id": "tc20",
@@ -292,7 +292,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.19
+        "elapsed_s": 0.53
       },
       {
         "id": "tc21",
@@ -303,7 +303,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.72,
+        "elapsed_s": 0.98,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -317,7 +317,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.93,
+        "elapsed_s": 0.9,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -331,7 +331,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.82,
+        "elapsed_s": 0.92,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -345,7 +345,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.34,
+        "elapsed_s": 1.03,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -355,20 +355,20 @@
         "level": 3,
         "description": "Missing params — send_message with no recipient or text",
         "category": "missing_params",
-        "fully_correct": true,
-        "no_tool_called": true,
+        "fully_correct": false,
+        "no_tool_called": false,
         "has_content": true,
-        "elapsed_s": 2.23
+        "elapsed_s": 1.24
       },
       {
         "id": "tc26",
         "level": 3,
         "description": "Missing params — write with no path or content",
         "category": "missing_params",
-        "fully_correct": true,
-        "no_tool_called": true,
+        "fully_correct": false,
+        "no_tool_called": false,
         "has_content": true,
-        "elapsed_s": 1.96
+        "elapsed_s": 1.26
       },
       {
         "id": "tc27",
@@ -379,7 +379,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.85,
+        "elapsed_s": 0.96,
         "recovery_text": true,
         "fully_correct": true
       },
@@ -392,7 +392,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.6,
+        "elapsed_s": 0.98,
         "recovery_tool_called": false,
         "recovery_text": true,
         "fully_correct": true
@@ -406,7 +406,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.96,
+        "elapsed_s": 0.87,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -420,25 +420,24 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.02,
-        "fully_correct": true,
-        "steps_passed": 2,
+        "elapsed_s": 0.91,
+        "fully_correct": false,
+        "steps_passed": 1,
         "steps_total": 2
       }
     ]
   },
   "coding": {
-    "score": 0.8,
-    "passed": 8,
+    "score": 0.9,
+    "passed": 9,
     "total": 10,
     "details": [
       {
         "id": "code01",
         "description": "HE/93 — Encode message (swap case + vowel shift)",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpnb2fg0rv.py\", line 19\n    assert encode('test') == 'TGST'\nIndentationError: expected an indented block after 'else' statement on line 16"
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code02",
@@ -485,9 +484,10 @@
       {
         "id": "code08",
         "description": "HE/145 — Order by digit sum (negative first digit)",
-        "runs_without_error": true,
-        "correct_output": true,
-        "fully_correct": true
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false,
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp99tyrldi.py\", line 35, in <module>\n    assert order_by_points([1, 11, -1, -11, -12]) == [-1, -11, 1, -12,"
       },
       {
         "id": "code09",
@@ -499,16 +499,15 @@
       {
         "id": "code10",
         "description": "HE/147 — Max triples divisible by 3",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpk5_pgfqk.py\", line 20\n    - (1,2,3): 1+3+7 = 11, 11 % 3 = 2 ✗\n                                      ^\nSyntaxError: invalid character '✗' (U+27"
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       }
     ]
   },
   "reasoning": {
-    "score": 0.2,
-    "passed": 2,
+    "score": 0.9,
+    "passed": 9,
     "total": 10,
     "details": [
       {
@@ -520,8 +519,8 @@
       {
         "id": "math02",
         "expected": "3",
-        "got": "4/3",
-        "correct": false
+        "got": "3",
+        "correct": true
       },
       {
         "id": "math03",
@@ -532,43 +531,43 @@
       {
         "id": "math04",
         "expected": "2220",
-        "got": "None",
-        "correct": false
+        "got": "2220",
+        "correct": true
       },
       {
         "id": "math05",
         "expected": "3",
-        "got": "None",
-        "correct": false
+        "got": "3",
+        "correct": true
       },
       {
         "id": "math06",
         "expected": "9",
-        "got": "None",
-        "correct": false
+        "got": "9",
+        "correct": true
       },
       {
         "id": "math07",
         "expected": "11/36",
-        "got": "None",
-        "correct": false
+        "got": "11/36",
+        "correct": true
       },
       {
         "id": "math08",
         "expected": "121",
-        "got": "None",
-        "correct": false
+        "got": "121",
+        "correct": true
       },
       {
         "id": "math09",
         "expected": "284",
-        "got": "None",
-        "correct": false
+        "got": "284",
+        "correct": true
       },
       {
         "id": "math10",
         "expected": "144",
-        "got": "None",
+        "got": "120",
         "correct": false
       }
     ]
@@ -640,5 +639,5 @@
       }
     ]
   },
-  "total_eval_time_s": 617.3
+  "total_eval_time_s": 341.5
 }

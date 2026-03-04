@@ -12,10 +12,10 @@
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
   "speed": {
-    "ttft_cold_s": 0.152,
-    "ttft_warm_s": 0.074,
-    "decode_short_tps": 71.1,
-    "decode_long_tps": 122.3
+    "ttft_cold_s": 0.145,
+    "ttft_warm_s": 0.072,
+    "decode_short_tps": 71.9,
+    "decode_long_tps": 123.2
   },
   "tool_calling": {
     "score": 0.17,
@@ -31,7 +31,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.94,
+        "elapsed_s": 0.93,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -45,7 +45,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.34,
+        "elapsed_s": 0.36,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -101,7 +101,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.44,
+        "elapsed_s": 0.43,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -115,7 +115,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 1.64,
+        "elapsed_s": 1.63,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -129,7 +129,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.27,
+        "elapsed_s": 0.26,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -157,7 +157,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.51,
+        "elapsed_s": 0.5,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -185,7 +185,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.25,
+        "elapsed_s": 0.24,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -217,7 +217,7 @@
         "expected_count": 2,
         "actual_count": 0,
         "fully_correct": false,
-        "elapsed_s": 1.07
+        "elapsed_s": 1.06
       },
       {
         "id": "tc15",
@@ -247,7 +247,7 @@
         "expected_count": 2,
         "actual_count": 0,
         "fully_correct": false,
-        "elapsed_s": 1.35
+        "elapsed_s": 1.34
       },
       {
         "id": "tc17",
@@ -262,7 +262,7 @@
         "expected_count": 2,
         "actual_count": 0,
         "fully_correct": false,
-        "elapsed_s": 0.43
+        "elapsed_s": 0.42
       },
       {
         "id": "tc18",
@@ -282,7 +282,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.61
+        "elapsed_s": 0.6
       },
       {
         "id": "tc20",
@@ -317,7 +317,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.6,
+        "elapsed_s": 0.58,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -331,7 +331,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.33,
+        "elapsed_s": 0.32,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -358,7 +358,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.4
+        "elapsed_s": 0.42
       },
       {
         "id": "tc26",
@@ -368,7 +368,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.47
+        "elapsed_s": 1.46
       },
       {
         "id": "tc27",
@@ -379,7 +379,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.64,
+        "elapsed_s": 0.63,
         "fully_correct": false
       },
       {
@@ -391,7 +391,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.44,
+        "elapsed_s": 0.43,
         "fully_correct": false
       },
       {
@@ -403,7 +403,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.48,
+        "elapsed_s": 0.47,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -435,7 +435,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpn5xq17ms.py\", line 21, in <module>\n    assert encode('test') == 'TGST'\n           ^^^^^^^^^^^^^^^^^^^^^^^"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpmzqfvtaw.py\", line 21, in <module>\n    assert encode('test') == 'TGST'\n           ^^^^^^^^^^^^^^^^^^^^^^^"
       },
       {
         "id": "code02",
@@ -450,7 +450,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpi2bsm7a4.py\", line 8, in <module>\n    assert sort_array([1,5,2,3,4]) == [1, 2, 4, 3, 5]\n           ^^^^^^"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmppywjtaej.py\", line 8, in <module>\n    assert sort_array([1,5,2,3,4]) == [1, 2, 4, 3, 5]\n           ^^^^^^"
       },
       {
         "id": "code04",
@@ -458,7 +458,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp19o0goko.py\", line 22, in <module>\n    assert match_parens(['()(', ')']) == 'Yes'\n           ^^^^^^^^^^^^"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpmuraa4ri.py\", line 22, in <module>\n    assert match_parens(['()(', ')']) == 'Yes'\n           ^^^^^^^^^^^^"
       },
       {
         "id": "code05",
@@ -466,7 +466,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp8xe6bnm3.py\", line 32, in <module>\n    assert valid_date('06/04/2020') == False\n           ^^^^^^^^^^^^^^"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpro8ihhuf.py\", line 32, in <module>\n    assert valid_date('06/04/2020') == False\n           ^^^^^^^^^^^^^^"
       },
       {
         "id": "code06",
@@ -474,7 +474,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpxzuiqo_w.py\", line 21, in <module>\n    assert tri(3) == [1, 3, 2.0, 8.0]\n           ^^^^^^^^^^^^^^^^^^^^^"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpqphbxql0.py\", line 21, in <module>\n    assert tri(3) == [1, 3, 2.0, 8.0]\n           ^^^^^^^^^^^^^^^^^^^^^"
       },
       {
         "id": "code07",
@@ -489,7 +489,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpkltftvpe.py\", line 8, in <module>\n    assert order_by_points([1, 11, -1, -11, -12]) == [-1, -11, 1, -12, "
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpqwditui4.py\", line 8, in <module>\n    assert order_by_points([1, 11, -1, -11, -12]) == [-1, -11, 1, -12, "
       },
       {
         "id": "code09",
@@ -497,7 +497,7 @@
         "runs_without_error": false,
         "correct_output": false,
         "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpuym82zxe.py\", line 15, in <module>\n    assert minSubArraySum([2, 3, 4, 1, 2, 4]) == 1\n           ^^^^^^^^"
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpzcgrseu3.py\", line 15, in <module>\n    assert minSubArraySum([2, 3, 4, 1, 2, 4]) == 1\n           ^^^^^^^^"
       },
       {
         "id": "code10",
@@ -643,5 +643,5 @@
       }
     ]
   },
-  "total_eval_time_s": 111.9
+  "total_eval_time_s": 111.4
 }

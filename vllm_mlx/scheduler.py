@@ -25,6 +25,7 @@ from .memory_cache import MemoryAwarePrefixCache, MemoryCacheConfig
 from .paged_cache import PagedCacheManager
 from .prefix_cache import BlockAwarePrefixCache, PrefixCacheManager
 from .request import Request, RequestOutput, RequestStatus, SamplingParams
+from .utils.decode import IncrementalDecoder
 from .utils.mamba_cache import ensure_mamba_support
 
 logger = logging.getLogger(__name__)
@@ -1809,6 +1810,8 @@ class Scheduler:
                 self.uid_to_request_id[uid] = request.request_id
                 request.batch_uid = uid
                 request.status = RequestStatus.RUNNING
+                # Attach incremental decoder for multi-byte safe streaming
+                request._decoder = IncrementalDecoder(self._actual_tokenizer)
                 self.running[request.request_id] = request
                 scheduled.append(request)
 
@@ -1862,11 +1865,16 @@ class Scheduler:
 
                 request.first_token_time = _time.time()
 
-            # Decode the new token (skip stop tokens — they are not content)
+            # Decode the new token using IncrementalDecoder for multi-byte
+            # safety (emoji, CJK). Skip stop tokens — they are not content.
             if response.finish_reason == "stop":
                 new_text = ""
             else:
-                new_text = self._decode_tokens([response.token])
+                decoder = getattr(request, "_decoder", None)
+                if decoder is not None:
+                    new_text = decoder.add_token(response.token)
+                else:
+                    new_text = self._decode_tokens([response.token])
 
             # Create output
             output = RequestOutput(
@@ -1889,8 +1897,13 @@ class Scheduler:
                 output.finish_reason = response.finish_reason
                 finished_ids.add(request_id)
 
-                # Decode full output
-                output.output_text = self._decode_tokens(request.output_token_ids)
+                # Decode full output using decoder if available (ensures
+                # any held-back multi-byte chars are flushed)
+                decoder = getattr(request, "_decoder", None)
+                if decoder is not None:
+                    output.output_text = decoder.get_full_text()
+                else:
+                    output.output_text = self._decode_tokens(request.output_token_ids)
                 request.output_text = output.output_text
 
                 # Extract cache for future reuse (critical for agentic multi-turn)

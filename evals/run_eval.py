@@ -399,6 +399,11 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
     """Run tool-calling scenarios with multi-turn, parallel, irrelevance, and error recovery support."""
     # TODO: GPT-OSS-20B scores 17% tools and 20% reasoning despite 60% coding / 90% general.
     #       Likely a minimax parser compatibility issue — try hermes parser or inspect raw responses.
+    # TODO: Benchmark these community-requested models:
+    #       - mistral-small-2506
+    #       - devstral-small-2512
+    #       - glm-4.5-air
+    #       - nemotron-nano-3-30B-A3B
     print("\n--- Suite B: Tool Calling ---")
 
     prompts_file = PROMPTS_DIR / "tool_calling.json"

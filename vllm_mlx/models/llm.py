@@ -15,6 +15,8 @@ from typing import Any, Iterator
 
 import mlx.core as mx
 
+from ..utils.decode import IncrementalDecoder
+
 logger = logging.getLogger(__name__)
 
 
@@ -393,11 +395,10 @@ class MLXLanguageModel:
 
         token_count = 0
         accumulated_text = ""
-        # Track generated token IDs for raw decoding (preserving special tokens).
-        # mlx_lm's detokenizer strips special tokens, which breaks parsers
-        # (like Harmony) that need control tokens like <|channel|>, <|call|>.
-        _generated_ids: list[int] = []
-        _prev_raw_text = ""
+        # Use IncrementalDecoder with skip_special_tokens=False to preserve
+        # control tokens (e.g. Harmony's <|channel|>, <|call|>) that tool
+        # parsers need. Also handles multi-byte chars (emoji, CJK) safely.
+        decoder = IncrementalDecoder(self.tokenizer, skip_special_tokens=False)
 
         # Build generation kwargs
         gen_kwargs = {
@@ -474,27 +475,8 @@ class MLXLanguageModel:
                         f"(prompt={len(full_token_ids)} tokens, "
                         f"prefilled={len(prompt_to_send)} tokens)"
                     )
-                # Decode with skip_special_tokens=False to preserve control
-                # tokens (e.g. Harmony's <|channel|>, <|call|>) that tool
-                # parsers need. mlx_lm's detokenizer strips these.
                 token_id = response.token if hasattr(response, "token") else 0
-                _generated_ids.append(token_id)
-                _raw_text = self.tokenizer.decode(
-                    _generated_ids, skip_special_tokens=False
-                )
-                new_text = _raw_text[len(_prev_raw_text):]
-
-                # Guard against multi-byte character boundaries: if the
-                # tokenizer produced a replacement character (U+FFFD) for
-                # an incomplete multi-byte sequence (e.g. emoji split
-                # across tokens), hold the delta and re-decode next
-                # iteration with more tokens to complete the character.
-                if "\ufffd" in new_text:
-                    # Don't update _prev_raw_text so next decode
-                    # recomputes the delta from the last good position.
-                    new_text = ""
-                else:
-                    _prev_raw_text = _raw_text
+                new_text = decoder.add_token(token_id)
                 accumulated_text += new_text
 
                 # Check for stop sequences

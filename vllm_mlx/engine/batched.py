@@ -17,6 +17,7 @@ from typing import Any
 
 from ..api.tool_calling import convert_tools_for_template
 from ..api.utils import clean_output_text, extract_multimodal_content, is_mllm_model
+from ..utils.chat_template import apply_chat_template as shared_apply_chat_template
 from .base import BaseEngine, GenerationOutput
 
 logger = logging.getLogger(__name__)
@@ -346,14 +347,19 @@ class BatchedEngine(BaseEngine):
         messages: list[dict[str, Any]],
         tools: list[dict] | None = None,
         num_images: int = 0,
+        enable_thinking: bool | None = None,
     ) -> str:
         """Apply chat template to messages.
 
         Uses the processor's (or tokenizer's) apply_chat_template with the
         full message list so that system prompts and conversation history
-        are preserved. The previous implementation extracted only the last
-        user message text via mlx_vlm.prompt_utils.apply_chat_template,
-        which dropped system prompts and all prior turns.
+        are preserved.
+
+        Args:
+            messages: Chat messages in OpenAI format.
+            tools: Converted tool definitions for template.
+            num_images: Number of images (triggers MLLM message preparation).
+            enable_thinking: Whether to enable thinking mode (None = auto).
         """
         # Choose the best template applicator.
         # For MLLM models, the processor handles special vision tokens.
@@ -368,36 +374,22 @@ class BatchedEngine(BaseEngine):
         elif hasattr(self.tokenizer, "apply_chat_template"):
             template_applicator = self.tokenizer
 
-        if template_applicator is not None:
-            # Convert OpenAI image_url content parts to HuggingFace format
-            # so the processor can insert the correct vision placeholder tokens.
-            if self._is_mllm and num_images > 0:
-                messages = self._prepare_mllm_messages(messages)
+        # Convert OpenAI image_url content parts to HuggingFace format
+        # so the processor can insert the correct vision placeholder tokens.
+        if self._is_mllm and num_images > 0:
+            messages = self._prepare_mllm_messages(messages)
 
-            template_kwargs = {
-                "tokenize": False,
-                "add_generation_prompt": True,
-            }
-            if tools:
-                template_kwargs["tools"] = tools
-
-            try:
-                return template_applicator.apply_chat_template(
-                    messages, **template_kwargs
-                )
-            except TypeError as e:
-                # Some templates don't accept 'tools'; retry without them.
-                logger.debug(f"Chat template TypeError, retrying without extras: {e}")
-                for key in ["tools"]:
-                    if key in template_kwargs:
-                        del template_kwargs[key]
-                return template_applicator.apply_chat_template(
-                    messages, **template_kwargs
-                )
-        else:
-            # Fallback for models without apply_chat_template
-            prompt = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
-            return prompt + "\nassistant:"
+        # If no suitable applicator was found, pass self.tokenizer anyway;
+        # the shared function will fall back to plain-text formatting when
+        # apply_chat_template is missing.
+        applicator = template_applicator or self.tokenizer
+        return shared_apply_chat_template(
+            applicator,
+            messages,
+            tools=tools,
+            enable_thinking=enable_thinking,
+            model_name=self._model_name,
+        )
 
     @staticmethod
     def _prepare_mllm_messages(
@@ -629,6 +621,9 @@ class BatchedEngine(BaseEngine):
         all_images = (images or []) + extracted_images
         all_videos = (videos or []) + extracted_videos
 
+        # Extract enable_thinking before passing kwargs downstream
+        enable_thinking = kwargs.pop("enable_thinking", None)
+
         # Convert tools for template
         template_tools = convert_tools_for_template(tools) if tools else None
 
@@ -637,6 +632,7 @@ class BatchedEngine(BaseEngine):
             messages,
             template_tools,
             num_images=len(all_images),
+            enable_thinking=enable_thinking,
         )
 
         return await self.generate(
@@ -740,6 +736,9 @@ class BatchedEngine(BaseEngine):
         all_images = (images or []) + extracted_images
         all_videos = (videos or []) + extracted_videos
 
+        # Extract enable_thinking before passing kwargs downstream
+        enable_thinking = kwargs.pop("enable_thinking", None)
+
         # Convert tools for template
         template_tools = convert_tools_for_template(tools) if tools else None
 
@@ -748,6 +747,7 @@ class BatchedEngine(BaseEngine):
             messages,
             template_tools,
             num_images=len(all_images),
+            enable_thinking=enable_thinking,
         )
 
         # Compute prefix boundary for cache

@@ -13,6 +13,7 @@ from typing import Any
 
 from ..api.tool_calling import convert_tools_for_template
 from ..api.utils import is_mllm_model
+from ..utils.chat_template import apply_chat_template as shared_apply_chat_template
 from .base import BaseEngine, GenerationOutput
 
 logger = logging.getLogger(__name__)
@@ -404,32 +405,15 @@ class SimpleEngine(BaseEngine):
             raise RuntimeError("build_prompt is not supported for MLLM models")
 
         template_tools = convert_tools_for_template(tools) if tools else None
+        enable_thinking = kwargs.get("enable_thinking", None)
 
-        tokenizer = self._model.tokenizer
-        if hasattr(tokenizer, "apply_chat_template"):
-            # Caller can override via kwargs; default off for coder models.
-            if "enable_thinking" in kwargs:
-                enable_thinking = kwargs["enable_thinking"]
-            else:
-                enable_thinking = "coder" not in self._model_name.lower()
-            template_kwargs = {
-                "tokenize": False,
-                "add_generation_prompt": True,
-                "enable_thinking": enable_thinking,
-            }
-            if template_tools:
-                template_kwargs["tools"] = template_tools
-
-            try:
-                return tokenizer.apply_chat_template(messages, **template_kwargs)
-            except TypeError:
-                for key in ["tools", "enable_thinking"]:
-                    if key in template_kwargs:
-                        del template_kwargs[key]
-                return tokenizer.apply_chat_template(messages, **template_kwargs)
-        else:
-            prompt = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
-            return prompt + "\nassistant:"
+        return shared_apply_chat_template(
+            self._model.tokenizer,
+            messages,
+            tools=template_tools,
+            enable_thinking=enable_thinking,
+            model_name=self._model_name,
+        )
 
     async def stream_chat(
         self,
@@ -504,32 +488,14 @@ class SimpleEngine(BaseEngine):
             return
 
         # For LLM, apply chat template and stream
-        tokenizer = self._model.tokenizer
-        if hasattr(tokenizer, "apply_chat_template"):
-            # Caller can override via kwargs; default off for coder models.
-            if "enable_thinking" in kwargs:
-                enable_thinking = kwargs.pop("enable_thinking")
-            else:
-                enable_thinking = "coder" not in self._model_name.lower()
-            template_kwargs = {
-                "tokenize": False,
-                "add_generation_prompt": True,
-                "enable_thinking": enable_thinking,
-            }
-            if template_tools:
-                template_kwargs["tools"] = template_tools
-
-            try:
-                prompt = tokenizer.apply_chat_template(messages, **template_kwargs)
-            except TypeError:
-                # Some templates don't support all kwargs
-                for key in ["tools", "enable_thinking"]:
-                    if key in template_kwargs:
-                        del template_kwargs[key]
-                prompt = tokenizer.apply_chat_template(messages, **template_kwargs)
-        else:
-            prompt = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
-            prompt += "\nassistant:"
+        enable_thinking = kwargs.pop("enable_thinking", None)
+        prompt = shared_apply_chat_template(
+            self._model.tokenizer,
+            messages,
+            tools=template_tools,
+            enable_thinking=enable_thinking,
+            model_name=self._model_name,
+        )
 
         # Stream generate
         async for output in self.stream_generate(

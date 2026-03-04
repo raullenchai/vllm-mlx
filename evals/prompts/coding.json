@@ -1,72 +1,72 @@
 [
   {
     "id": "code01",
-    "description": "Simple function — fizzbuzz",
-    "prompt": "Write a Python function `fizzbuzz(n)` that returns a list of strings from 1 to n. For multiples of 3 use 'Fizz', multiples of 5 use 'Buzz', multiples of both use 'FizzBuzz', otherwise the number as a string.",
-    "test_code": "result = fizzbuzz(15)\nassert result[2] == 'Fizz'\nassert result[4] == 'Buzz'\nassert result[14] == 'FizzBuzz'\nassert result[0] == '1'\nassert len(result) == 15\nprint('PASS')",
+    "description": "HE/93 — Encode message (swap case + vowel shift)",
+    "prompt": "Write a Python function `encode(message)` that takes a message string, swaps the case of all letters, and replaces all vowels (in the swapped result) with the letter that appears 2 places ahead in the English alphabet.\n\nExamples:\n  encode('test') => 'TGST'\n  encode('This is a message') => 'tHKS KS C MGSSCGG'",
+    "test_code": "assert encode('test') == 'TGST'\nassert encode('This is a message') == 'tHKS KS C MGSSCGG'\nassert encode('I DoNt KnOw WhaT tO CarRy') == 'k dQnT kNqW wHCt Tq cCRrY'\nassert encode('') == ''\nprint('PASS')",
     "language": "python"
   },
   {
     "id": "code02",
-    "description": "Simple function — fibonacci",
-    "prompt": "Write a Python function `fibonacci(n)` that returns the nth Fibonacci number (0-indexed, so fibonacci(0)=0, fibonacci(1)=1, fibonacci(10)=55).",
-    "test_code": "assert fibonacci(0) == 0\nassert fibonacci(1) == 1\nassert fibonacci(10) == 55\nassert fibonacci(20) == 6765\nprint('PASS')",
+    "description": "HE/94 — Largest prime factor digit sum",
+    "prompt": "Write a Python function `skjkasdkd(lst)` that takes a list of integers, finds the largest prime number in the list, and returns the sum of its digits.\n\nExamples:\n  skjkasdkd([0,3,2,1,3,5,7,4,5,5,5,2,181,32,4,32,3,2,32,324,4,3]) => 10\n  skjkasdkd([1,0,1,8,2,4597,2,1,3,40,1,2,1,2,4,2,5,1]) => 25",
+    "test_code": "assert skjkasdkd([0,3,2,1,3,5,7,4,5,5,5,2,181,32,4,32,3,2,32,324,4,3]) == 10\nassert skjkasdkd([1,0,1,8,2,4597,2,1,3,40,1,2,1,2,4,2,5,1]) == 25\nassert skjkasdkd([1,3,1,32,5107,34,83278,109,163,23,2323,32,30,1,9,3]) == 13\nassert skjkasdkd([0,724,32,71,99,32,6,0,5,91,83,0,5,6]) == 11\nassert skjkasdkd([0,81,12,3,1,21]) == 3\nassert skjkasdkd([0,8,1,2,1,7]) == 7\nassert skjkasdkd([8191]) == 19\nprint('PASS')",
     "language": "python"
   },
   {
     "id": "code03",
-    "description": "Data structure — flatten nested list",
-    "prompt": "Write a Python function `flatten(lst)` that takes an arbitrarily nested list and returns a flat list of all elements. Example: flatten([1, [2, [3, 4], 5], 6]) => [1, 2, 3, 4, 5, 6]",
-    "test_code": "assert flatten([1, [2, [3, 4], 5], 6]) == [1, 2, 3, 4, 5, 6]\nassert flatten([]) == []\nassert flatten([1, 2, 3]) == [1, 2, 3]\nassert flatten([[[[1]]]]) == [1]\nprint('PASS')",
+    "description": "HE/116 — Sort by binary 1-count",
+    "prompt": "Write a Python function `sort_array(arr)` that sorts an array of non-negative integers by the number of ones in their binary representation in ascending order. For ties, sort by decimal value.\n\nNote: Handle negative numbers by counting ones in their absolute value's binary representation.\n\nExamples:\n  sort_array([1,5,2,3,4]) => [1, 2, 4, 3, 5]\n  sort_array([-2,-3,-4,-5,-6]) => [-4, -2, -6, -5, -3]\n  sort_array([]) => []",
+    "test_code": "assert sort_array([1,5,2,3,4]) == [1, 2, 4, 3, 5]\nassert sort_array([-2,-3,-4,-5,-6]) == [-4, -2, -6, -5, -3]\nassert sort_array([1,0,2,3,4]) == [0, 1, 2, 4, 3]\nassert sort_array([]) == []\nassert sort_array([2,5,77,4,5,3,5,7,2,3,4]) == [2, 2, 4, 4, 3, 3, 5, 5, 5, 7, 77]\nassert sort_array([3,6,44,12,32,5]) == [32, 3, 5, 6, 12, 44]\nprint('PASS')",
     "language": "python"
   },
   {
     "id": "code04",
-    "description": "Bug fix — off-by-one error",
-    "prompt": "Fix this Python function that's supposed to return True if the string is a palindrome (case-insensitive), but has a bug:\n\ndef is_palindrome(s):\n    s = s.lower()\n    for i in range(len(s) // 2):\n        if s[i] != s[len(s) - i]:\n            return False\n    return True\n\nReturn the corrected function.",
-    "test_code": "assert is_palindrome('racecar') == True\nassert is_palindrome('Racecar') == True\nassert is_palindrome('hello') == False\nassert is_palindrome('a') == True\nassert is_palindrome('ab') == False\nprint('PASS')",
+    "description": "HE/119 — Parentheses match (two strings)",
+    "prompt": "Write a Python function `match_parens(lst)` that takes a list of two strings, each consisting of open '(' and close ')' parentheses only. Check if there is some way to concatenate the two strings (in either order) to make a properly balanced parentheses string. Return 'Yes' if possible, otherwise 'No'.\n\nExamples:\n  match_parens(['()(', ')']) => 'Yes'\n  match_parens([')', ')']) => 'No'\n  match_parens(['(', ')']) => 'Yes'",
+    "test_code": "assert match_parens(['()(', ')']) == 'Yes'\nassert match_parens([')', ')']) == 'No'\nassert match_parens(['(()(())', '())())']) == 'No'\nassert match_parens([')())', '(()()(']) == 'Yes'\nassert match_parens(['()', '())']) == 'No'\nassert match_parens(['(', ')']) == 'Yes'\nassert match_parens([')', '(']) == 'Yes'\nassert match_parens([')(', ')(']) == 'No'\nprint('PASS')",
     "language": "python"
   },
   {
     "id": "code05",
-    "description": "Algorithm — two sum",
-    "prompt": "Write a Python function `two_sum(nums, target)` that returns the indices of the two numbers that add up to target. Assume exactly one solution exists. Example: two_sum([2, 7, 11, 15], 9) => [0, 1]",
-    "test_code": "assert sorted(two_sum([2, 7, 11, 15], 9)) == [0, 1]\nassert sorted(two_sum([3, 2, 4], 6)) == [1, 2]\nassert sorted(two_sum([3, 3], 6)) == [0, 1]\nprint('PASS')",
+    "description": "HE/124 — Valid date mm-dd-yyyy",
+    "prompt": "Write a Python function `valid_date(date)` that validates a date string in mm-dd-yyyy format. Return True if the date is valid, False otherwise.\n\nRules:\n- Must be in mm-dd-yyyy format (with dashes)\n- Month must be 1-12\n- Day must be valid for the month: months 1,3,5,7,8,10,12 have 1-31 days; months 4,6,9,11 have 1-30 days; month 2 has 1-29 days\n- Empty string returns False\n\nExamples:\n  valid_date('03-11-2000') => True\n  valid_date('15-01-2012') => False\n  valid_date('04-0-2040') => False\n  valid_date('') => False\n  valid_date('06/04/2020') => False",
+    "test_code": "assert valid_date('03-11-2000') == True\nassert valid_date('15-01-2012') == False\nassert valid_date('04-0-2040') == False\nassert valid_date('06-04-2020') == True\nassert valid_date('01-01-2007') == True\nassert valid_date('03-32-2011') == False\nassert valid_date('') == False\nassert valid_date('04-31-3000') == False\nassert valid_date('06/04/2020') == False\nassert valid_date('04122003') == False\nassert valid_date('2003-04-12') == False\nprint('PASS')",
     "language": "python"
   },
   {
     "id": "code06",
-    "description": "String processing — word count",
-    "prompt": "Write a Python function `word_freq(text)` that returns a dictionary mapping each word (lowercased) to its frequency count. Words are separated by whitespace and punctuation should be stripped. Example: word_freq('Hello, hello world!') => {'hello': 2, 'world': 1}",
-    "test_code": "result = word_freq('Hello, hello world!')\nassert result == {'hello': 2, 'world': 1}\nresult2 = word_freq('the cat sat on the mat')\nassert result2['the'] == 2\nassert result2['cat'] == 1\nprint('PASS')",
+    "description": "HE/130 — Custom tribonacci sequence",
+    "prompt": "Write a Python function `tri(n)` that returns the first n+1 elements of the modified tribonacci sequence as a list.\n\nThe sequence is defined as:\n- tri(0) = 1 (always included as the first element, which is tri(0))\n- tri(1) = 3\n- For even indices i >= 2: tri(i) = 1 + i/2\n- For odd indices i >= 3: tri(i) = tri(i-1) + tri(i-2) + tri(i+1)\n\nNote: for odd i, you need tri(i+1) which is even, so compute it as 1 + (i+1)/2.\n\nExamples:\n  tri(3) => [1, 3, 2.0, 8.0]\n  tri(0) => [1]\n  tri(1) => [1, 3]",
+    "test_code": "assert tri(3) == [1, 3, 2.0, 8.0]\nassert tri(4) == [1, 3, 2.0, 8.0, 3.0]\nassert tri(5) == [1, 3, 2.0, 8.0, 3.0, 15.0]\nassert tri(7) == [1, 3, 2.0, 8.0, 3.0, 15.0, 4.0, 24.0]\nassert tri(0) == [1]\nassert tri(1) == [1, 3]\nprint('PASS')",
     "language": "python"
   },
   {
     "id": "code07",
-    "description": "Class design — stack with min",
-    "prompt": "Write a Python class `MinStack` that supports push(val), pop(), top(), and get_min() all in O(1) time. get_min() returns the minimum element currently in the stack.",
-    "test_code": "s = MinStack()\ns.push(3)\ns.push(5)\nassert s.get_min() == 3\ns.push(2)\ns.push(1)\nassert s.get_min() == 1\ns.pop()\nassert s.get_min() == 2\ns.pop()\nassert s.get_min() == 3\nassert s.top() == 5\nprint('PASS')",
+    "description": "HE/141 — Filename validator",
+    "prompt": "Write a Python function `file_name_check(file_name)` that checks if a file name is valid. Return 'Yes' if valid, 'No' otherwise.\n\nA valid file name must satisfy ALL of:\n1. There should be no more than three digits (0-9) in the file name\n2. There must be exactly one dot '.'\n3. The substring before the dot must not be empty and must start with a letter (a-z or A-Z)\n4. The extension (after the dot) must be one of: 'txt', 'exe', 'dll'\n\nExamples:\n  file_name_check('example.txt') => 'Yes'\n  file_name_check('1example.dll') => 'No'\n  file_name_check('s1sdf3.asd') => 'No'\n  file_name_check('K.dll') => 'Yes'",
+    "test_code": "assert file_name_check('example.txt') == 'Yes'\nassert file_name_check('1example.dll') == 'No'\nassert file_name_check('s1sdf3.asd') == 'No'\nassert file_name_check('K.dll') == 'Yes'\nassert file_name_check('MY16FILE3.exe') == 'Yes'\nassert file_name_check('His12FILE94.exe') == 'No'\nassert file_name_check('_Y.txt') == 'No'\nassert file_name_check('.txt') == 'No'\nassert file_name_check('final..txt') == 'No'\nassert file_name_check('all.exe.txt') == 'No'\nprint('PASS')",
     "language": "python"
   },
   {
     "id": "code08",
-    "description": "File processing — CSV parser",
-    "prompt": "Write a Python function `parse_csv(text)` that takes a CSV string and returns a list of dictionaries using the first row as headers. Example: parse_csv('name,age\\nAlice,30\\nBob,25') => [{'name': 'Alice', 'age': '30'}, {'name': 'Bob', 'age': '25'}]",
-    "test_code": "result = parse_csv('name,age\\nAlice,30\\nBob,25')\nassert len(result) == 2\nassert result[0] == {'name': 'Alice', 'age': '30'}\nassert result[1] == {'name': 'Bob', 'age': '25'}\nresult2 = parse_csv('a,b,c\\n1,2,3')\nassert result2[0] == {'a': '1', 'b': '2', 'c': '3'}\nprint('PASS')",
+    "description": "HE/145 — Order by digit sum (negative first digit)",
+    "prompt": "Write a Python function `order_by_points(nums)` that sorts a list of integers by the sum of their digits. For negative numbers, the first digit (leftmost) should be negative. Use a stable sort (preserve original order for equal digit sums).\n\nFor example, -11 has digit sum = -1 + 1 = 0, and -12 has digit sum = -1 + 2 = 1.\n\nExamples:\n  order_by_points([1, 11, -1, -11, -12]) => [-1, -11, 1, -12, 11]\n  order_by_points([]) => []",
+    "test_code": "assert order_by_points([1, 11, -1, -11, -12]) == [-1, -11, 1, -12, 11]\nassert order_by_points([1234,423,463,145,2,423,423,53,6,37,3457,3,56,0,46]) == [0, 2, 3, 6, 53, 423, 423, 423, 1234, 145, 37, 46, 56, 463, 3457]\nassert order_by_points([]) == []\nassert order_by_points([1, -11, -32, 43, 54, -98, 2, -3]) == [-3, -32, -98, -11, 1, 2, 43, 54]\nassert order_by_points([1,2,3,4,5,6,7,8,9,10,11]) == [1, 10, 2, 11, 3, 4, 5, 6, 7, 8, 9]\nprint('PASS')",
     "language": "python"
   },
   {
     "id": "code09",
-    "description": "Refactor — simplify complex conditional",
-    "prompt": "Refactor this Python function to be cleaner and more Pythonic. Keep the same behavior:\n\ndef categorize(score):\n    if score >= 90 and score <= 100:\n        result = 'A'\n    elif score >= 80 and score < 90:\n        result = 'B'\n    elif score >= 70 and score < 80:\n        result = 'C'\n    elif score >= 60 and score < 70:\n        result = 'D'\n    else:\n        if score >= 0:\n            result = 'F'\n        else:\n            result = 'Invalid'\n    return result\n\nReturn the refactored function.",
-    "test_code": "assert categorize(95) == 'A'\nassert categorize(85) == 'B'\nassert categorize(75) == 'C'\nassert categorize(65) == 'D'\nassert categorize(55) == 'F'\nassert categorize(-1) == 'Invalid'\nassert categorize(100) == 'A'\nassert categorize(0) == 'F'\nprint('PASS')",
+    "description": "HE/114 — Minimum subarray sum",
+    "prompt": "Write a Python function `minSubArraySum(nums)` that returns the minimum possible sum of any non-empty contiguous subarray of the given list of integers.\n\nExamples:\n  minSubArraySum([2, 3, 4, 1, 2, 4]) => 1\n  minSubArraySum([-1, -2, -3]) => -6\n  minSubArraySum([-1, -2, -3, 2, -10]) => -14",
+    "test_code": "assert minSubArraySum([2, 3, 4, 1, 2, 4]) == 1\nassert minSubArraySum([-1, -2, -3]) == -6\nassert minSubArraySum([-1, -2, -3, 2, -10]) == -14\nassert minSubArraySum([-9999999999999999]) == -9999999999999999\nassert minSubArraySum([0, 10, 20, 1000000]) == 0\nassert minSubArraySum([-1, -2, -3, 10, -5]) == -6\nassert minSubArraySum([100, -1, -2, -3, 10, -5]) == -6\nassert minSubArraySum([10, 11, 13, 8, 3, 4]) == 3\nassert minSubArraySum([100, -33, 32, -1, 0, -2]) == -33\nassert minSubArraySum([-10]) == -10\nassert minSubArraySum([7]) == 7\nassert minSubArraySum([1, -1]) == -1\nprint('PASS')",
     "language": "python"
   },
   {
     "id": "code10",
-    "description": "Algorithm — binary search",
-    "prompt": "Write a Python function `binary_search(arr, target)` that returns the index of target in sorted array arr, or -1 if not found. Do not use any built-in search functions.",
-    "test_code": "assert binary_search([1, 3, 5, 7, 9], 5) == 2\nassert binary_search([1, 3, 5, 7, 9], 1) == 0\nassert binary_search([1, 3, 5, 7, 9], 9) == 4\nassert binary_search([1, 3, 5, 7, 9], 4) == -1\nassert binary_search([], 1) == -1\nprint('PASS')",
+    "description": "HE/147 — Max triples divisible by 3",
+    "prompt": "Write a Python function `get_max_triples(n)` that builds an array a of length n where a[i] = i * i - i + 1 (1-indexed, so a[1] = 1, a[2] = 3, a[3] = 7, ...). Return the number of triples (a[i], a[j], a[k]) where i < j < k and (a[i] + a[j] + a[k]) is divisible by 3.\n\nExamples:\n  get_max_triples(5) => 1\n  get_max_triples(6) => 4",
+    "test_code": "assert get_max_triples(5) == 1\nassert get_max_triples(6) == 4\nassert get_max_triples(10) == 36\nassert get_max_triples(100) == 53361\nprint('PASS')",
     "language": "python"
   }
 ]

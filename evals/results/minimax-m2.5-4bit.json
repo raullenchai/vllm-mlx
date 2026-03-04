@@ -8,14 +8,14 @@
     "memory_gb": 256,
     "os": "macOS-26.3-arm64-arm-64bit"
   },
-  "date": "2026-03-03",
+  "date": "2026-03-04",
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser minimax",
   "speed": {
-    "ttft_cold_s": 1.402,
-    "ttft_warm_s": 0.485,
-    "decode_short_tps": 44.9,
-    "decode_long_tps": 50.6
+    "ttft_cold_s": 1.3,
+    "ttft_warm_s": 0.134,
+    "decode_short_tps": 46.7,
+    "decode_long_tps": 50.5
   },
   "tool_calling": {
     "score": 0.87,
@@ -31,7 +31,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 3.0,
+        "elapsed_s": 3.03,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -59,7 +59,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.81,
+        "elapsed_s": 1.83,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -73,7 +73,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.6,
+        "elapsed_s": 1.59,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -87,7 +87,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 0.5,
-        "elapsed_s": 1.57,
+        "elapsed_s": 1.56,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -101,7 +101,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.37,
+        "elapsed_s": 1.39,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -115,7 +115,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.35,
+        "elapsed_s": 1.36,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -129,7 +129,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.73,
+        "elapsed_s": 1.74,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -139,13 +139,13 @@
         "level": 2,
         "description": "Function selection — create_reminder not calendar_create or send_message",
         "category": "function_selection",
-        "tool_detected": true,
-        "correct_name": true,
-        "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 2.62,
-        "fully_correct": true,
-        "steps_passed": 1,
+        "tool_detected": false,
+        "correct_name": false,
+        "valid_json_args": false,
+        "arg_score": 0.0,
+        "elapsed_s": 10.6,
+        "fully_correct": false,
+        "steps_passed": 0,
         "steps_total": 1
       },
       {
@@ -157,7 +157,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.91,
+        "elapsed_s": 1.93,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -171,7 +171,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 7.78,
+        "elapsed_s": 10.74,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -185,7 +185,7 @@
         "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.49,
+        "elapsed_s": 1.51,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -199,7 +199,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.95,
+        "elapsed_s": 1.97,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -217,7 +217,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 1.84
+        "elapsed_s": 2.02
       },
       {
         "id": "tc15",
@@ -232,7 +232,7 @@
         "expected_count": 3,
         "actual_count": 3,
         "fully_correct": true,
-        "elapsed_s": 2.74
+        "elapsed_s": 2.73
       },
       {
         "id": "tc16",
@@ -247,7 +247,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 2.59
+        "elapsed_s": 2.76
       },
       {
         "id": "tc17",
@@ -262,7 +262,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 1.65
+        "elapsed_s": 1.66
       },
       {
         "id": "tc18",
@@ -272,7 +272,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.04
+        "elapsed_s": 1.05
       },
       {
         "id": "tc19",
@@ -282,7 +282,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 2.34
+        "elapsed_s": 2.46
       },
       {
         "id": "tc20",
@@ -292,7 +292,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.07
+        "elapsed_s": 1.08
       },
       {
         "id": "tc21",
@@ -303,7 +303,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.57,
+        "elapsed_s": 1.58,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -331,7 +331,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.89,
+        "elapsed_s": 1.91,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -345,10 +345,10 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.13,
-        "fully_correct": false,
-        "steps_passed": 1,
-        "steps_total": 2
+        "elapsed_s": 1.99,
+        "fully_correct": true,
+        "steps_passed": 3,
+        "steps_total": 3
       },
       {
         "id": "tc25",
@@ -358,7 +358,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.57
+        "elapsed_s": 1.77
       },
       {
         "id": "tc26",
@@ -368,7 +368,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.78
+        "elapsed_s": 1.79
       },
       {
         "id": "tc27",
@@ -379,7 +379,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.96,
+        "elapsed_s": 2.03,
         "recovery_text": true,
         "fully_correct": true
       },
@@ -392,7 +392,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.38,
+        "elapsed_s": 1.4,
         "recovery_tool_called": false,
         "recovery_text": true,
         "fully_correct": true
@@ -420,7 +420,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.41,
+        "elapsed_s": 1.52,
         "fully_correct": false,
         "steps_passed": 1,
         "steps_total": 2
@@ -428,91 +428,100 @@
     ]
   },
   "coding": {
-    "score": 0.4,
-    "passed": 4,
+    "score": 0.1,
+    "passed": 1,
     "total": 10,
     "details": [
       {
         "id": "code01",
-        "description": "Simple function — fizzbuzz",
+        "description": "HE/93 — Encode message (swap case + vowel shift)",
         "runs_without_error": false,
         "correct_output": false,
-        "fully_correct": false
+        "fully_correct": false,
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpzd3bpjij.py\", line 3\n    We need to interpret \"swap case\" means convert uppercase to lowercase and vice versa. Then replace vowels (both upper"
       },
       {
         "id": "code02",
-        "description": "Simple function — fibonacci",
-        "runs_without_error": true,
-        "correct_output": true,
-        "fully_correct": true
+        "description": "HE/94 — Largest prime factor digit sum",
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false,
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmptjxjv4j6.py\", line 7\n    Edge cases: If there is no prime number? The problem doesn't specify. But we can assume there is at least one prime. "
       },
       {
         "id": "code03",
-        "description": "Data structure — flatten nested list",
+        "description": "HE/116 — Sort by binary 1-count",
         "runs_without_error": false,
         "correct_output": false,
-        "fully_correct": false
+        "fully_correct": false,
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp8m2yxrep.py\", line 9\n    We can use Python's built-in sorted with key lambda x: (bin(abs(x)).count('1'), x). But note that bin(0) is '0b0', co"
       },
       {
         "id": "code04",
-        "description": "Bug fix — off-by-one error",
-        "runs_without_error": true,
-        "correct_output": true,
-        "fully_correct": true
+        "description": "HE/119 — Parentheses match (two strings)",
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false,
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp_jrq2noa.py\", line 1\n    **Solution Explanation**\n    ^^\nSyntaxError: invalid syntax"
       },
       {
         "id": "code05",
-        "description": "Algorithm — two sum",
+        "description": "HE/124 — Valid date mm-dd-yyyy",
         "runs_without_error": false,
         "correct_output": false,
-        "fully_correct": false
+        "fully_correct": false,
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpr96m48f5.py\", line 26, in <module>\n    assert valid_date('03-11-2000') == True\n           ^^^^^^^^^^^^^^^"
       },
       {
         "id": "code06",
-        "description": "String processing — word count",
-        "runs_without_error": true,
-        "correct_output": true,
-        "fully_correct": true
+        "description": "HE/130 — Custom tribonacci sequence",
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false,
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpellp7x3b.py\", line 17\n    We need to interpret the definition correctly. Let's examine the examples:\n                                         "
       },
       {
         "id": "code07",
-        "description": "Class design — stack with min",
+        "description": "HE/141 — Filename validator",
         "runs_without_error": false,
         "correct_output": false,
-        "fully_correct": false
+        "fully_correct": false,
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp37nindlx.py\", line 2\n    \"\"\"\n    ^\nSyntaxError: unterminated triple-quoted string literal (detected at line 24)"
       },
       {
         "id": "code08",
-        "description": "File processing — CSV parser",
+        "description": "HE/145 — Order by digit sum (negative first digit)",
         "runs_without_error": false,
         "correct_output": false,
-        "fully_correct": false
+        "fully_correct": false,
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmphybw6f51.py\", line 3\n    We need to sort the list by this sum, stable sort (preserve original order for equal sums). Python's sort is stable, "
       },
       {
         "id": "code09",
-        "description": "Refactor — simplify complex conditional",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false
-      },
-      {
-        "id": "code10",
-        "description": "Algorithm — binary search",
+        "description": "HE/114 — Minimum subarray sum",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
+      },
+      {
+        "id": "code10",
+        "description": "HE/147 — Max triples divisible by 3",
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false,
+        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp2tl2hrku.py\", line 11\n    - If i ≡ 0 (mod 3): i = 3k. Then i-1 ≡ -1 ≡ 2 (mod 3). So i(i-1) ≡ 0*2 = 0 (mod 3). So a[i] ≡ 0 + 1 = 1 (mod 3).\n   "
       }
     ]
   },
   "reasoning": {
-    "score": 0.6,
-    "passed": 6,
+    "score": 0.8,
+    "passed": 8,
     "total": 10,
     "details": [
       {
         "id": "math01",
-        "expected": "18",
-        "got": "18",
+        "expected": "3/2",
+        "got": "3/2",
         "correct": true
       },
       {
@@ -523,51 +532,51 @@
       },
       {
         "id": "math03",
-        "expected": "70000",
-        "got": "150",
-        "correct": false
-      },
-      {
-        "id": "math04",
-        "expected": "540",
-        "got": "540",
+        "expected": "14/3",
+        "got": "14/3",
         "correct": true
       },
       {
-        "id": "math05",
-        "expected": "20",
-        "got": "3",
+        "id": "math04",
+        "expected": "2220",
+        "got": "1",
         "correct": false
       },
       {
+        "id": "math05",
+        "expected": "3",
+        "got": "3",
+        "correct": true
+      },
+      {
         "id": "math06",
-        "expected": "64",
-        "got": "64",
+        "expected": "9",
+        "got": "9",
         "correct": true
       },
       {
         "id": "math07",
-        "expected": "260",
-        "got": "260",
+        "expected": "11/36",
+        "got": "11/36",
         "correct": true
       },
       {
         "id": "math08",
-        "expected": "160",
-        "got": "20",
-        "correct": false
+        "expected": "121",
+        "got": "121",
+        "correct": true
       },
       {
         "id": "math09",
-        "expected": "4",
-        "got": "3",
-        "correct": false
+        "expected": "284",
+        "got": "284",
+        "correct": true
       },
       {
         "id": "math10",
-        "expected": "460",
-        "got": "460",
-        "correct": true
+        "expected": "144",
+        "got": "2",
+        "correct": false
       }
     ]
   },
@@ -578,65 +587,65 @@
     "details": [
       {
         "id": "gen01",
-        "description": "Instruction following — list format",
-        "correct": true,
-        "reason": "ok"
+        "description": "MMLU-Pro CS — Boolean operator completeness",
+        "correct": false,
+        "reason": "expected D, got H"
       },
       {
         "id": "gen02",
-        "description": "Instruction following — constrained output",
+        "description": "MMLU-Pro CS — Sorting algorithm complexity",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen03",
-        "description": "Factual knowledge — science",
+        "description": "MMLU-Pro CS — Two's complement overflow",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen04",
-        "description": "Factual knowledge — geography",
+        "description": "MMLU-Pro Physics — Ideal gas law",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen05",
-        "description": "Reasoning — logical deduction",
+        "description": "MMLU-Pro Physics — Free fall in 2nd second",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen06",
-        "description": "Summarization",
+        "description": "MMLU-Pro Math — Function composition",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen07",
-        "description": "Creative writing — constrained",
-        "correct": false,
-        "reason": "too long (1560 > 200)"
+        "description": "MMLU-Pro Chemistry — Conjugate acid",
+        "correct": true,
+        "reason": "ok"
       },
       {
         "id": "gen08",
-        "description": "Format following — JSON output",
+        "description": "MMLU-Pro Chemistry — Zero-order reaction rate",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen09",
-        "description": "Multi-step instruction",
+        "description": "MMLU-Pro History — Classical empire decline analogy",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen10",
-        "description": "Refusal — safety boundary",
+        "description": "MMLU-Pro Engineering — Lamp illumination",
         "correct": true,
         "reason": "ok"
       }
     ]
   },
-  "total_eval_time_s": 385.3
+  "total_eval_time_s": 603.0
 }

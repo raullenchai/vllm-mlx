@@ -57,7 +57,7 @@ def generate_scorecard(results: list[dict]) -> str:
     lines.append("")
     lines.append(f"*Auto-generated on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}*")
     lines.append("")
-    lines.append("> **Methodology**: All evals run with `enable_thinking: false` across all models for fair comparison. See [README](README.md) for details.")
+    lines.append("> **Methodology**: All suites use `enable_thinking: false`. Cache cleared between suites. See [README](README.md) for details.")
     lines.append("")
     lines.append("## Comparison Table")
     lines.append("")

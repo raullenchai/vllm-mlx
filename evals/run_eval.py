@@ -10,8 +10,8 @@ Suites:
   A. Speed     — TTFT, decode tok/s, memory
   B. Tools     — 30 tool-calling scenarios (9 categories)
   C. Coding    — 10 code generation tasks (auto-graded)
-  D. Reasoning — 10 math problems (GSM8K subset)
-  E. General   — 10 instruction following / factual tasks
+  D. Reasoning — 10 math problems (MATH-500 subset)
+  E. General   — 10 MMLU-Pro multiple choice questions
 
 Usage:
     # Start server first:
@@ -39,6 +39,7 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timezone
+from fractions import Fraction
 from pathlib import Path
 
 try:
@@ -111,7 +112,8 @@ def detect_hardware() -> dict:
 
 def chat_request(host: str, port: int, messages: list, *, tools=None,
                  max_tokens: int = 512, temperature: float = 0.0,
-                 stream: bool = False, timeout: float = 120.0) -> dict:
+                 stream: bool = False, timeout: float = 120.0,
+                 enable_thinking: bool = False) -> dict:
     """Send a chat completion request (non-streaming by default)."""
     body = {
         "model": "default",
@@ -119,7 +121,7 @@ def chat_request(host: str, port: int, messages: list, *, tools=None,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "stream": stream,
-        "enable_thinking": False,
+        "enable_thinking": enable_thinking,
     }
     if tools:
         body["tools"] = tools
@@ -135,7 +137,8 @@ def chat_request(host: str, port: int, messages: list, *, tools=None,
 
 def stream_chat(host: str, port: int, messages: list, *, tools=None,
                 max_tokens: int = 512, temperature: float = 0.0,
-                timeout: float = 120.0):
+                timeout: float = 120.0,
+                enable_thinking: bool = False):
     """Stream a chat completion. Returns (content, tool_calls, ttft, elapsed)."""
     body = {
         "model": "default",
@@ -143,7 +146,7 @@ def stream_chat(host: str, port: int, messages: list, *, tools=None,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "stream": True,
-        "enable_thinking": False,
+        "enable_thinking": enable_thinking,
     }
     if tools:
         body["tools"] = tools
@@ -394,6 +397,8 @@ def _check_parallel_calls(tool_calls, scenario) -> dict:
 
 def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
     """Run tool-calling scenarios with multi-turn, parallel, irrelevance, and error recovery support."""
+    # TODO: GPT-OSS-20B scores 17% tools and 20% reasoning despite 60% coding / 90% general.
+    #       Likely a minimax parser compatibility issue — try hermes parser or inspect raw responses.
     print("\n--- Suite B: Tool Calling ---")
 
     prompts_file = PROMPTS_DIR / "tool_calling.json"
@@ -676,6 +681,8 @@ def extract_python_code(text: str) -> str:
 
 def run_coding_suite(host: str, port: int, verbose: bool = False) -> dict:
     """Run 10 coding tasks, auto-grade by executing test code."""
+    # TODO: MiniMax-M2.5 scores 10% coding despite 87% tools / 80% reasoning / 90% general.
+    #       Likely a code extraction or formatting issue — investigate response format.
     print("\n--- Suite C: Coding ---")
 
     prompts_file = PROMPTS_DIR / "coding.json"
@@ -693,7 +700,8 @@ def run_coding_suite(host: str, port: int, verbose: bool = False) -> dict:
             resp = chat_request(
                 host, port,
                 [{"role": "user", "content": task["prompt"]}],
-                max_tokens=800, temperature=0.0,
+                max_tokens=1200, temperature=0.0,
+                enable_thinking=False,
             )
             output = _strip_thinking(resp["choices"][0]["message"]["content"])
             code = extract_python_code(output)
@@ -756,40 +764,82 @@ def run_coding_suite(host: str, port: int, verbose: bool = False) -> dict:
 
 
 # =============================================================================
-# Suite D: Reasoning (GSM8K)
+# Suite D: Reasoning (MATH-500)
 # =============================================================================
 
 
 def extract_answer(text: str):
-    """Extract numerical answer from model response (reuse gsm8k_eval logic)."""
+    """Extract numerical answer from model response. Supports integers, fractions, and LaTeX."""
+    # Priority 1: #### marker (with optional fraction or number)
+    m = re.search(r"####\s*\\frac\{(\d+)\}\{(\d+)\}", text)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}"
+    m = re.search(r"####\s*\$?(\d+(?:/\d+)?(?:,\d+)*(?:\.\d+)?)", text)
+    if m:
+        return m.group(1).replace(",", "")
+
+    # Priority 2: "answer is ..." patterns
+    m = re.search(r"answer is[:\s]+\\frac\{(\d+)\}\{(\d+)\}", text, re.IGNORECASE)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}"
+    m = re.search(r"answer is[:\s]+\$?(\d+(?:/\d+)?(?:,\d+)*(?:\.\d+)?)", text, re.IGNORECASE)
+    if m:
+        return m.group(1).replace(",", "")
+
+    # Priority 3: boxed LaTeX \boxed{\frac{a}{b}} or \boxed{N}
+    m = re.search(r"\\boxed\{\\frac\{(\d+)\}\{(\d+)\}\}", text)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}"
+    m = re.search(r"\\boxed\{(\d+(?:/\d+)?)\}", text)
+    if m:
+        return m.group(1)
+
+    # Priority 4: LaTeX \frac{a}{b} (last occurrence)
+    fracs = re.findall(r"\\frac\{(\d+)\}\{(\d+)\}", text)
+    if fracs:
+        a, b = fracs[-1]
+        return f"{a}/{b}"
+
+    # Priority 5: plain fraction a/b (last occurrence)
+    frac_matches = re.findall(r"(\d+/\d+)", text)
+    if frac_matches:
+        return frac_matches[-1]
+
+    # Priority 6: plain number at end of line
     patterns = [
-        r"####\s*\$?(\d+(?:,\d+)*(?:\.\d+)?)",
-        r"answer is[:\s]+\$?(\d+(?:,\d+)*(?:\.\d+)?)",
         r"=\s*\$?(\d+(?:,\d+)*(?:\.\d+)?)\s*$",
-        r"(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:dollars?|eggs?|cups?|bolts?|sheep|minutes?|hours?|meters?)?\s*$",
+        r"(\d+(?:,\d+)*(?:\.\d+)?)\s*$",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
         if match:
             return match.group(1).replace(",", "")
+
+    # Fallback: last number in text
     numbers = re.findall(r"\d+(?:,\d+)*(?:\.\d+)?", text)
     if numbers:
         return numbers[-1].replace(",", "")
     return None
 
 
-def normalize_answer(answer: str) -> str:
-    answer = answer.replace(",", "").replace("$", "")
+def normalize_answer(answer: str) -> Fraction | None:
+    """Normalize answer to a Fraction for exact comparison."""
+    if answer is None:
+        return None
+    answer = answer.replace(",", "").replace("$", "").strip()
     try:
+        if "/" in answer:
+            parts = answer.split("/")
+            return Fraction(int(parts[0]), int(parts[1]))
         num = float(answer)
-        return str(int(num)) if num == int(num) else str(num)
-    except ValueError:
-        return answer
+        return Fraction(num).limit_denominator(10000)
+    except (ValueError, ZeroDivisionError):
+        return None
 
 
 def run_reasoning_suite(host: str, port: int, verbose: bool = False) -> dict:
-    """Run 10 GSM8K-subset math problems."""
-    print("\n--- Suite D: Reasoning (GSM8K) ---")
+    """Run 10 MATH-500 problems."""
+    print("\n--- Suite D: Reasoning (MATH-500) ---")
 
     prompts_file = PROMPTS_DIR / "reasoning.json"
     problems = json.loads(prompts_file.read_text())
@@ -803,29 +853,31 @@ def run_reasoning_suite(host: str, port: int, verbose: bool = False) -> dict:
 
         prompt = (
             "Solve this math problem step by step. "
-            'At the end, provide the final numerical answer after "####".\n\n'
-            f"Question: {prob['question']}\n\nSolution:"
+            "At the end, write your final answer after \"####\". "
+            "If the answer is a fraction, write it as a/b.\n\n"
+            f"Problem: {prob['question']}\n\nSolution:"
         )
 
         try:
             resp = chat_request(
                 host, port,
                 [
-                    {"role": "system", "content": "You are a math tutor. Solve problems step by step, then give the final numerical answer after ####."},
+                    {"role": "system", "content": "You are a math tutor. Solve problems step by step, then give the final answer after ####. Use fractions when appropriate."},
                     {"role": "user", "content": prompt},
                 ],
                 max_tokens=1024, temperature=0.0,
+                enable_thinking=False,
             )
             output = _strip_thinking(resp["choices"][0]["message"]["content"])
             extracted = extract_answer(output)
             expected = normalize_answer(prob["answer"])
-            got = normalize_answer(extracted) if extracted else None
-            correct = got == expected
+            got = normalize_answer(extracted)
+            correct = got is not None and expected is not None and got == expected
 
             result = {
                 "id": pid,
-                "expected": expected,
-                "got": got,
+                "expected": str(expected),
+                "got": str(got),
                 "correct": correct,
             }
 
@@ -866,7 +918,7 @@ def _strip_thinking(text: str) -> str:
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
     # If the output doesn't start with thinking patterns, return as-is
-    if not re.match(r'^(?:Thinking Process|##?\s*Thinking|Let me think|\d+\.\s+\*\*Analy)', text, re.IGNORECASE):
+    if not re.match(r'^(?:Thinking Process|##?\s*Thinking|Let me think|The user\b|\d+\.\s+\*\*Analy)', text, re.IGNORECASE):
         return text
 
     # Look for explicit answer delimiters (last match wins)
@@ -908,6 +960,57 @@ def _strip_thinking(text: str) -> str:
 
     # Last resort: return original
     return text.strip()
+
+
+def _extract_answer_letter(text: str) -> str | None:
+    """Extract MCQ answer letter (A-J) from model response.
+
+    Strategy: search the full text for unambiguous patterns first (explicit
+    "answer is X", standalone letter on its own line).  For ambiguous patterns
+    (parenthesised letters, bare letters) only search the tail of the response
+    to avoid matching option re-listings that verbose models emit.
+    """
+    # Priority 1: explicit "answer is X" / "answer: X" (last match wins)
+    matches = list(re.finditer(
+        r'answer\s+is\s*[:\s]*\(?([A-Ja-j])\)?', text, re.IGNORECASE,
+    ))
+    if matches:
+        return matches[-1].group(1).upper()
+
+    # Priority 2: standalone letter on its own line (last match)
+    matches = list(re.finditer(r'^\s*([A-Ja-j])\s*$', text, re.MULTILINE))
+    if matches:
+        return matches[-1].group(1).upper()
+
+    # For remaining (ambiguous) patterns, only search the last 300 chars
+    # to avoid picking up letters from option re-listings.
+    tail = text[-500:] if len(text) > 500 else text
+
+    # Priority 3: letter followed by period/closing-paren at start of line
+    matches = list(re.finditer(
+        r'^\s*([A-Ja-j])[\.\)]', tail, re.MULTILINE,
+    ))
+    if matches:
+        return matches[-1].group(1).upper()
+
+    # Priority 4: parenthesised letter "(X)" in the tail
+    matches = list(re.finditer(r'\(([A-Ja-j])\)', tail))
+    if matches:
+        return matches[-1].group(1).upper()
+
+    # Priority 5: last letter A-J in tail preceded by word boundary,
+    # excluding the pronoun "I"/"i" when followed by common verb patterns.
+    candidates = list(re.finditer(r'\b([A-Ja-j])\b', tail))
+    for c in reversed(candidates):
+        letter = c.group(1)
+        if letter.upper() == "I":
+            after = tail[c.end():c.end() + 15].lstrip()
+            if re.match(r"(?:think|believe|choose|would|will|am|'m|'d|'ll)\b",
+                        after, re.IGNORECASE):
+                continue
+        return letter.upper()
+
+    return None
 
 
 def check_general_response(response: str, checks: dict) -> tuple[bool, str]:
@@ -980,11 +1083,24 @@ def check_general_response(response: str, checks: dict) -> tuple[bool, str]:
         if not (lo <= len(lines) <= hi):
             return False, f"line count {len(lines)} not in [{lo}, {hi}]"
 
+    if "contains_none" in checks:
+        for word in checks["contains_none"]:
+            if word.lower() in text.lower():
+                return False, f"should not contain '{word}'"
+
+    if "answer_letter" in checks:
+        expected_letter = checks["answer_letter"]
+        got_letter = _extract_answer_letter(text)
+        if got_letter != expected_letter:
+            return False, f"expected {expected_letter}, got {got_letter or 'none'}"
+
     return True, "ok"
 
 
 def run_general_suite(host: str, port: int, verbose: bool = False) -> dict:
     """Run 10 general knowledge / instruction following tasks."""
+    # TODO: GLM-4.7-Flash scores 50% general despite 100% coding / 90% reasoning.
+    #       May struggle with MMLU-Pro 10-option multiple choice format — check answer extraction.
     print("\n--- Suite E: General Knowledge ---")
 
     prompts_file = PROMPTS_DIR / "general.json"
@@ -993,11 +1109,10 @@ def run_general_suite(host: str, port: int, verbose: bool = False) -> dict:
     details = []
     passed = 0
 
-    # System prompt that suppresses verbose thinking (Qwen3.5 outputs
-    # "Thinking Process:..." as plain content unless explicitly told not to)
+    # System prompt for MMLU-Pro multiple choice questions
     no_think_sys = {
         "role": "system",
-        "content": "Answer directly and concisely. Do not show your thinking process or reasoning steps. Just provide the final answer.",
+        "content": "You are taking a multiple choice test. Read the question and options carefully, then respond with just the letter of your answer. Do not show your thinking process.",
     }
 
     for task in tasks:
@@ -1008,7 +1123,8 @@ def run_general_suite(host: str, port: int, verbose: bool = False) -> dict:
             resp = chat_request(
                 host, port,
                 [no_think_sys, {"role": "user", "content": task["prompt"]}],
-                max_tokens=512, temperature=0.0,
+                max_tokens=2048, temperature=0.0,
+                enable_thinking=False,
             )
             output = _strip_thinking(resp["choices"][0]["message"]["content"])
             ok, reason = check_general_response(output, task.get("checks", {}))
@@ -1107,20 +1223,37 @@ Examples:
 
     start_time = time.perf_counter()
 
+    def _bust_cache(host, port):
+        """Clear server prompt cache between suites."""
+        try:
+            url = f"http://{host}:{port}/v1/cache/clear"
+            if _HTTPX:
+                httpx.post(url, timeout=10)
+            else:
+                import urllib.request
+                req = urllib.request.Request(url, method="POST")
+                urllib.request.urlopen(req, timeout=10)
+        except Exception:
+            pass
+
     # Run selected suites
     if "speed" in args.suite:
         result["speed"] = run_speed_suite(args.host, args.port, verbose=args.verbose)
 
     if "tool_calling" in args.suite:
+        _bust_cache(args.host, args.port)
         result["tool_calling"] = run_tool_calling_suite(args.host, args.port, verbose=args.verbose)
 
     if "coding" in args.suite:
+        _bust_cache(args.host, args.port)
         result["coding"] = run_coding_suite(args.host, args.port, verbose=args.verbose)
 
     if "reasoning" in args.suite:
+        _bust_cache(args.host, args.port)
         result["reasoning"] = run_reasoning_suite(args.host, args.port, verbose=args.verbose)
 
     if "general" in args.suite:
+        _bust_cache(args.host, args.port)
         result["general"] = run_general_suite(args.host, args.port, verbose=args.verbose)
 
     total_time = time.perf_counter() - start_time

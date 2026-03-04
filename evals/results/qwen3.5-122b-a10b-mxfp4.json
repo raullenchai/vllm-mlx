@@ -8,14 +8,14 @@
     "memory_gb": 256,
     "os": "macOS-26.3-arm64-arm-64bit"
   },
-  "date": "2026-03-03",
+  "date": "2026-03-04",
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
   "speed": {
-    "ttft_cold_s": 0.972,
-    "ttft_warm_s": 0.017,
-    "decode_short_tps": 28.3,
-    "decode_long_tps": 57.7
+    "ttft_cold_s": 0.687,
+    "ttft_warm_s": 0.028,
+    "decode_short_tps": 26.7,
+    "decode_long_tps": 56.9
   },
   "tool_calling": {
     "score": 0.9,
@@ -25,13 +25,13 @@
       {
         "id": "tc01",
         "level": 1,
-        "description": "Single tool, simple args \u2014 web search",
+        "description": "Single tool, simple args — web search",
         "category": "single_tool",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.82,
+        "elapsed_s": 2.41,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -39,13 +39,13 @@
       {
         "id": "tc02",
         "level": 1,
-        "description": "Single tool, simple args \u2014 translate",
+        "description": "Single tool, simple args — translate",
         "category": "single_tool",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.43,
+        "elapsed_s": 0.88,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -53,13 +53,13 @@
       {
         "id": "tc03",
         "level": 1,
-        "description": "Single tool, simple args \u2014 image generation",
+        "description": "Single tool, simple args — image generation",
         "category": "single_tool",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.52,
+        "elapsed_s": 0.81,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -67,13 +67,13 @@
       {
         "id": "tc04",
         "level": 1,
-        "description": "Single tool, explicit code \u2014 code_run",
+        "description": "Single tool, explicit code — code_run",
         "category": "single_tool",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.99,
+        "elapsed_s": 1.09,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -81,13 +81,13 @@
       {
         "id": "tc05",
         "level": 2,
-        "description": "Function selection \u2014 memory_store not write or send_message",
+        "description": "Function selection — memory_store not write or send_message",
         "category": "function_selection",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.56,
+        "elapsed_s": 1.08,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -95,13 +95,13 @@
       {
         "id": "tc06",
         "level": 2,
-        "description": "Function selection \u2014 browse not web_search",
+        "description": "Function selection — browse not web_search",
         "category": "function_selection",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.27,
+        "elapsed_s": 0.73,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -109,13 +109,13 @@
       {
         "id": "tc07",
         "level": 2,
-        "description": "Function selection \u2014 exec not read for listing files",
+        "description": "Function selection — exec not read for listing files",
         "category": "function_selection",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.63,
+        "elapsed_s": 0.71,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -123,13 +123,13 @@
       {
         "id": "tc08",
         "level": 2,
-        "description": "Function selection \u2014 code_run not exec for Python",
+        "description": "Function selection — code_run not exec for Python",
         "category": "function_selection",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.72,
+        "elapsed_s": 1.11,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -137,13 +137,13 @@
       {
         "id": "tc09",
         "level": 2,
-        "description": "Function selection \u2014 create_reminder not calendar_create or send_message",
+        "description": "Function selection — create_reminder not calendar_create or send_message",
         "category": "function_selection",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.82,
+        "elapsed_s": 0.97,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -151,13 +151,13 @@
       {
         "id": "tc10",
         "level": 3,
-        "description": "Complex args \u2014 write file with multi-line code content",
+        "description": "Complex args — write file with multi-line code content",
         "category": "complex_args",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.19,
+        "elapsed_s": 1.02,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -165,13 +165,13 @@
       {
         "id": "tc11",
         "level": 3,
-        "description": "Complex args \u2014 calendar with natural date/time",
+        "description": "Complex args — calendar with natural date/time",
         "category": "complex_args",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 4.44,
+        "elapsed_s": 1.08,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -179,13 +179,13 @@
       {
         "id": "tc12",
         "level": 3,
-        "description": "Complex args \u2014 exec with piped command",
+        "description": "Complex args — exec with piped command",
         "category": "complex_args",
         "tool_detected": true,
         "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.17,
+        "elapsed_s": 0.67,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -193,13 +193,13 @@
       {
         "id": "tc13",
         "level": 3,
-        "description": "Complex args \u2014 code_run with multi-line Python and imports",
+        "description": "Complex args — code_run with multi-line Python and imports",
         "category": "complex_args",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.97,
+        "elapsed_s": 1.42,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -207,7 +207,7 @@
       {
         "id": "tc14",
         "level": 3,
-        "description": "Parallel \u2014 two web searches",
+        "description": "Parallel — two web searches",
         "category": "parallel",
         "tool_detected": true,
         "correct_name": true,
@@ -217,12 +217,12 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 1.82
+        "elapsed_s": 1.21
       },
       {
         "id": "tc15",
         "level": 3,
-        "description": "Parallel \u2014 three translations",
+        "description": "Parallel — three translations",
         "category": "parallel",
         "tool_detected": true,
         "correct_name": true,
@@ -232,12 +232,12 @@
         "expected_count": 3,
         "actual_count": 3,
         "fully_correct": true,
-        "elapsed_s": 2.74
+        "elapsed_s": 2.17
       },
       {
         "id": "tc16",
         "level": 3,
-        "description": "Parallel \u2014 web_search + image_gen (different tools)",
+        "description": "Parallel — web_search + image_gen (different tools)",
         "category": "parallel",
         "tool_detected": true,
         "correct_name": true,
@@ -247,12 +247,12 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 2.47
+        "elapsed_s": 1.27
       },
       {
         "id": "tc17",
         "level": 3,
-        "description": "Parallel \u2014 two file reads",
+        "description": "Parallel — two file reads",
         "category": "parallel",
         "tool_detected": true,
         "correct_name": true,
@@ -262,48 +262,48 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 1.83
+        "elapsed_s": 1.14
       },
       {
         "id": "tc18",
         "level": 2,
-        "description": "Irrelevance \u2014 factual question, no tool needed",
+        "description": "Irrelevance — factual question, no tool needed",
         "category": "irrelevance",
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.11
+        "elapsed_s": 0.36
       },
       {
         "id": "tc19",
         "level": 2,
-        "description": "Irrelevance \u2014 knowledge question, no tool needed",
+        "description": "Irrelevance — knowledge question, no tool needed",
         "category": "irrelevance",
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 2.15
+        "elapsed_s": 1.51
       },
       {
         "id": "tc20",
         "level": 2,
-        "description": "Irrelevance \u2014 conversation closer, no tool needed",
+        "description": "Irrelevance — conversation closer, no tool needed",
         "category": "irrelevance",
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.18
+        "elapsed_s": 0.42
       },
       {
         "id": "tc21",
         "level": 4,
-        "description": "Sequential \u2014 web_search then browse",
+        "description": "Sequential — web_search then browse",
         "category": "sequential",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.3,
+        "elapsed_s": 0.8,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -311,13 +311,13 @@
       {
         "id": "tc22",
         "level": 4,
-        "description": "Sequential \u2014 read then exec",
+        "description": "Sequential — read then exec",
         "category": "sequential",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.52,
+        "elapsed_s": 0.71,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -325,13 +325,13 @@
       {
         "id": "tc23",
         "level": 5,
-        "description": "Sequential 3-step \u2014 exec + memory_store + send_message",
+        "description": "Sequential 3-step — exec + memory_store + send_message",
         "category": "sequential",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.02,
+        "elapsed_s": 0.73,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -339,13 +339,13 @@
       {
         "id": "tc24",
         "level": 5,
-        "description": "Sequential 3-step \u2014 web_search + code_run + write",
+        "description": "Sequential 3-step — web_search + code_run + write",
         "category": "sequential",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.76,
+        "elapsed_s": 0.82,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -353,46 +353,46 @@
       {
         "id": "tc25",
         "level": 3,
-        "description": "Missing params \u2014 send_message with no recipient or text",
+        "description": "Missing params — send_message with no recipient or text",
         "category": "missing_params",
-        "fully_correct": true,
-        "no_tool_called": true,
+        "fully_correct": false,
+        "no_tool_called": false,
         "has_content": true,
-        "elapsed_s": 1.41
+        "elapsed_s": 0.96
       },
       {
         "id": "tc26",
         "level": 3,
-        "description": "Missing params \u2014 write with no path or content",
+        "description": "Missing params — write with no path or content",
         "category": "missing_params",
-        "fully_correct": true,
-        "no_tool_called": true,
+        "fully_correct": false,
+        "no_tool_called": false,
         "has_content": true,
-        "elapsed_s": 1.41
+        "elapsed_s": 0.92
       },
       {
         "id": "tc27",
         "level": 4,
-        "description": "Error recovery \u2014 permission denied, model should explain or retry",
+        "description": "Error recovery — permission denied, model should explain or retry",
         "category": "error_recovery",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.05,
+        "elapsed_s": 0.76,
         "recovery_text": true,
         "fully_correct": true
       },
       {
         "id": "tc28",
         "level": 4,
-        "description": "Error recovery \u2014 404 not found, model should try alternative",
+        "description": "Error recovery — 404 not found, model should try alternative",
         "category": "error_recovery",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.3,
+        "elapsed_s": 0.78,
         "recovery_tool_called": false,
         "recovery_text": true,
         "fully_correct": true
@@ -400,13 +400,13 @@
       {
         "id": "tc29",
         "level": 4,
-        "description": "Nested dependent \u2014 read URL from file then browse it",
+        "description": "Nested dependent — read URL from file then browse it",
         "category": "nested_dependent",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.51,
+        "elapsed_s": 0.69,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -414,13 +414,13 @@
       {
         "id": "tc30",
         "level": 4,
-        "description": "Nested dependent \u2014 exec output becomes memory_store value",
+        "description": "Nested dependent — exec output becomes memory_store value",
         "category": "nested_dependent",
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.53,
+        "elapsed_s": 0.72,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -434,70 +434,71 @@
     "details": [
       {
         "id": "code01",
-        "description": "Simple function \u2014 fizzbuzz",
+        "description": "HE/93 — Encode message (swap case + vowel shift)",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code02",
-        "description": "Simple function \u2014 fibonacci",
+        "description": "HE/94 — Largest prime factor digit sum",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code03",
-        "description": "Data structure \u2014 flatten nested list",
+        "description": "HE/116 — Sort by binary 1-count",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code04",
-        "description": "Bug fix \u2014 off-by-one error",
+        "description": "HE/119 — Parentheses match (two strings)",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code05",
-        "description": "Algorithm \u2014 two sum",
+        "description": "HE/124 — Valid date mm-dd-yyyy",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code06",
-        "description": "String processing \u2014 word count",
+        "description": "HE/130 — Custom tribonacci sequence",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code07",
-        "description": "Class design \u2014 stack with min",
+        "description": "HE/141 — Filename validator",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code08",
-        "description": "File processing \u2014 CSV parser",
+        "description": "HE/145 — Order by digit sum (negative first digit)",
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false,
+        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpjv5949wa.py\", line 35, in <module>\n    assert order_by_points([1, 11, -1, -11, -12]) == [-1, -11, 1, -12,"
+      },
+      {
+        "id": "code09",
+        "description": "HE/114 — Minimum subarray sum",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
-        "id": "code09",
-        "description": "Refactor \u2014 simplify complex conditional",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false
-      },
-      {
         "id": "code10",
-        "description": "Algorithm \u2014 binary search",
+        "description": "HE/147 — Max triples divisible by 3",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
@@ -505,14 +506,14 @@
     ]
   },
   "reasoning": {
-    "score": 0.9,
-    "passed": 9,
+    "score": 0.8,
+    "passed": 8,
     "total": 10,
     "details": [
       {
         "id": "math01",
-        "expected": "18",
-        "got": "18",
+        "expected": "3/2",
+        "got": "3/2",
         "correct": true
       },
       {
@@ -523,120 +524,120 @@
       },
       {
         "id": "math03",
-        "expected": "70000",
-        "got": "70000",
+        "expected": "14/3",
+        "got": "14/3",
         "correct": true
       },
       {
         "id": "math04",
-        "expected": "540",
-        "got": "540",
-        "correct": true
+        "expected": "2220",
+        "got": "2",
+        "correct": false
       },
       {
         "id": "math05",
-        "expected": "20",
-        "got": "20",
-        "correct": true
+        "expected": "3",
+        "got": "1",
+        "correct": false
       },
       {
         "id": "math06",
-        "expected": "64",
-        "got": "64",
+        "expected": "9",
+        "got": "9",
         "correct": true
       },
       {
         "id": "math07",
-        "expected": "260",
-        "got": "260",
+        "expected": "11/36",
+        "got": "11/36",
         "correct": true
       },
       {
         "id": "math08",
-        "expected": "160",
-        "got": "160",
+        "expected": "121",
+        "got": "121",
         "correct": true
       },
       {
         "id": "math09",
-        "expected": "4",
-        "got": "4.5625",
-        "correct": false
+        "expected": "284",
+        "got": "284",
+        "correct": true
       },
       {
         "id": "math10",
-        "expected": "460",
-        "got": "460",
+        "expected": "144",
+        "got": "144",
         "correct": true
       }
     ]
   },
   "general": {
-    "score": 0.8,
-    "passed": 8,
+    "score": 0.9,
+    "passed": 9,
     "total": 10,
     "details": [
       {
         "id": "gen01",
-        "description": "Instruction following \u2014 list format",
+        "description": "MMLU-Pro CS — Boolean operator completeness",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen02",
-        "description": "Instruction following \u2014 constrained output",
-        "correct": false,
-        "reason": "sentence count 5 != 3"
+        "description": "MMLU-Pro CS — Sorting algorithm complexity",
+        "correct": true,
+        "reason": "ok"
       },
       {
         "id": "gen03",
-        "description": "Factual knowledge \u2014 science",
+        "description": "MMLU-Pro CS — Two's complement overflow",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen04",
-        "description": "Factual knowledge \u2014 geography",
+        "description": "MMLU-Pro Physics — Ideal gas law",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen05",
-        "description": "Reasoning \u2014 logical deduction",
+        "description": "MMLU-Pro Physics — Free fall in 2nd second",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen06",
-        "description": "Summarization",
+        "description": "MMLU-Pro Math — Function composition",
+        "correct": false,
+        "reason": "expected E, got C"
+      },
+      {
+        "id": "gen07",
+        "description": "MMLU-Pro Chemistry — Conjugate acid",
         "correct": true,
         "reason": "ok"
       },
       {
-        "id": "gen07",
-        "description": "Creative writing \u2014 constrained",
-        "correct": false,
-        "reason": "too long (1676 > 200)"
-      },
-      {
         "id": "gen08",
-        "description": "Format following \u2014 JSON output",
-        "correct": false,
-        "reason": "no JSON object found"
+        "description": "MMLU-Pro Chemistry — Zero-order reaction rate",
+        "correct": true,
+        "reason": "ok"
       },
       {
         "id": "gen09",
-        "description": "Multi-step instruction",
+        "description": "MMLU-Pro History — Classical empire decline analogy",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen10",
-        "description": "Refusal \u2014 safety boundary",
+        "description": "MMLU-Pro Engineering — Lamp illumination",
         "correct": true,
         "reason": "ok"
       }
     ]
   },
-  "total_eval_time_s": 233.6
+  "total_eval_time_s": 261.9
 }

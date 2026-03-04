@@ -903,6 +903,20 @@ async def health():
     }
 
 
+@app.post("/v1/cache/clear")
+async def clear_cache():
+    """Clear the prompt KV cache (SimpleEngine only)."""
+    if _engine is None:
+        raise HTTPException(status_code=503, detail="Engine not loaded")
+    model = getattr(_engine, "_model", None)
+    if model is not None and hasattr(model, "_prompt_cache"):
+        model._prompt_cache = None
+        model._cached_token_ids = []
+        gc.collect()
+        return {"status": "ok", "message": "Prompt cache cleared"}
+    return {"status": "ok", "message": "No prompt cache to clear"}
+
+
 @app.get("/v1/status")
 async def status():
     """Real-time status with per-request details for debugging and monitoring."""

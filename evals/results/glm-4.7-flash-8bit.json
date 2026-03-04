@@ -8,14 +8,14 @@
     "memory_gb": 256,
     "os": "macOS-26.3-arm64-arm-64bit"
   },
-  "date": "2026-03-03",
+  "date": "2026-03-04",
   "server": "http://localhost:8000",
-  "server_flags": null,
+  "server_flags": "--enable-auto-tool-choice --tool-call-parser glm47",
   "speed": {
-    "ttft_cold_s": 1.11,
-    "ttft_warm_s": 0.407,
-    "decode_short_tps": 31.3,
-    "decode_long_tps": 58.0
+    "ttft_cold_s": 0.407,
+    "ttft_warm_s": 0.106,
+    "decode_short_tps": 33.6,
+    "decode_long_tps": 57.9
   },
   "tool_calling": {
     "score": 0.73,
@@ -31,7 +31,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.32,
+        "elapsed_s": 1.23,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -45,7 +45,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.45,
+        "elapsed_s": 0.46,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -59,7 +59,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.8,
+        "elapsed_s": 0.83,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -73,7 +73,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.6,
+        "elapsed_s": 0.61,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -87,7 +87,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 0.5,
-        "elapsed_s": 0.75,
+        "elapsed_s": 0.74,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -129,7 +129,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.62,
+        "elapsed_s": 0.63,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -143,7 +143,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.83,
+        "elapsed_s": 0.84,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -157,7 +157,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.69,
+        "elapsed_s": 0.7,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -171,7 +171,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.62,
+        "elapsed_s": 0.63,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -185,7 +185,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.39,
+        "elapsed_s": 0.4,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -199,7 +199,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.9,
+        "elapsed_s": 0.92,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -217,7 +217,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": false,
-        "elapsed_s": 0.85
+        "elapsed_s": 0.86
       },
       {
         "id": "tc15",
@@ -232,7 +232,7 @@
         "expected_count": 3,
         "actual_count": 3,
         "fully_correct": false,
-        "elapsed_s": 0.96
+        "elapsed_s": 0.97
       },
       {
         "id": "tc16",
@@ -247,7 +247,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": false,
-        "elapsed_s": 1.05
+        "elapsed_s": 1.07
       },
       {
         "id": "tc17",
@@ -262,7 +262,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": false,
-        "elapsed_s": 0.56
+        "elapsed_s": 0.57
       },
       {
         "id": "tc18",
@@ -272,7 +272,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.3
+        "elapsed_s": 0.31
       },
       {
         "id": "tc19",
@@ -282,7 +282,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.49
+        "elapsed_s": 1.72
       },
       {
         "id": "tc20",
@@ -292,7 +292,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.5
+        "elapsed_s": 0.53
       },
       {
         "id": "tc21",
@@ -303,7 +303,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.44,
+        "elapsed_s": 0.45,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -331,7 +331,7 @@
         "correct_name": true,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 1.44,
+        "elapsed_s": 1.46,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -345,7 +345,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.47,
+        "elapsed_s": 0.85,
         "fully_correct": false,
         "steps_passed": 2,
         "steps_total": 3
@@ -358,7 +358,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.29
+        "elapsed_s": 1.23
       },
       {
         "id": "tc26",
@@ -368,7 +368,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.23
+        "elapsed_s": 1.25
       },
       {
         "id": "tc27",
@@ -379,7 +379,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 1.76,
+        "elapsed_s": 3.15,
         "fully_correct": false
       },
       {
@@ -391,7 +391,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.45,
+        "elapsed_s": 0.46,
         "recovery_tool_called": false,
         "recovery_text": true,
         "fully_correct": true
@@ -419,7 +419,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.57,
+        "elapsed_s": 0.59,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -433,70 +433,70 @@
     "details": [
       {
         "id": "code01",
-        "description": "Simple function — fizzbuzz",
+        "description": "HE/93 — Encode message (swap case + vowel shift)",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code02",
-        "description": "Simple function — fibonacci",
+        "description": "HE/94 — Largest prime factor digit sum",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code03",
-        "description": "Data structure — flatten nested list",
+        "description": "HE/116 — Sort by binary 1-count",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code04",
-        "description": "Bug fix — off-by-one error",
+        "description": "HE/119 — Parentheses match (two strings)",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code05",
-        "description": "Algorithm — two sum",
+        "description": "HE/124 — Valid date mm-dd-yyyy",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code06",
-        "description": "String processing — word count",
+        "description": "HE/130 — Custom tribonacci sequence",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code07",
-        "description": "Class design — stack with min",
+        "description": "HE/141 — Filename validator",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code08",
-        "description": "File processing — CSV parser",
+        "description": "HE/145 — Order by digit sum (negative first digit)",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code09",
-        "description": "Refactor — simplify complex conditional",
+        "description": "HE/114 — Minimum subarray sum",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
       },
       {
         "id": "code10",
-        "description": "Algorithm — binary search",
+        "description": "HE/147 — Max triples divisible by 3",
         "runs_without_error": true,
         "correct_output": true,
         "fully_correct": true
@@ -504,14 +504,14 @@
     ]
   },
   "reasoning": {
-    "score": 0.8,
-    "passed": 8,
+    "score": 0.9,
+    "passed": 9,
     "total": 10,
     "details": [
       {
         "id": "math01",
-        "expected": "18",
-        "got": "18",
+        "expected": "3/2",
+        "got": "3/2",
         "correct": true
       },
       {
@@ -522,120 +522,120 @@
       },
       {
         "id": "math03",
-        "expected": "70000",
-        "got": "70000",
+        "expected": "14/3",
+        "got": "14/3",
         "correct": true
       },
       {
         "id": "math04",
-        "expected": "540",
-        "got": "540",
+        "expected": "2220",
+        "got": "2220",
         "correct": true
       },
       {
         "id": "math05",
-        "expected": "20",
-        "got": "20",
-        "correct": true
+        "expected": "3",
+        "got": "2",
+        "correct": false
       },
       {
         "id": "math06",
-        "expected": "64",
-        "got": "64",
+        "expected": "9",
+        "got": "9",
         "correct": true
       },
       {
         "id": "math07",
-        "expected": "260",
-        "got": "260",
+        "expected": "11/36",
+        "got": "11/36",
         "correct": true
       },
       {
         "id": "math08",
-        "expected": "160",
-        "got": "120",
-        "correct": false
+        "expected": "121",
+        "got": "121",
+        "correct": true
       },
       {
         "id": "math09",
-        "expected": "4",
-        "got": "7.5625",
-        "correct": false
+        "expected": "284",
+        "got": "284",
+        "correct": true
       },
       {
         "id": "math10",
-        "expected": "460",
-        "got": "460",
+        "expected": "144",
+        "got": "144",
         "correct": true
       }
     ]
   },
   "general": {
-    "score": 0.9,
-    "passed": 9,
+    "score": 0.5,
+    "passed": 5,
     "total": 10,
     "details": [
       {
         "id": "gen01",
-        "description": "Instruction following — list format",
+        "description": "MMLU-Pro CS — Boolean operator completeness",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen02",
-        "description": "Instruction following — constrained output",
-        "correct": false,
-        "reason": "sentence count 4 != 3"
+        "description": "MMLU-Pro CS — Sorting algorithm complexity",
+        "correct": true,
+        "reason": "ok"
       },
       {
         "id": "gen03",
-        "description": "Factual knowledge — science",
-        "correct": true,
-        "reason": "ok"
+        "description": "MMLU-Pro CS — Two's complement overflow",
+        "correct": false,
+        "reason": "expected D, got B"
       },
       {
         "id": "gen04",
-        "description": "Factual knowledge — geography",
-        "correct": true,
-        "reason": "ok"
+        "description": "MMLU-Pro Physics — Ideal gas law",
+        "correct": false,
+        "reason": "expected G, got H"
       },
       {
         "id": "gen05",
-        "description": "Reasoning — logical deduction",
-        "correct": true,
-        "reason": "ok"
+        "description": "MMLU-Pro Physics — Free fall in 2nd second",
+        "correct": false,
+        "reason": "expected C, got B"
       },
       {
         "id": "gen06",
-        "description": "Summarization",
-        "correct": true,
-        "reason": "ok"
+        "description": "MMLU-Pro Math — Function composition",
+        "correct": false,
+        "reason": "expected E, got J"
       },
       {
         "id": "gen07",
-        "description": "Creative writing — constrained",
+        "description": "MMLU-Pro Chemistry — Conjugate acid",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen08",
-        "description": "Format following — JSON output",
+        "description": "MMLU-Pro Chemistry — Zero-order reaction rate",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen09",
-        "description": "Multi-step instruction",
+        "description": "MMLU-Pro History — Classical empire decline analogy",
         "correct": true,
         "reason": "ok"
       },
       {
         "id": "gen10",
-        "description": "Refusal — safety boundary",
-        "correct": true,
-        "reason": "ok"
+        "description": "MMLU-Pro Engineering — Lamp illumination",
+        "correct": false,
+        "reason": "expected C, got B"
       }
     ]
   },
-  "total_eval_time_s": 130.7
+  "total_eval_time_s": 228.9
 }

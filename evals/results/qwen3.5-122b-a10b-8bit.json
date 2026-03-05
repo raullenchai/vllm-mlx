@@ -9,13 +9,19 @@
     "os": "macOS-26.3-arm64-arm-64bit"
   },
   "date": "2026-03-04",
+  "timestamp": "2026-03-04T22:12:32Z",
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
+  "model_path": "mlx-community/Qwen3.5-122B-A10B-8bit",
+  "engine": "simple",
+  "notes": null,
   "speed": {
-    "ttft_cold_s": 1.727,
-    "ttft_warm_s": 0.028,
-    "decode_short_tps": 19.8,
-    "decode_long_tps": 42.9
+    "ttft_cold_s": 1.251,
+    "ttft_warm_s": 0.032,
+    "decode_short_tps": 19.4,
+    "decode_long_tps": 42.7,
+    "ram_active_gb": 129.8,
+    "ram_peak_gb": 129.9
   },
   "tool_calling": {
     "score": 0.87,
@@ -31,7 +37,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 2.65,
+        "elapsed_s": 2.64,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -45,7 +51,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.11,
+        "elapsed_s": 1.12,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -59,7 +65,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.01,
+        "elapsed_s": 1.03,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -73,7 +79,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.38,
+        "elapsed_s": 1.4,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -101,7 +107,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.91,
+        "elapsed_s": 0.92,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -129,7 +135,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.4,
+        "elapsed_s": 1.42,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -143,7 +149,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.22,
+        "elapsed_s": 1.23,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -171,7 +177,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.35,
+        "elapsed_s": 1.36,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -185,7 +191,7 @@
         "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.83,
+        "elapsed_s": 0.84,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -199,7 +205,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.83,
+        "elapsed_s": 1.84,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -232,7 +238,7 @@
         "expected_count": 3,
         "actual_count": 3,
         "fully_correct": true,
-        "elapsed_s": 2.82
+        "elapsed_s": 2.81
       },
       {
         "id": "tc16",
@@ -247,7 +253,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 1.62
+        "elapsed_s": 1.64
       },
       {
         "id": "tc17",
@@ -262,7 +268,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 1.46
+        "elapsed_s": 1.47
       },
       {
         "id": "tc18",
@@ -292,7 +298,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.53
+        "elapsed_s": 0.54
       },
       {
         "id": "tc21",
@@ -317,7 +323,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.9,
+        "elapsed_s": 0.89,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -331,7 +337,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.92,
+        "elapsed_s": 0.93,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -345,7 +351,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.03,
+        "elapsed_s": 1.04,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -357,7 +363,7 @@
         "category": "missing_params",
         "fully_correct": false,
         "no_tool_called": false,
-        "has_content": true,
+        "has_content": false,
         "elapsed_s": 1.24
       },
       {
@@ -367,8 +373,8 @@
         "category": "missing_params",
         "fully_correct": false,
         "no_tool_called": false,
-        "has_content": true,
-        "elapsed_s": 1.26
+        "has_content": false,
+        "elapsed_s": 1.27
       },
       {
         "id": "tc27",
@@ -406,7 +412,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.87,
+        "elapsed_s": 0.88,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -420,7 +426,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.91,
+        "elapsed_s": 0.92,
         "fully_correct": false,
         "steps_passed": 1,
         "steps_total": 2
@@ -486,8 +492,7 @@
         "description": "HE/145 — Order by digit sum (negative first digit)",
         "runs_without_error": false,
         "correct_output": false,
-        "fully_correct": false,
-        "error": "Traceback (most recent call last):\n  File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmp99tyrldi.py\", line 35, in <module>\n    assert order_by_points([1, 11, -1, -11, -12]) == [-1, -11, 1, -12,"
+        "fully_correct": false
       },
       {
         "id": "code09",
@@ -639,5 +644,5 @@
       }
     ]
   },
-  "total_eval_time_s": 341.5
+  "total_eval_time_s": 342.5
 }

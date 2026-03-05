@@ -1,6 +1,6 @@
 {
-  "model": "Qwen3.5-35B-A3B-8bit",
-  "quantization": "8bit",
+  "model": "Qwen3.5-4B-4bit",
+  "quantization": "4bit",
   "parser": "hermes",
   "hardware": "Apple M3 Ultra (256GB)",
   "hardware_detail": {
@@ -9,23 +9,23 @@
     "os": "macOS-26.3-arm64-arm-64bit"
   },
   "date": "2026-03-04",
-  "timestamp": "2026-03-04T21:44:48Z",
+  "timestamp": "2026-03-04T21:14:18Z",
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
-  "model_path": "mlx-community/Qwen3.5-35B-A3B-8bit",
+  "model_path": "mlx-community/Qwen3.5-4B-MLX-4bit",
   "engine": "simple",
   "notes": null,
   "speed": {
-    "ttft_cold_s": 0.456,
-    "ttft_warm_s": 0.03,
-    "decode_short_tps": 32.4,
-    "decode_long_tps": 80.0,
-    "ram_active_gb": 36.9,
-    "ram_peak_gb": 36.9
+    "ttft_cold_s": 0.196,
+    "ttft_warm_s": 0.029,
+    "decode_short_tps": 43.0,
+    "decode_long_tps": 157.6,
+    "ram_active_gb": 2.4,
+    "ram_peak_gb": 2.5
   },
   "tool_calling": {
-    "score": 0.9,
-    "passed": 27,
+    "score": 0.73,
+    "passed": 22,
     "total": 30,
     "details": [
       {
@@ -37,7 +37,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.11,
+        "elapsed_s": 0.92,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -51,7 +51,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.65,
+        "elapsed_s": 0.41,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -61,13 +61,13 @@
         "level": 1,
         "description": "Single tool, simple args — image generation",
         "category": "single_tool",
-        "tool_detected": true,
-        "correct_name": true,
-        "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 0.59,
-        "fully_correct": true,
-        "steps_passed": 1,
+        "tool_detected": false,
+        "correct_name": false,
+        "valid_json_args": false,
+        "arg_score": 0.0,
+        "elapsed_s": 0.34,
+        "fully_correct": false,
+        "steps_passed": 0,
         "steps_total": 1
       },
       {
@@ -79,7 +79,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.79,
+        "elapsed_s": 0.46,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -93,7 +93,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 0.5,
-        "elapsed_s": 0.77,
+        "elapsed_s": 0.45,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -107,7 +107,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.53,
+        "elapsed_s": 0.34,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -121,7 +121,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.55,
+        "elapsed_s": 0.35,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -135,7 +135,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.79,
+        "elapsed_s": 0.47,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -145,13 +145,13 @@
         "level": 2,
         "description": "Function selection — create_reminder not calendar_create or send_message",
         "category": "function_selection",
-        "tool_detected": true,
-        "correct_name": true,
-        "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 0.7,
-        "fully_correct": true,
-        "steps_passed": 1,
+        "tool_detected": false,
+        "correct_name": false,
+        "valid_json_args": false,
+        "arg_score": 0.0,
+        "elapsed_s": 0.35,
+        "fully_correct": false,
+        "steps_passed": 0,
         "steps_total": 1
       },
       {
@@ -163,7 +163,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.73,
+        "elapsed_s": 0.44,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -176,8 +176,8 @@
         "tool_detected": true,
         "correct_name": true,
         "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 0.77,
+        "arg_score": 0.75,
+        "elapsed_s": 0.52,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -191,7 +191,7 @@
         "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.5,
+        "elapsed_s": 0.32,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -205,7 +205,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.02,
+        "elapsed_s": 0.58,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -223,7 +223,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.86
+        "elapsed_s": 0.51
       },
       {
         "id": "tc15",
@@ -238,7 +238,7 @@
         "expected_count": 3,
         "actual_count": 3,
         "fully_correct": true,
-        "elapsed_s": 1.54
+        "elapsed_s": 1.26
       },
       {
         "id": "tc16",
@@ -253,7 +253,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.91
+        "elapsed_s": 0.93
       },
       {
         "id": "tc17",
@@ -268,7 +268,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.82
+        "elapsed_s": 0.48
       },
       {
         "id": "tc18",
@@ -278,7 +278,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.27
+        "elapsed_s": 0.64
       },
       {
         "id": "tc19",
@@ -288,7 +288,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.17
+        "elapsed_s": 0.7
       },
       {
         "id": "tc20",
@@ -298,7 +298,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.33
+        "elapsed_s": 0.3
       },
       {
         "id": "tc21",
@@ -309,7 +309,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.56,
+        "elapsed_s": 0.36,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -320,13 +320,13 @@
         "description": "Sequential — read then exec",
         "category": "sequential",
         "tool_detected": true,
-        "correct_name": true,
+        "correct_name": false,
         "valid_json_args": true,
-        "arg_score": 1.0,
-        "elapsed_s": 0.51,
-        "fully_correct": true,
-        "steps_passed": 2,
-        "steps_total": 2
+        "arg_score": 0.0,
+        "elapsed_s": 0.36,
+        "fully_correct": false,
+        "steps_passed": 0,
+        "steps_total": 1
       },
       {
         "id": "tc23",
@@ -334,13 +334,13 @@
         "description": "Sequential 3-step — exec + memory_store + send_message",
         "category": "sequential",
         "tool_detected": true,
-        "correct_name": true,
+        "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.52,
-        "fully_correct": true,
-        "steps_passed": 3,
-        "steps_total": 3
+        "elapsed_s": 0.48,
+        "fully_correct": false,
+        "steps_passed": 0,
+        "steps_total": 1
       },
       {
         "id": "tc24",
@@ -351,7 +351,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.56,
+        "elapsed_s": 0.37,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -364,29 +364,30 @@
         "fully_correct": false,
         "no_tool_called": false,
         "has_content": false,
-        "elapsed_s": 0.67
+        "elapsed_s": 0.53
       },
       {
         "id": "tc26",
         "level": 3,
         "description": "Missing params — write with no path or content",
         "category": "missing_params",
-        "fully_correct": true,
-        "no_tool_called": true,
-        "has_content": true,
-        "elapsed_s": 0.38
+        "fully_correct": false,
+        "no_tool_called": false,
+        "has_content": false,
+        "elapsed_s": 0.42
       },
       {
         "id": "tc27",
         "level": 4,
         "description": "Error recovery — permission denied, model should explain or retry",
         "category": "error_recovery",
-        "tool_detected": false,
-        "correct_name": false,
-        "valid_json_args": false,
-        "arg_score": 0.0,
-        "elapsed_s": 0.9,
-        "fully_correct": false
+        "tool_detected": true,
+        "correct_name": true,
+        "valid_json_args": true,
+        "arg_score": 1.0,
+        "elapsed_s": 0.37,
+        "recovery_text": true,
+        "fully_correct": true
       },
       {
         "id": "tc28",
@@ -397,7 +398,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.56,
+        "elapsed_s": 0.36,
         "recovery_tool_called": false,
         "recovery_text": true,
         "fully_correct": true
@@ -411,7 +412,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.5,
+        "elapsed_s": 0.33,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -422,19 +423,19 @@
         "description": "Nested dependent — exec output becomes memory_store value",
         "category": "nested_dependent",
         "tool_detected": true,
-        "correct_name": true,
+        "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.53,
-        "fully_correct": true,
-        "steps_passed": 2,
-        "steps_total": 2
+        "elapsed_s": 0.44,
+        "fully_correct": false,
+        "steps_passed": 0,
+        "steps_total": 1
       }
     ]
   },
   "coding": {
-    "score": 0.9,
-    "passed": 9,
+    "score": 0.5,
+    "passed": 5,
     "total": 10,
     "details": [
       {
@@ -447,16 +448,16 @@
       {
         "id": "code02",
         "description": "HE/94 — Largest prime factor digit sum",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code03",
         "description": "HE/116 — Sort by binary 1-count",
-        "runs_without_error": true,
-        "correct_output": true,
-        "fully_correct": true
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false
       },
       {
         "id": "code04",
@@ -468,16 +469,16 @@
       {
         "id": "code05",
         "description": "HE/124 — Valid date mm-dd-yyyy",
-        "runs_without_error": true,
-        "correct_output": true,
-        "fully_correct": true
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false
       },
       {
         "id": "code06",
         "description": "HE/130 — Custom tribonacci sequence",
-        "runs_without_error": true,
-        "correct_output": true,
-        "fully_correct": true
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false
       },
       {
         "id": "code07",
@@ -489,9 +490,9 @@
       {
         "id": "code08",
         "description": "HE/145 — Order by digit sum (negative first digit)",
-        "runs_without_error": true,
-        "correct_output": true,
-        "fully_correct": true
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false
       },
       {
         "id": "code09",
@@ -503,15 +504,15 @@
       {
         "id": "code10",
         "description": "HE/147 — Max triples divisible by 3",
-        "runs_without_error": true,
-        "correct_output": true,
-        "fully_correct": true
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false
       }
     ]
   },
   "reasoning": {
-    "score": 0.8,
-    "passed": 8,
+    "score": 0.5,
+    "passed": 5,
     "total": 10,
     "details": [
       {
@@ -523,8 +524,8 @@
       {
         "id": "math02",
         "expected": "3",
-        "got": "3",
-        "correct": true
+        "got": "3/4",
+        "correct": false
       },
       {
         "id": "math03",
@@ -535,20 +536,20 @@
       {
         "id": "math04",
         "expected": "2220",
-        "got": "2220",
-        "correct": true
+        "got": "3",
+        "correct": false
       },
       {
         "id": "math05",
         "expected": "3",
-        "got": "29/10",
+        "got": "2",
         "correct": false
       },
       {
         "id": "math06",
         "expected": "9",
-        "got": "1",
-        "correct": false
+        "got": "9",
+        "correct": true
       },
       {
         "id": "math07",
@@ -565,20 +566,20 @@
       {
         "id": "math09",
         "expected": "284",
-        "got": "284",
-        "correct": true
+        "got": "504",
+        "correct": false
       },
       {
         "id": "math10",
         "expected": "144",
-        "got": "144",
-        "correct": true
+        "got": "7",
+        "correct": false
       }
     ]
   },
   "general": {
-    "score": 0.8,
-    "passed": 8,
+    "score": 0.5,
+    "passed": 5,
     "total": 10,
     "details": [
       {
@@ -596,32 +597,32 @@
       {
         "id": "gen03",
         "description": "MMLU-Pro CS — Two's complement overflow",
-        "correct": true,
-        "reason": "ok"
+        "correct": false,
+        "reason": "expected D, got B"
       },
       {
         "id": "gen04",
         "description": "MMLU-Pro Physics — Ideal gas law",
         "correct": false,
-        "reason": "expected G, got C"
+        "reason": "expected G, got B"
       },
       {
         "id": "gen05",
         "description": "MMLU-Pro Physics — Free fall in 2nd second",
-        "correct": true,
-        "reason": "ok"
+        "correct": false,
+        "reason": "expected C, got B"
       },
       {
         "id": "gen06",
         "description": "MMLU-Pro Math — Function composition",
         "correct": false,
-        "reason": "expected E, got C"
+        "reason": "expected E, got B"
       },
       {
         "id": "gen07",
         "description": "MMLU-Pro Chemistry — Conjugate acid",
-        "correct": true,
-        "reason": "ok"
+        "correct": false,
+        "reason": "expected I, got B"
       },
       {
         "id": "gen08",
@@ -643,5 +644,5 @@
       }
     ]
   },
-  "total_eval_time_s": 186.0
+  "total_eval_time_s": 111.8
 }

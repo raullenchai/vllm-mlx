@@ -1,6 +1,6 @@
 {
-  "model": "Qwen3.5-35B-A3B-8bit",
-  "quantization": "8bit",
+  "model": "Qwen3.5-27B-4bit",
+  "quantization": "4bit",
   "parser": "hermes",
   "hardware": "Apple M3 Ultra (256GB)",
   "hardware_detail": {
@@ -9,23 +9,23 @@
     "os": "macOS-26.3-arm64-arm-64bit"
   },
   "date": "2026-03-04",
-  "timestamp": "2026-03-04T21:44:48Z",
+  "timestamp": "2026-03-04T22:18:39Z",
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
-  "model_path": "mlx-community/Qwen3.5-35B-A3B-8bit",
+  "model_path": "mlx-community/Qwen3.5-27B-4bit",
   "engine": "simple",
   "notes": null,
   "speed": {
-    "ttft_cold_s": 0.456,
-    "ttft_warm_s": 0.03,
-    "decode_short_tps": 32.4,
-    "decode_long_tps": 80.0,
-    "ram_active_gb": 36.9,
-    "ram_peak_gb": 36.9
+    "ttft_cold_s": 0.453,
+    "ttft_warm_s": 0.029,
+    "decode_short_tps": 17.7,
+    "decode_long_tps": 37.7,
+    "ram_active_gb": 15.3,
+    "ram_peak_gb": 15.4
   },
   "tool_calling": {
-    "score": 0.9,
-    "passed": 27,
+    "score": 0.83,
+    "passed": 25,
     "total": 30,
     "details": [
       {
@@ -37,7 +37,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.11,
+        "elapsed_s": 4.78,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -51,7 +51,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.65,
+        "elapsed_s": 1.3,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -65,7 +65,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.59,
+        "elapsed_s": 1.17,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -79,7 +79,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.79,
+        "elapsed_s": 1.59,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -93,7 +93,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 0.5,
-        "elapsed_s": 0.77,
+        "elapsed_s": 1.55,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -107,7 +107,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.53,
+        "elapsed_s": 1.04,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -121,7 +121,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.55,
+        "elapsed_s": 1.04,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -135,7 +135,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.79,
+        "elapsed_s": 1.59,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -149,7 +149,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.7,
+        "elapsed_s": 1.43,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -163,7 +163,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.73,
+        "elapsed_s": 1.48,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -177,7 +177,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.77,
+        "elapsed_s": 1.56,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -191,7 +191,7 @@
         "correct_name": false,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.5,
+        "elapsed_s": 0.99,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -205,7 +205,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.02,
+        "elapsed_s": 2.13,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -223,7 +223,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.86
+        "elapsed_s": 1.77
       },
       {
         "id": "tc15",
@@ -238,7 +238,7 @@
         "expected_count": 3,
         "actual_count": 3,
         "fully_correct": true,
-        "elapsed_s": 1.54
+        "elapsed_s": 3.22
       },
       {
         "id": "tc16",
@@ -253,7 +253,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.91
+        "elapsed_s": 1.85
       },
       {
         "id": "tc17",
@@ -261,14 +261,14 @@
         "description": "Parallel — two file reads",
         "category": "parallel",
         "tool_detected": true,
-        "correct_name": true,
+        "correct_name": false,
         "valid_json_args": true,
-        "arg_score": 1.0,
-        "matched": 2,
+        "arg_score": 0.5,
+        "matched": 1,
         "expected_count": 2,
-        "actual_count": 2,
-        "fully_correct": true,
-        "elapsed_s": 0.82
+        "actual_count": 1,
+        "fully_correct": false,
+        "elapsed_s": 0.99
       },
       {
         "id": "tc18",
@@ -278,7 +278,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.27
+        "elapsed_s": 0.52
       },
       {
         "id": "tc19",
@@ -288,7 +288,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.17
+        "elapsed_s": 2.58
       },
       {
         "id": "tc20",
@@ -298,7 +298,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.33
+        "elapsed_s": 0.78
       },
       {
         "id": "tc21",
@@ -309,7 +309,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.56,
+        "elapsed_s": 1.12,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -323,7 +323,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.51,
+        "elapsed_s": 1.02,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -337,7 +337,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.52,
+        "elapsed_s": 1.04,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -351,7 +351,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.56,
+        "elapsed_s": 1.23,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -364,17 +364,17 @@
         "fully_correct": false,
         "no_tool_called": false,
         "has_content": false,
-        "elapsed_s": 0.67
+        "elapsed_s": 1.51
       },
       {
         "id": "tc26",
         "level": 3,
         "description": "Missing params — write with no path or content",
         "category": "missing_params",
-        "fully_correct": true,
-        "no_tool_called": true,
-        "has_content": true,
-        "elapsed_s": 0.38
+        "fully_correct": false,
+        "no_tool_called": false,
+        "has_content": false,
+        "elapsed_s": 1.49
       },
       {
         "id": "tc27",
@@ -385,7 +385,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 0.9,
+        "elapsed_s": 3.17,
         "fully_correct": false
       },
       {
@@ -397,7 +397,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.56,
+        "elapsed_s": 1.12,
         "recovery_tool_called": false,
         "recovery_text": true,
         "fully_correct": true
@@ -411,7 +411,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.5,
+        "elapsed_s": 0.99,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -425,7 +425,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.53,
+        "elapsed_s": 1.04,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -447,9 +447,9 @@
       {
         "id": "code02",
         "description": "HE/94 — Largest prime factor digit sum",
-        "runs_without_error": false,
-        "correct_output": false,
-        "fully_correct": false
+        "runs_without_error": true,
+        "correct_output": true,
+        "fully_correct": true
       },
       {
         "id": "code03",
@@ -503,15 +503,15 @@
       {
         "id": "code10",
         "description": "HE/147 — Max triples divisible by 3",
-        "runs_without_error": true,
-        "correct_output": true,
-        "fully_correct": true
+        "runs_without_error": false,
+        "correct_output": false,
+        "fully_correct": false
       }
     ]
   },
   "reasoning": {
-    "score": 0.8,
-    "passed": 8,
+    "score": 0.5,
+    "passed": 5,
     "total": 10,
     "details": [
       {
@@ -535,19 +535,19 @@
       {
         "id": "math04",
         "expected": "2220",
-        "got": "2220",
-        "correct": true
+        "got": "2",
+        "correct": false
       },
       {
         "id": "math05",
         "expected": "3",
-        "got": "29/10",
+        "got": "4",
         "correct": false
       },
       {
         "id": "math06",
         "expected": "9",
-        "got": "1",
+        "got": "4",
         "correct": false
       },
       {
@@ -565,14 +565,14 @@
       {
         "id": "math09",
         "expected": "284",
-        "got": "284",
-        "correct": true
+        "got": "7",
+        "correct": false
       },
       {
         "id": "math10",
         "expected": "144",
-        "got": "144",
-        "correct": true
+        "got": "2",
+        "correct": false
       }
     ]
   },
@@ -584,8 +584,8 @@
       {
         "id": "gen01",
         "description": "MMLU-Pro CS — Boolean operator completeness",
-        "correct": true,
-        "reason": "ok"
+        "correct": false,
+        "reason": "expected D, got E"
       },
       {
         "id": "gen02",
@@ -602,8 +602,8 @@
       {
         "id": "gen04",
         "description": "MMLU-Pro Physics — Ideal gas law",
-        "correct": false,
-        "reason": "expected G, got C"
+        "correct": true,
+        "reason": "ok"
       },
       {
         "id": "gen05",
@@ -643,5 +643,5 @@
       }
     ]
   },
-  "total_eval_time_s": 186.0
+  "total_eval_time_s": 451.7
 }

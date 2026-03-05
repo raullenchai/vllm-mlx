@@ -114,8 +114,10 @@ We welcome community benchmarks! Different hardware + different models = better 
 evals/
 ├── README.md                 # This file
 ├── SCORECARD.md              # Auto-generated comparison table
+├── EVAL_CONFIGS.md           # Detailed per-model eval configs (engine, parser, load notes)
 ├── TOOL_CALLING_TESTS.md     # Provenance & design rationale for 30 tool tests
 ├── run_eval.py               # Unified eval runner
+├── run_all_models.sh         # Batch runner for all models
 ├── generate_scorecard.py     # Reads results/*.json → SCORECARD.md
 ├── prompts/
 │   ├── tool_calling.json     # 30 tool-calling scenarios (9 categories, L1-L5)

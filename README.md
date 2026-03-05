@@ -418,19 +418,19 @@ Tested on Mac Studio M3 Ultra (256GB). Eval scores from standardized benchmark s
 
 Standardized eval framework: speed, tool calling (30 scenarios), coding ([HumanEval+](https://github.com/openai/human-eval)), reasoning ([MATH-500](https://huggingface.co/datasets/HuggingFaceH4/MATH-500)), and general knowledge ([MMLU-Pro](https://huggingface.co/datasets/TIGER-Lab/MMLU-Pro)). All suites run with `enable_thinking: false`. Run on your own Apple Silicon Mac and submit results!
 
-| Model | Quant | Decode | Tools | Code | Reason | General |
-|-------|-------|--------|-------|------|--------|---------|
-| Qwen3.5-122B-A10B | 8bit | 43 t/s | 87% | **90%** | **90%** | **90%** |
-| Qwen3.5-122B-A10B | mxfp4 | 57 t/s | **90%** | **90%** | 80% | **90%** |
-| Qwen3.5-35B-A3B | 8bit | 82 t/s | **90%** | **90%** | 80% | 80% |
-| Qwen3.5-35B-A3B | 4bit | 104 t/s | 87% | **90%** | 50% | 70% |
-| Qwen3-Coder-Next | 6bit | 67 t/s | 87% | **90%** | 80% | 70% |
-| Qwen3-Coder-Next | 4bit | 74 t/s | **90%** | **90%** | 70% | 70% |
-| GLM-4.7-Flash | 8bit | 58 t/s | 73% | **100%** | **90%** | 50% |
-| MiniMax-M2.5 | 4bit | 51 t/s | 87% | 10% | 80% | **90%** |
-| GPT-OSS-20B | mxfp4-q8 | 11 t/s | 17% | 60% | 20% | **90%** |
-| Hermes-3-Llama-8B | 4bit | 123 t/s | 17% | 20% | 30% | 40% |
-| Qwen3-0.6B | 4bit | 370 t/s | 30% | 20% | 20% | 30% |
+| Model | Quant | RAM | Decode | Tools | Code | Reason | General | Avg |
+|-------|-------|-----|--------|-------|------|--------|---------|-----|
+| Qwen3.5-122B-A10B | 8bit | — | 43 t/s | 87% | **90%** | **90%** | **90%** | **89%** |
+| Qwen3.5-122B-A10B | mxfp4 | — | 57 t/s | **90%** | **90%** | 80% | **90%** | 88% |
+| Qwen3.5-35B-A3B | 8bit | 36.9 GB | 82 t/s | **90%** | **90%** | 80% | 80% | 85% |
+| Qwen3.5-35B-A3B | 4bit | 19.6 GB | 99 t/s | 87% | **90%** | 50% | 70% | 74% |
+| Qwen3-Coder-Next | 6bit | — | 67 t/s | 87% | **90%** | 80% | 70% | 82% |
+| Qwen3-Coder-Next | 4bit | 44.9 GB | 72 t/s | **90%** | **90%** | 70% | 70% | 80% |
+| GLM-4.7-Flash | 8bit | — | 58 t/s | 73% | **100%** | **90%** | 50% | 78% |
+| MiniMax-M2.5 | 4bit | — | 51 t/s | 87% | 10% | 80% | **90%** | 67% |
+| GPT-OSS-20B | mxfp4-q8 | 12.1 GB | 86 t/s | **80%** | 20% | 60% | **90%** | 63% |
+| Hermes-3-Llama-8B | 4bit | — | 123 t/s | 17% | 20% | 30% | 40% | 27% |
+| Qwen3-0.6B | 4bit | 0.4 GB | 354 t/s | 30% | 20% | 20% | 30% | 25% |
 
 *Tested on Apple M3 Ultra (256GB). See full [scorecard](evals/SCORECARD.md) for details.*
 

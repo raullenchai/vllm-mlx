@@ -252,12 +252,19 @@ def run_speed_suite(host: str, port: int, verbose: bool = False) -> dict:
     results["decode_long_tps"] = round(long_tps, 1)
     print(f"{long_tps:.1f} tok/s ({long_tokens} tok in {long_elapsed:.2f}s)")
 
-    # -- Memory (try /health or /metrics endpoint) --
+    # -- RAM usage from /v1/status Metal metrics --
     try:
-        r = httpx.get(f"http://{host}:{port}/health", timeout=5.0)
-        health = r.json() if r.status_code == 200 else {}
-        if "memory_gb" in health:
-            results["memory_gb"] = health["memory_gb"]
+        r = httpx.get(f"http://{host}:{port}/v1/status", timeout=5.0)
+        r.raise_for_status()
+        metal = r.json().get("metal", {})
+        ram_active = metal.get("active_memory_gb")
+        ram_peak = metal.get("peak_memory_gb")
+        if ram_active is not None:
+            results["ram_active_gb"] = round(ram_active, 1)
+            print(f"  RAM active: {ram_active:.1f} GB")
+        if ram_peak is not None:
+            results["ram_peak_gb"] = round(ram_peak, 1)
+            print(f"  RAM peak:   {ram_peak:.1f} GB")
     except Exception:
         pass
 
@@ -397,13 +404,8 @@ def _check_parallel_calls(tool_calls, scenario) -> dict:
 
 def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
     """Run tool-calling scenarios with multi-turn, parallel, irrelevance, and error recovery support."""
-    # TODO: GPT-OSS-20B scores 17% tools and 20% reasoning despite 60% coding / 90% general.
-    #       Likely a minimax parser compatibility issue — try hermes parser or inspect raw responses.
-    # TODO: Benchmark these community-requested models:
-    #       - mistral-small-2506
-    #       - devstral-small-2512
-    #       - glm-4.5-air
-    #       - nemotron-nano-3-30B-A3B
+    # NOTE: GPT-OSS-20B scored 3% tools before SUPPORTS_NATIVE_TOOL_FORMAT=True fix (harmony parser).
+    #       After fix, scores 80% — the model needs native tool message format for multi-turn.
     print("\n--- Suite B: Tool Calling ---")
 
     prompts_file = PROMPTS_DIR / "tool_calling.json"
@@ -1190,6 +1192,9 @@ Examples:
     parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed output")
     parser.add_argument("--hardware", default=None, help="Hardware description override (e.g. 'Mac Studio M3 Ultra 256GB')")
     parser.add_argument("--server-flags", default=None, help="Server flags used (e.g. '--enable-auto-tool-choice --tool-call-parser harmony')")
+    parser.add_argument("--model-path", default=None, help="Local model path (for reproducibility)")
+    parser.add_argument("--engine", default="simple", choices=["simple", "batched"], help="Engine mode (default: simple)")
+    parser.add_argument("--notes", default=None, help="Free-form notes about this eval run")
 
     args = parser.parse_args()
 
@@ -1222,8 +1227,12 @@ Examples:
         "hardware": hw_label,
         "hardware_detail": hw,
         "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "server": f"http://{args.host}:{args.port}",
         "server_flags": args.server_flags,
+        "model_path": args.model_path,
+        "engine": args.engine,
+        "notes": args.notes,
     }
 
     start_time = time.perf_counter()

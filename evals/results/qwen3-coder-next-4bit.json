@@ -9,13 +9,19 @@
     "os": "macOS-26.3-arm64-arm-64bit"
   },
   "date": "2026-03-04",
+  "timestamp": "2026-03-04T21:48:15Z",
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser hermes",
+  "model_path": "lmstudio-community/Qwen3-Coder-Next-MLX-4bit",
+  "engine": "simple",
+  "notes": null,
   "speed": {
-    "ttft_cold_s": 0.457,
-    "ttft_warm_s": 0.03,
+    "ttft_cold_s": 0.473,
+    "ttft_warm_s": 0.027,
     "decode_short_tps": 41.5,
-    "decode_long_tps": 73.6
+    "decode_long_tps": 73.5,
+    "ram_active_gb": 44.9,
+    "ram_peak_gb": 45.0
   },
   "tool_calling": {
     "score": 0.9,
@@ -31,7 +37,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.27,
+        "elapsed_s": 1.29,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -73,7 +79,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.71,
+        "elapsed_s": 0.7,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -185,7 +191,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.48,
+        "elapsed_s": 0.47,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -199,7 +205,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.95,
+        "elapsed_s": 0.94,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -217,7 +223,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.82
+        "elapsed_s": 0.81
       },
       {
         "id": "tc15",
@@ -232,7 +238,7 @@
         "expected_count": 3,
         "actual_count": 3,
         "fully_correct": true,
-        "elapsed_s": 1.38
+        "elapsed_s": 1.37
       },
       {
         "id": "tc16",
@@ -247,7 +253,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": true,
-        "elapsed_s": 0.84
+        "elapsed_s": 0.83
       },
       {
         "id": "tc17",
@@ -272,7 +278,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.23
+        "elapsed_s": 0.24
       },
       {
         "id": "tc19",
@@ -292,7 +298,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 0.3
+        "elapsed_s": 0.31
       },
       {
         "id": "tc21",
@@ -331,7 +337,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.46,
+        "elapsed_s": 0.47,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -345,7 +351,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.53,
+        "elapsed_s": 0.52,
         "fully_correct": true,
         "steps_passed": 3,
         "steps_total": 3
@@ -357,8 +363,8 @@
         "category": "missing_params",
         "fully_correct": false,
         "no_tool_called": false,
-        "has_content": true,
-        "elapsed_s": 0.66
+        "has_content": false,
+        "elapsed_s": 0.67
       },
       {
         "id": "tc26",
@@ -367,7 +373,7 @@
         "category": "missing_params",
         "fully_correct": false,
         "no_tool_called": false,
-        "has_content": true,
+        "has_content": false,
         "elapsed_s": 0.62
       },
       {
@@ -379,7 +385,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.49,
+        "elapsed_s": 0.5,
         "recovery_text": true,
         "fully_correct": true
       },
@@ -500,8 +506,7 @@
         "description": "HE/147 — Max triples divisible by 3",
         "runs_without_error": false,
         "correct_output": false,
-        "fully_correct": false,
-        "error": "File \"/var/folders/wb/48mxmsf134v50bv4rd_hl2bw0000gn/T/tmpjc6zdo4a.py\", line 1\n    i=1: 1 - 1 + 1 = 1 → 1 mod 3\n                       ^\nSyntaxError: invalid character '→' (U+2192)"
+        "fully_correct": false
       }
     ]
   },
@@ -639,5 +644,5 @@
       }
     ]
   },
-  "total_eval_time_s": 216.6
+  "total_eval_time_s": 218.9
 }

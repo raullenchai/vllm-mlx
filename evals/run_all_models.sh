@@ -23,7 +23,8 @@ fi
 # Model configs: name|path|parser|quantization
 declare -a MODELS=(
   "Qwen3-0.6B-4bit|/Users/raullenstudio/.lmstudio/models/mlx-community/Qwen3-0.6B-MLX-4bit|hermes|4bit"
-  "GLM-4.7-4bit|/Users/raullenstudio/.lmstudio/models/mlx-community/GLM-4.7-4bit|glm47|4bit"
+  "Hermes-3-Llama-3.1-8B-4bit|/Users/raullenstudio/.lmstudio/models/mlx-community/Hermes-3-Llama-3.1-8B-4bit|hermes|4bit"
+  "GLM-4.7-Flash-8bit|/Users/raullenstudio/.lmstudio/models/lmstudio-community/GLM-4.7-Flash-MLX-8bit|glm47|8bit"
   "GPT-OSS-20B-mxfp4-q8|/Users/raullenstudio/.lmstudio/models/mlx-community/gpt-oss-20b-MXFP4-Q8|harmony|mxfp4-q8"
   "MiniMax-M2.5-4bit|/Users/raullenstudio/.lmstudio/models/lmstudio-community/MiniMax-M2.5-MLX-4bit|minimax|4bit"
   "Qwen3.5-35B-A3B-4bit|/Users/raullenstudio/.lmstudio/models/mlx-community/Qwen3.5-35B-A3B-4bit|hermes|4bit"
@@ -32,13 +33,14 @@ declare -a MODELS=(
   "Qwen3-Coder-Next-6bit|/Users/raullenstudio/.lmstudio/models/lmstudio-community/Qwen3-Coder-Next-MLX-6bit|hermes|6bit"
   "Qwen3.5-122B-A10B-mxfp4|/Users/raullenstudio/.lmstudio/models/nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx|hermes|mxfp4"
   "Qwen3.5-122B-A10B-8bit|/Users/raullenstudio/.lmstudio/models/mlx-community/Qwen3.5-122B-A10B-8bit|hermes|8bit"
-  # Requested by community — download and uncomment to eval:
-  # "Mistral-Small-3.2-4bit|<path>|hermes|4bit"
-  # "Devstral-Small-4bit|<path>|hermes|4bit"
-  # "GLM-4.5-Air-4bit|<path>|glm47|4bit"
+  "Qwen3.5-4B-4bit|/Users/raullenstudio/.lmstudio/models/mlx-community/Qwen3.5-4B-MLX-4bit|hermes|4bit"
+  "Qwen3.5-9B-4bit|/Users/raullenstudio/.lmstudio/models/mlx-community/Qwen3.5-9B-4bit|hermes|4bit"
+  "Mistral-Small-3.2-4bit|/Users/raullenstudio/.lmstudio/models/lmstudio-community/Mistral-Small-3.2-24B-Instruct-2506-MLX-4bit|hermes|4bit"
+  "Qwen3.5-27B-4bit|/Users/raullenstudio/.lmstudio/models/mlx-community/Qwen3.5-27B-4bit|hermes|4bit"
+  "GLM-4.5-Air-4bit|/Users/raullenstudio/.lmstudio/models/lmstudio-community/GLM-4.5-Air-MLX-4bit|glm47|4bit"
+  "Devstral-Small-2-4bit|/Users/raullenstudio/.lmstudio/models/mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit|hermes|4bit"
+  # Not yet downloaded:
   # "Nemotron-Nano-30B-4bit|<path>|hermes|4bit"
-  # "Qwen3.5-4B-4bit|<path>|hermes|4bit"
-  # "Qwen3.5-9B-4bit|<path>|hermes|4bit"
 )
 
 start_server() {
@@ -101,6 +103,8 @@ for model_config in "${MODELS[@]}"; do
       --model "$name" \
       --parser "$parser" \
       --quantization "$quant" \
+      --model-path "$path" \
+      --engine simple \
       --suite $SUITES \
       --server-flags "--enable-auto-tool-choice --tool-call-parser $parser"
     echo ""

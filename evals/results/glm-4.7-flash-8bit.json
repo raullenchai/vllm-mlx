@@ -9,13 +9,19 @@
     "os": "macOS-26.3-arm64-arm-64bit"
   },
   "date": "2026-03-04",
+  "timestamp": "2026-03-04T21:40:38Z",
   "server": "http://localhost:8000",
   "server_flags": "--enable-auto-tool-choice --tool-call-parser glm47",
+  "model_path": "lmstudio-community/GLM-4.7-Flash-MLX-8bit",
+  "engine": "simple",
+  "notes": null,
   "speed": {
-    "ttft_cold_s": 0.407,
-    "ttft_warm_s": 0.106,
-    "decode_short_tps": 33.6,
-    "decode_long_tps": 57.9
+    "ttft_cold_s": 0.362,
+    "ttft_warm_s": 0.113,
+    "decode_short_tps": 33.4,
+    "decode_long_tps": 57.2,
+    "ram_active_gb": 31.9,
+    "ram_peak_gb": 31.9
   },
   "tool_calling": {
     "score": 0.73,
@@ -31,7 +37,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 1.23,
+        "elapsed_s": 1.24,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -59,7 +65,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.83,
+        "elapsed_s": 0.82,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -185,7 +191,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.4,
+        "elapsed_s": 0.41,
         "fully_correct": true,
         "steps_passed": 1,
         "steps_total": 1
@@ -247,7 +253,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": false,
-        "elapsed_s": 1.07
+        "elapsed_s": 1.08
       },
       {
         "id": "tc17",
@@ -262,7 +268,7 @@
         "expected_count": 2,
         "actual_count": 2,
         "fully_correct": false,
-        "elapsed_s": 0.57
+        "elapsed_s": 0.59
       },
       {
         "id": "tc18",
@@ -282,7 +288,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.72
+        "elapsed_s": 1.74
       },
       {
         "id": "tc20",
@@ -303,7 +309,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.45,
+        "elapsed_s": 0.46,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -317,7 +323,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.4,
+        "elapsed_s": 0.41,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -331,7 +337,7 @@
         "correct_name": true,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 1.46,
+        "elapsed_s": 1.47,
         "fully_correct": false,
         "steps_passed": 0,
         "steps_total": 1
@@ -345,7 +351,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.85,
+        "elapsed_s": 0.86,
         "fully_correct": false,
         "steps_passed": 2,
         "steps_total": 3
@@ -358,7 +364,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.23
+        "elapsed_s": 1.25
       },
       {
         "id": "tc26",
@@ -368,7 +374,7 @@
         "fully_correct": true,
         "no_tool_called": true,
         "has_content": true,
-        "elapsed_s": 1.25
+        "elapsed_s": 1.26
       },
       {
         "id": "tc27",
@@ -379,7 +385,7 @@
         "correct_name": false,
         "valid_json_args": false,
         "arg_score": 0.0,
-        "elapsed_s": 3.15,
+        "elapsed_s": 3.17,
         "fully_correct": false
       },
       {
@@ -391,7 +397,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.46,
+        "elapsed_s": 0.45,
         "recovery_tool_called": false,
         "recovery_text": true,
         "fully_correct": true
@@ -405,7 +411,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.38,
+        "elapsed_s": 0.42,
         "fully_correct": false,
         "steps_passed": 1,
         "steps_total": 2
@@ -419,7 +425,7 @@
         "correct_name": true,
         "valid_json_args": true,
         "arg_score": 1.0,
-        "elapsed_s": 0.59,
+        "elapsed_s": 0.63,
         "fully_correct": true,
         "steps_passed": 2,
         "steps_total": 2
@@ -637,5 +643,5 @@
       }
     ]
   },
-  "total_eval_time_s": 228.9
+  "total_eval_time_s": 230.6
 }

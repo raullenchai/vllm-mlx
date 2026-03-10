@@ -237,7 +237,11 @@ class SimpleEngine(BaseEngine):
                 **kwargs,
             ):
                 prompt_tokens = getattr(chunk, "prompt_tokens", 0) or prompt_tokens
-                completion_tokens += 1
+                # Prefer chunk's completion count if available, else increment
+                if hasattr(chunk, "completion_tokens"):
+                    completion_tokens = chunk.completion_tokens
+                else:
+                    completion_tokens += 1
                 new_text = chunk.text if hasattr(chunk, "text") else str(chunk)
                 accumulated_text += new_text
 
@@ -249,12 +253,17 @@ class SimpleEngine(BaseEngine):
                     finish_reason = getattr(chunk, "finish_reason", "stop")
 
                 # Pass current token ID for logprobs extraction
-                current_token = getattr(chunk, "token", 0)
+                current_token = getattr(chunk, "token", None)
+                tokens_list = (
+                    [current_token]
+                    if current_token is not None and current_token != 0
+                    else []
+                )
 
                 yield GenerationOutput(
                     text=accumulated_text,
                     new_text=new_text,
-                    tokens=[current_token] if current_token else [],
+                    tokens=tokens_list,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                     finished=finished,
@@ -288,6 +297,7 @@ class SimpleEngine(BaseEngine):
         max_tokens: int = 256,
         temperature: float = 0.7,
         top_p: float = 0.9,
+        stop: list[str] | None = None,
         tools: list[dict] | None = None,
         images: list[str] | None = None,
         videos: list[str] | None = None,
@@ -301,6 +311,7 @@ class SimpleEngine(BaseEngine):
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             top_p: Top-p sampling
+            stop: Stop sequences
             tools: Optional tool definitions
             images: Optional image URLs/paths
             videos: Optional video URLs/paths
@@ -324,6 +335,8 @@ class SimpleEngine(BaseEngine):
                     messages=messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
+                    top_p=top_p,
+                    stop=stop,
                     **kwargs,
                 )
                 return GenerationOutput(
@@ -335,11 +348,17 @@ class SimpleEngine(BaseEngine):
             else:
                 # For LLM, build prompt with enable_thinking support,
                 # then generate directly.
-                enable_thinking_val = kwargs.pop("enable_thinking", None)
+                enable_thinking_val = kwargs.get("enable_thinking")
+                kwargs_copy = kwargs.copy()
+                kwargs_copy.pop("enable_thinking", None)
                 prompt = self.build_prompt(
-                    messages, tools=tools,
-                    **({"enable_thinking": enable_thinking_val}
-                       if enable_thinking_val is not None else {}),
+                    messages,
+                    tools=tools,
+                    **(
+                        {"enable_thinking": enable_thinking_val}
+                        if enable_thinking_val is not None
+                        else {}
+                    ),
                 )
                 # Run in thread pool to allow asyncio timeout to work
                 output = await asyncio.to_thread(
@@ -348,7 +367,7 @@ class SimpleEngine(BaseEngine):
                     max_tokens=max_tokens,
                     temperature=temperature,
                     top_p=top_p,
-                    **kwargs,
+                    **kwargs_copy,
                 )
                 # Return raw text — server handles cleaning after
                 # tool parsing and reasoning extraction.
@@ -375,8 +394,9 @@ class SimpleEngine(BaseEngine):
                                     add_generation_prompt=True,
                                 )
                                 prompt_tokens = len(prompt_ids)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning(f"Failed to compute prompt_tokens: {e}")
+                                prompt_tokens = 0
 
                 return GenerationOutput(
                     text=text,
@@ -405,7 +425,7 @@ class SimpleEngine(BaseEngine):
             raise RuntimeError("build_prompt is not supported for MLLM models")
 
         template_tools = convert_tools_for_template(tools) if tools else None
-        enable_thinking = kwargs.get("enable_thinking", None)
+        enable_thinking = kwargs.get("enable_thinking")
 
         return shared_apply_chat_template(
             self._model.tokenizer,
@@ -421,6 +441,7 @@ class SimpleEngine(BaseEngine):
         max_tokens: int = 256,
         temperature: float = 0.7,
         top_p: float = 0.9,
+        stop: list[str] | None = None,
         tools: list[dict] | None = None,
         images: list[str] | None = None,
         videos: list[str] | None = None,
@@ -434,6 +455,7 @@ class SimpleEngine(BaseEngine):
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             top_p: Top-p sampling
+            stop: Stop sequences
             tools: Optional tool definitions
             images: Optional image URLs/paths
             videos: Optional video URLs/paths
@@ -450,45 +472,49 @@ class SimpleEngine(BaseEngine):
 
         # Build prompt using tokenizer
         if self._is_mllm:
-            # For MLLM, use stream_chat which yields tokens incrementally
-            accumulated_text = ""
-            token_count = 0
+            # For MLLM, use stream_chat which yields tokens incrementally.
+            # Must hold the generation lock to prevent concurrent Metal
+            # command buffer conflicts with other generation methods.
+            async with self._generation_lock:
+                accumulated_text = ""
+                token_count = 0
 
-            # Run stream_chat in thread pool since it's synchronous
-            def run_stream():
-                return list(
-                    self._model.stream_chat(
-                        messages=messages,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        **kwargs,
+                # Run the synchronous generator in a thread
+                sync_gen = self._model.stream_chat(
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    **kwargs,
+                )
+
+                while True:
+                    try:
+                        chunk = await asyncio.to_thread(next, sync_gen)
+                    except StopIteration:
+                        break
+
+                    token_count += 1
+                    new_text = chunk.text if hasattr(chunk, "text") else str(chunk)
+                    accumulated_text += new_text
+
+                    finished = chunk.finish_reason is not None
+
+                    yield GenerationOutput(
+                        text=accumulated_text,
+                        new_text=new_text,
+                        prompt_tokens=getattr(chunk, "prompt_tokens", 0),
+                        completion_tokens=token_count,
+                        finished=finished,
+                        finish_reason=chunk.finish_reason if finished else None,
                     )
-                )
 
-            chunks = await asyncio.to_thread(run_stream)
-
-            for chunk in chunks:
-                token_count += 1
-                new_text = chunk.text if hasattr(chunk, "text") else str(chunk)
-                accumulated_text += new_text
-
-                finished = chunk.finish_reason is not None
-
-                yield GenerationOutput(
-                    text=accumulated_text,
-                    new_text=new_text,
-                    prompt_tokens=getattr(chunk, "prompt_tokens", 0),
-                    completion_tokens=token_count,
-                    finished=finished,
-                    finish_reason=chunk.finish_reason if finished else None,
-                )
-
-                if finished:
-                    break
+                    if finished:
+                        break
             return
 
         # For LLM, apply chat template and stream
-        enable_thinking = kwargs.pop("enable_thinking", None)
+        enable_thinking = kwargs.get("enable_thinking")
         prompt = shared_apply_chat_template(
             self._model.tokenizer,
             messages,
@@ -564,7 +590,7 @@ class SimpleEngine(BaseEngine):
         self._model.kv_group_size = self._kv_group_size
         self._model._prompt_cache = None
         self._model._cached_token_ids = []
-        self._model._cache_lock = False
+        self._model._cache_lock = asyncio.Lock()
         self._model.model = model
         self._model.tokenizer = tokenizer
         self._model.draft_model = None
@@ -577,7 +603,14 @@ class SimpleEngine(BaseEngine):
             logger.info(
                 f"Loading draft model for speculative decoding: {self._draft_model_name}"
             )
-            self._model.draft_model, draft_tokenizer = mlx_load(self._draft_model_name)
+            try:
+                self._model.draft_model, draft_tokenizer = mlx_load(
+                    self._draft_model_name
+                )
+            except Exception as e:
+                logger.error(f"Failed to load draft model: {e}")
+                self._model.draft_model = None
+                raise
 
             # Validate tokenizer compatibility
             if draft_tokenizer.vocab_size != tokenizer.vocab_size:

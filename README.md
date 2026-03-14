@@ -26,31 +26,45 @@ rapid-mlx serve lmstudio-community/Qwen3-Coder-Next-MLX-4bit --tool-call-parser 
 
 ---
 
-## Performance: Rapid-MLX vs Ollama
+## Benchmarks: Rapid-MLX vs the Competition
 
-Same model, same Mac, same quantization — **Rapid-MLX is up to 2.7x faster**.
+Same model (Qwen3.5-9B 4bit), same Mac (M3 Ultra 256GB) — speed + capability side by side.
 
 ### Decode Speed (tok/s) — Higher is Better
 
 ```
 Qwen3.5-9B 4bit
-  Rapid-MLX ████████████████████████████████████████████████████████  108 tok/s
-  Ollama    ████████████████████                                      41 tok/s
+  Rapid-MLX   ████████████████████████████████████████████████████████  109 tok/s
+  mlx-lm      ████████████████████████████████████████████████████████  109 tok/s
+  Ollama      ████████████████████                                      40 tok/s
+  llama.cpp   ████████████████████                                      ~40 tok/s
 ```
 
-### Benchmark Details — Qwen3.5-9B 4bit on M3 Ultra
+### Full Comparison — Qwen3.5-9B 4bit on M3 Ultra
 
-| Metric | Rapid-MLX | Ollama | Speedup |
-|--------|----------|--------|---------|
-| Decode (short gen) | **108 tok/s** | 41 tok/s | **2.6x** |
-| Decode (long gen) | **106 tok/s** | 39 tok/s | **2.7x** |
-| Time to first token (cold) | **0.31s** | 0.38s | 1.2x |
-| Time to first token (cached) | **0.14s** | 0.19s | 1.4x |
-| Multi-turn TTFT (cached) | **0.14s** | 0.28s | **2.0x** |
+| Metric | Rapid-MLX | Ollama | mlx-lm | llama.cpp |
+|--------|-----------|--------|--------|-----------|
+| **Decode (tok/s)** | **109** | 40 | **109** | ~40 |
+| **TTFT (cold)** | 0.24s | 3.46s | 0.30s | ~0.30s |
+| **TTFT (cached)** | **0.14s** | 0.18s | 0.30s | ~0.30s |
+| **Multi-turn TTFT** | **0.14s** | 0.27s | N/A | N/A |
+| **Peak RAM** | 5.1 GB | 6.6 GB | 5.0 GB | ~5.0 GB |
+| **Tool call success** | **100%** | 100% | N/A | ~60% |
+| **Tool call recovery** | **100%** | 0% | N/A | 0% |
+| **Think-tag leak rate** | **0%** | 0%\* | N/A | N/A |
+| **Vision** | ✓ | ✓ | ✗ | ✗ |
+| **Audio (STT/TTS)** | ✓ | ✗ | ✗ | ✗ |
+| **17 tool parsers** | ✓ | ✗ | ✗ | ✗ |
+| **Prompt cache** | ✓ | ✗ | ✗ | ✗ |
+| **Cloud routing** | ✓ | ✗ | ✗ | ✗ |
 
-> **Why the gap?** Ollama uses llama.cpp (C++ with generic Metal shaders). Rapid-MLX uses Apple's [MLX framework](https://github.com/ml-explore/mlx) — purpose-built for Apple Silicon unified memory, with native Metal compute kernels and zero-copy GPU access. The result is **2-3x faster decode** on every model we've tested. Multi-turn speedup comes from our persistent prompt cache — Ollama re-prefills the full context every turn.
+\* *Ollama separates reasoning via its own `reasoning` field. Without a reasoning parser, think-tag content stays in the model's native format.*
 
-*Tested on Mac Studio M3 Ultra (256GB). Both engines running the same Qwen3.5-9B at 4-bit quantization. Benchmark script: [`scripts/benchmark_engines.py`](scripts/benchmark_engines.py). More models coming — [help us expand the table](https://github.com/raullenchai/Rapid-MLX/issues).*
+> **Why 2.7x faster decode than Ollama?** Ollama uses llama.cpp (C++ with generic Metal shaders). Rapid-MLX uses Apple's [MLX framework](https://github.com/ml-explore/mlx) — purpose-built for Apple Silicon unified memory, with native Metal compute kernels and zero-copy GPU access.
+>
+> **Why the same speed as mlx-lm?** Both use the same MLX backend. Rapid-MLX adds prompt cache (2x faster multi-turn), tool calling (17 parsers + auto-recovery), reasoning separation, vision, audio, and cloud routing — with zero speed overhead.
+
+*Tested on Mac Studio M3 Ultra (256GB). Benchmark script: [`scripts/benchmark_engines.py`](scripts/benchmark_engines.py). More models coming — [help us expand the table](https://github.com/raullenchai/Rapid-MLX/issues).*
 
 ---
 

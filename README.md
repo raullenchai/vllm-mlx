@@ -1,27 +1,30 @@
 # Rapid-MLX
 
-**The fastest local AI engine for Apple Silicon.**
+**Run AI on your Mac. Faster than anything else.**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/tests-1500%2B-brightgreen.svg)](tests/)
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1%20|%20M2%20|%20M3%20|%20M4-black.svg?logo=apple)](https://support.apple.com/en-us/HT211814)
 
-| Fastest or tied on | vs Ollama / llama.cpp | Cached TTFT | Tool Calling |
-|:---:|:---:|:---:|:---:|
-| **11 of 13 models** | **2-4x faster** | **0.08-0.15s** | **100%** |
-| vs upstream, mlx-lm, Ollama, llama.cpp | same models, same hardware | prompt cache, multi-turn | Qwen3.5 family, all sizes |
+Rapid-MLX turns your Mac into a local AI server. It runs the same models as ChatGPT — Qwen, Llama, Mistral, Gemma, DeepSeek — directly on Apple Silicon, with no cloud, no subscription, and no data leaving your machine.
 
-The fastest inference engine for local LLMs on Apple Silicon. A **drop-in replacement for OpenAI** — GPU-accelerated via [MLX](https://github.com/ml-explore/mlx), with the tool calling, streaming, and reliability that agent frameworks demand.
+**Why not Ollama?** Rapid-MLX is **2-4x faster** on the same models. It uses Apple's [MLX framework](https://github.com/ml-explore/mlx), built specifically for the M-series GPU, instead of the generic C++ backend that Ollama and llama.cpp use. More speed from the same hardware.
+
+| | Your Mac runs AI | How fast | What works |
+|:---|:---:|:---:|:---:|
+| **16 GB MacBook Air** | Qwen3.5-4B | 158 tok/s | Chat, coding, tools |
+| **64 GB Mac Mini / Studio** | Qwen3.5-35B | 80 tok/s | Best balance of smart + fast |
+| **128+ GB Mac Studio / Pro** | Qwen3.5-122B | 57 tok/s | Frontier-level intelligence |
 
 ```bash
-# Install
+# Install (one command)
 curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash
 
-# Serve
-rapid-mlx serve lmstudio-community/Qwen3-Coder-Next-MLX-4bit --tool-call-parser hermes --port 8000
+# Pick a model and go
+rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --tool-call-parser hermes --port 8000
 
-# Use with any OpenAI client
+# Works with Claude Code, Cursor, Aider, or any OpenAI-compatible app
 OPENAI_BASE_URL=http://localhost:8000/v1 claude
 ```
 

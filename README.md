@@ -1,90 +1,159 @@
-```
-  ≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋
+# Rapid-MLX
 
-       ⚡  R A P I D · M L X
-
-       The fastest local AI engine
-       for Apple Silicon
-
-  ≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋≈~≋
-```
+**The fastest local AI engine for Apple Silicon.**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/tests-1500%2B-brightgreen.svg)](tests/)
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1%20|%20M2%20|%20M3%20|%20M4-black.svg?logo=apple)](https://support.apple.com/en-us/HT211814)
 
-Run local LLMs as a **drop-in replacement for OpenAI** on your Mac. 2.7x faster than Ollama, GPU-accelerated via [MLX](https://github.com/ml-explore/mlx), with the tool calling, streaming, and reliability that agent frameworks demand. Works with **Claude Code, Cursor, Aider, Open WebUI, Continue.dev, LangChain, and any OpenAI-compatible client**.
+| Decode Speed | vs Ollama | Cached TTFT | Tool Calling |
+|:---:|:---:|:---:|:---:|
+| **174 tok/s** | **4.2x faster** | **0.08s** | **100%** |
+| Phi-4 Mini on M3 Ultra | Qwen3.5-9B: 109 vs 26 | prompt cache, multi-turn | Qwen3.5 all sizes |
+
+Run local LLMs as a **drop-in replacement for OpenAI** on your Mac. GPU-accelerated via [MLX](https://github.com/ml-explore/mlx) with the tool calling, streaming, and reliability that agent frameworks demand.
 
 ```bash
-# Install (one-liner, Apple Silicon only)
+# Install
 curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash
 
-# Start serving
+# Serve
 rapid-mlx serve lmstudio-community/Qwen3-Coder-Next-MLX-4bit --tool-call-parser hermes --port 8000
+
+# Use with any OpenAI client
+OPENAI_BASE_URL=http://localhost:8000/v1 claude
 ```
 
 ---
 
-## Benchmarks: Rapid-MLX vs the Competition
+## Benchmarks
 
-Same model (Qwen3.5-9B 4bit), same Mac (M3 Ultra 256GB) — speed + capability side by side.
+All benchmarks on **Mac Studio M3 Ultra (256GB)**. Same model, same hardware.
 
-### Decode Speed (tok/s) — Higher is Better
+### Rapid-MLX vs Ollama & llama.cpp
+
+The question everyone asks: *how does it compare?*
+
+| Model | Rapid-MLX | Ollama | llama.cpp | Speedup |
+|-------|----------|--------|-----------|---------|
+| **Phi-4 Mini 14B** | **174** tok/s | 51 tok/s | 55 tok/s | **3.4x** vs Ollama |
+| **Qwen3.5-9B** | **109** tok/s | 26 tok/s | — | **4.2x** vs Ollama |
+| **Gemma 3 12B** | 49 tok/s | 54 tok/s | — | 0.9x |
+
+> **Why faster?** Ollama and llama.cpp use C++ with generic Metal shaders. Rapid-MLX uses Apple's [MLX framework](https://github.com/ml-explore/mlx) — purpose-built for Apple Silicon unified memory with native Metal compute kernels and zero-copy GPU access.
+>
+> **Why slower on Gemma 3?** Gemma's architecture doesn't benefit from MLX optimizations as much. We report honestly.
+
+### TTFT — The Killer Feature
+
+Prompt cache keeps multi-turn conversations fast. Ollama re-prefills the full context every turn.
+
+| Model | Rapid-MLX (cached) | Upstream vllm-mlx | Speedup |
+|-------|-------------------|-------------------|---------|
+| Hermes-3-Llama 8B | **0.08s** | 0.18s | 2.3x |
+| Phi-4 Mini 14B | **0.10s** | 0.15s | 1.5x |
+| Qwen3-Coder-Next 80B | **0.10s** | 0.27s | 2.7x |
+| Devstral-Small-2 24B | **0.10s** | 0.38s | 3.8x |
+| Qwen3.5-9B | **0.18s** | 0.26s | 1.4x |
+| Mistral Small 24B | **0.10s** | 0.38s | 3.8x |
+| GLM-4.5-Air | **0.12s** | 0.47s | 3.9x |
+
+*Ollama has no prompt cache. Every turn re-prefills the full context.*
+
+**"Upstream"** = original [vllm-mlx](https://github.com/waybarrios/vllm-mlx) (our fork base). Rapid-MLX adds prompt cache, 17 tool parsers, reasoning separation, and optimized scheduling.
+
+<details>
+<summary><strong>Full 15-model decode comparison (bar chart)</strong></summary>
 
 ```
-Qwen3.5-9B 4bit
-  Rapid-MLX   ████████████████████████████████████████████████████████  109 tok/s
-  mlx-lm      ████████████████████████████████████████████████████████  109 tok/s
-  Ollama      ████████████████████                                      40 tok/s
-  llama.cpp   ████████████████████                                      ~40 tok/s
+Phi-4 Mini 14B            ⚡ Rapid-MLX  ████████████████████████████████████████████████████████████  174
+                            mlx-lm     ████████████████████████                                      77
+                            llama.cpp  █████████████████                                              55
+                            Ollama     ████████████████                                               51
+
+Qwen3.5-4B                ⚡ Rapid-MLX  █████████████████████████████████████████████████████         158
+                            mlx-lm     ████████████████████████████████████████████████████████       168
+
+GPT-OSS 20B               ⚡ Rapid-MLX  ████████████████████████████████████████                      123
+                            mlx-lm     █████████████████████████                                      79
+
+Hermes-3-Llama 8B         ⚡ Rapid-MLX  ████████████████████████████████████████                      123
+                            mlx-lm     █████████████████████████████████████████                      127
+
+Qwen3.5-9B                ⚡ Rapid-MLX  ███████████████████████████████████                           109
+                            mlx-lm     ███████████████                                                61
+                            Ollama     ████████                                                       26
+
+Qwen3.5-35B-A3B           ⚡ Rapid-MLX  ██████████████████████████                                     82
+                            mlx-lm     ███████████████████████████                                     85
+
+Qwen3-Coder-Next 80B      ⚡ Rapid-MLX  ████████████████████████                                       74
+                            mlx-lm     ████████████████████████                                        76
+
+GLM-4.7-Flash 9B          ⚡ Rapid-MLX  ███████████████████                                            60
+
+Gemma 3 12B                 Rapid-MLX  ███████████████                                                49
+                            mlx-lm     ███████████████████████                                         73
+
+Devstral-Small-2 24B      ⚡ Rapid-MLX  ███████████████                                                48
+                            mlx-lm     ███████████████                                                 49
+
+Mistral Small 24B          ⚡ Rapid-MLX  ███████████████                                                48
+                            mlx-lm     █████████████                                                   41
+
+Qwen3.5-122B-A10B          ⚡ Rapid-MLX  ██████████████                                                 44
+                            mlx-lm     ██████████████                                                  45
+
+Qwen3.5-27B                 Rapid-MLX  ████████████                                                   39
+                            mlx-lm     ████████████                                                    39
 ```
 
-### Full Comparison — Qwen3.5-9B 4bit on M3 Ultra
+</details>
 
-| Metric | Rapid-MLX | Ollama | mlx-lm | llama.cpp |
-|--------|-----------|--------|--------|-----------|
-| **Decode (tok/s)** | **109** | 40 | **109** | ~40 |
-| **TTFT (cold)** | 0.24s | 3.46s | 0.30s | ~0.30s |
-| **TTFT (cached)** | **0.14s** | 0.18s | 0.30s | ~0.30s |
-| **Multi-turn TTFT** | **0.14s** | 0.27s | N/A | N/A |
-| **Peak RAM** | 5.1 GB | 6.6 GB | 5.0 GB | ~5.0 GB |
-| **Tool call success** | **100%** | 100% | N/A | ~60% |
-| **Tool call recovery** | **100%** | 0% | N/A | 0% |
-| **Think-tag leak rate** | **0%** | 0%\* | N/A | N/A |
+<details>
+<summary><strong>Full multi-engine comparison table</strong></summary>
+
+| Model | RAM | Rapid-MLX | Upstream | Ollama | llama.cpp | mlx-lm | **Best Speedup** |
+|-------|-----|----------|----------|--------|-----------|--------|-----------------|
+| **Phi-4 Mini 14B** | 2.4 GB | **174** | 170 | 51 | 55 | 77 | **3.4x** vs Ollama |
+| **Qwen3.5-4B** | 2.7 GB | **~158** | 155 | - | - | 168 | ~1.0x |
+| **GPT-OSS 20B** | 11.8 GB | **123** | 79 | - | - | 79 | **1.56x** vs upstream |
+| **Hermes-3-Llama 8B** | 4.7 GB | **123** | 122 | - | - | 127 | ~1.0x |
+| **Qwen3.5-9B** | 5.1 GB | **109** | 104 | 26 | N/A | 61 | **4.2x** vs Ollama |
+| **Qwen3.5-35B-A3B** | 34.8 GB | **82** | 80 | - | - | 85 | ~1.0x |
+| **Qwen3-Coder 80B** | 42.2 GB | **74** | 69 | - | - | 76 | 1.07x vs upstream |
+| **GLM-4.7-Flash 9B** | 30.1 GB | **60** | 56 | - | - | - | 1.07x vs upstream |
+| **Gemma 3 12B** | 8.5 GB | 49 | - | 54 | N/A | 73 | 0.7x |
+| **Devstral-Small-2 24B** | 12.7 GB | **48** | 48 | - | - | 49 | ~1.0x |
+| **Mistral Small 24B** | 12.7 GB | **48** | 47 | - | - | 41 | **1.2x** vs mlx-lm |
+| **Qwen3.5-122B-A10B** | 121.3 GB | 44 | 43 | - | - | 45 | ~1.0x |
+| **Qwen3.5-27B** | 14.5 GB | 39 | 38 | - | - | 39 | ~1.0x |
+
+</details>
+
+### Capability Comparison — What Matters for Agents
+
+| Feature | Rapid-MLX | Ollama | llama.cpp | mlx-lm |
+|---------|-----------|--------|-----------|--------|
+| **Tool calling** | 100% (Qwen) | 100% (Qwen) | 80% (Phi-4) | N/A |
+| **Tool call recovery** | 100% | 100% | 100% | N/A |
+| **Think-tag leak** | 0% | 0% | 0% | N/A |
+| **Prompt cache** | ✓ (0.1s TTFT) | ✗ (0.27s) | ✗ | ✗ |
 | **Vision** | ✓ | ✓ | ✗ | ✗ |
 | **Audio (STT/TTS)** | ✓ | ✗ | ✗ | ✗ |
 | **17 tool parsers** | ✓ | ✗ | ✗ | ✗ |
-| **Prompt cache** | ✓ | ✗ | ✗ | ✗ |
 | **Cloud routing** | ✓ | ✗ | ✗ | ✗ |
+| **Streaming** | ✓ | ✓ | ✓ | ✗ |
+| **OpenAI API** | ✓ | ✓ | ✓ | ✗ |
 
-\* *Ollama separates reasoning via its own `reasoning` field. Without a reasoning parser, think-tag content stays in the model's native format.*
+> **Why faster than mlx-lm?** Same MLX backend, but Rapid-MLX has persistent prompt cache (reducing repeat prefill), reasoning separation (eliminating wasted thinking tokens), and an OpenAI-compatible server layer — all with near-zero overhead.
 
-> **Why 2.7x faster decode than Ollama?** Ollama uses llama.cpp (C++ with generic Metal shaders). Rapid-MLX uses Apple's [MLX framework](https://github.com/ml-explore/mlx) — purpose-built for Apple Silicon unified memory, with native Metal compute kernels and zero-copy GPU access.
->
-> **Why the same speed as mlx-lm?** Both use the same MLX backend. Rapid-MLX adds prompt cache (2x faster multi-turn), tool calling (17 parsers + auto-recovery), reasoning separation, vision, audio, and cloud routing — with zero speed overhead.
-
-*Tested on Mac Studio M3 Ultra (256GB). Benchmark script: [`scripts/benchmark_engines.py`](scripts/benchmark_engines.py). More models coming — [help us expand the table](https://github.com/raullenchai/Rapid-MLX/issues).*
+*Benchmark script: [`scripts/benchmark_engines.py`](scripts/benchmark_engines.py). Run your own: `python scripts/benchmark_engines.py --engine rapid-mlx ollama --runs 3`*
 
 ---
 
-## Why Rapid-MLX?
-
-Faster inference is just the start. Local models break in agent workflows — quantized models forget their tool format, streaming leaks XML into content, disconnected clients lock the server. **Rapid-MLX fixes all of that at the server level**, so every client just works.
-
-| Capability | What You Get |
-|-----------|-------------|
-| **2-3x faster decode** | MLX + Metal vs llama.cpp — [see benchmarks above](#performance-rapid-mlx-vs-ollama) |
-| **Tool calling** | 17 parser formats, streaming, auto-recovery of degraded outputs |
-| **Agent reliability** | Disconnect guard, think-tag filtering, text-format tool call recovery |
-| **Reasoning separation** | Clean `reasoning_content` field (0% leak rate) |
-| **Prompt cache** | Persistent KV cache — **2x faster multi-turn** vs Ollama |
-| **Cloud routing** | Auto-offload large prefills to GPT-5/Claude when local would be slow |
-| **KV cache quantization** | 4-bit and 8-bit, halves memory for long contexts |
-| **Multimodal** | Vision, audio (STT/TTS), video, embeddings |
-| **1500+ tests** | Unit tests + end-to-end agent simulation |
-
-### Works With
+## Works With
 
 | Client | Status | Notes |
 |--------|--------|-------|
@@ -98,7 +167,7 @@ Faster inference is just the start. Local models break in agent workflows — qu
 | [LangChain](https://langchain.com) | Compatible | Standard OpenAI client |
 | Any OpenAI SDK client | Compatible | Drop-in `base_url` swap |
 
-> **Community-maintained tables.** Tested on M3 Ultra so far — if you verify a client or model on your hardware, [open an issue](https://github.com/raullenchai/Rapid-MLX/issues) or PR to update. We can't test every Mac + model + client combo alone.
+> **Community-maintained tables.** Tested on M3 Ultra so far — if you verify a client or model on your hardware, [open an issue](https://github.com/raullenchai/Rapid-MLX/issues) or PR to update.
 
 ---
 
@@ -155,26 +224,165 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-Works as a drop-in backend for any OpenAI-compatible client:
+---
+
+## Choose Your Model
+
+### Hardware Requirements
+
+How much RAM do you need? Model weights must fit in unified memory, plus ~20% headroom for KV cache. If your Mac uses >90% of RAM, you'll hit swap thrashing and decode speed drops to <5 tok/s.
+
+| Mac RAM | Recommended Model | Weights | Decode Speed | Notes |
+|---------|-------------------|---------|-------------|-------|
+| 16 GB | Qwen3.5-4B 4bit | 2.4 GB | ~158 tok/s | Chat, simple tasks, 73% tool calling |
+| 24 GB | Qwen3.5-9B 4bit | 5.1 GB | ~106 tok/s | Good all-rounder — 71% avg |
+| 32 GB | Qwen3.5-27B 4bit | 15.3 GB | ~38 tok/s | 76% avg, solid for coding |
+| 64 GB | Qwen3.5-35B-A3B 8bit | 37 GB | ~80 tok/s | **Sweet spot** — 85% avg, fast MoE |
+| 96 GB | Qwen3.5-122B mxfp4 | 65 GB | ~57 tok/s | Best model fits comfortably |
+| 128 GB | Qwen3.5-122B mxfp4 + `--kv-bits 4` | 65 GB | ~57 tok/s | Long contexts (50K+ tokens) |
+| 192 GB+ | Qwen3.5-122B 8bit | 130 GB | ~43 tok/s | Maximum quality — 89% avg |
+
+**Rule of thumb:** model weights + 20% = minimum RAM. Use `--kv-bits 4` or `--kv-bits 8` to halve KV cache memory for long contexts.
+
+#### Help Us Fill This Table
+
+These numbers are from a single M3 Ultra (256GB). We need community data for other configs — M1, M2, M4, MacBook Air/Pro, different RAM tiers. If you test a model, **copy the template below into a [new issue](https://github.com/raullenchai/Rapid-MLX/issues/new):**
+
+```
+**Hardware:** Mac ___ (___GB RAM), macOS ___
+**Model:** ___ (quantization: ___)
+**Server flags:** `rapid-mlx serve --model ___ ...`
+**Decode speed:** ___ tok/s
+**TTFT (cold / cached):** ___s / ___s
+**Agent client tested:** Claude Code / Cursor / Aider / other
+**Did it fit in RAM?** Yes / No (swap used: ___GB)
+**Notes:** ___
+```
+
+### Recommended Models
+
+| Model | Params | Quant | RAM | Decode | Tool Parser | Best For |
+|-------|--------|-------|-----|--------|-------------|----------|
+| [Qwen3.5-122B-A10B](https://huggingface.co/mlx-community/Qwen3.5-122B-A10B-8bit) | 122B/10B | 8bit | 130GB | 43 tok/s | `hermes` | **Best overall** — 89% avg |
+| [Qwen3.5-122B-A10B](https://huggingface.co/nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx) | 122B/10B | mxfp4 | 65GB | 57 tok/s | `hermes` | **Best value** — same quality, half the RAM |
+| [Qwen3.5-35B-A3B](https://huggingface.co/mlx-community/Qwen3.5-35B-A3B-8bit) | 35B/3B | 8bit | 37GB | 80 tok/s | `hermes` | Best for 64GB Macs — 85% avg |
+| [Qwen3-Coder-Next](https://huggingface.co/lmstudio-community/Qwen3-Coder-Next-MLX-4bit) | 80B/3B | 4bit | 45GB | 74 tok/s | `hermes` | Fast coding agent |
+| [Qwen3.5-9B](https://huggingface.co/mlx-community/Qwen3.5-9B-4bit) | 9B | 4bit | 5.1GB | 106 tok/s | `hermes` | Best small model — 71% avg, fits any Mac |
+| [Qwen3.5-4B](https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit) | 4B | 4bit | 2.4GB | 158 tok/s | `hermes` | Ultralight — 56% avg, 16GB MacBook Air |
+
+Benchmarks on Mac Studio M3 Ultra (256GB), 800 GB/s memory bandwidth.
+
+### Quick Start Commands
 
 ```bash
-# Claude Code
-OPENAI_BASE_URL=http://localhost:8000/v1 claude
+# Qwen3.5-122B — best overall for agent workloads (74GB, 41-47 tok/s)
+rapid-mlx serve \
+  --model nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx \
+  --tool-call-parser hermes \
+  --reasoning-parser qwen3 \
+  --prefill-step-size 8192 \
+  --kv-bits 8 \
+  --port 8000
 
-# Cursor — set in Settings > Models > OpenAI API Base
-# http://localhost:8000/v1
+# Qwen3-Coder-Next — fast coding agent (3B active, ~100 tok/s)
+rapid-mlx serve \
+  --model lmstudio-community/Qwen3-Coder-Next-MLX-4bit \
+  --tool-call-parser hermes \
+  --prefill-step-size 8192 \
+  --port 8000
 
-# Aider
-aider --openai-api-base http://localhost:8000/v1
+# Qwen3.5-35B-A3B — best for 64GB Macs (85% avg, 80 tok/s)
+rapid-mlx serve \
+  --model mlx-community/Qwen3.5-35B-A3B-8bit \
+  --tool-call-parser hermes \
+  --reasoning-parser qwen3 \
+  --prefill-step-size 8192 \
+  --port 8000
 
-# Any OpenAI SDK — just set base_url
+# Qwen3.5-9B — lightweight, fits any Mac (71% avg, 106 tok/s)
+rapid-mlx serve \
+  --model mlx-community/Qwen3.5-9B-4bit \
+  --tool-call-parser hermes \
+  --reasoning-parser qwen3 \
+  --port 8000
+
+# DeepSeek-R1 — reasoning-focused
+rapid-mlx serve \
+  --model mlx-community/DeepSeek-R1-Distill-Qwen-14B-4bit \
+  --tool-call-parser deepseek \
+  --reasoning-parser deepseek_r1 \
+  --port 8000
+
+# Qwen3 VL — vision + language
+rapid-mlx serve \
+  --model mlx-community/Qwen3-VL-4B-Instruct-MLX-4bit \
+  --mllm \
+  --port 8000
 ```
+
+### Tool Parser Selection Guide
+
+| Model Family | `--tool-call-parser` | `--reasoning-parser` | Notes |
+|-------------|---------------------|---------------------|-------|
+| Qwen3.5-122B-A10B | `hermes` | `qwen3` | **Recommended** — best agent stability |
+| Qwen3.5-35B/27B/9B/4B | `hermes` | `qwen3` | Same family, same parsers |
+| Qwen3-Coder-Next | `hermes` | *(none)* | Non-thinking mode, fast |
+| Qwen3 (thinking) | `qwen` or `qwen3_coder` | `qwen3` | With `<think>` tags |
+| MiniMax-M2.5 | `minimax` | `minimax` | XML tool format |
+| GPT-OSS | `seed_oss` | `gpt_oss` | Native format |
+| GLM-4.7 | `glm47` | *(none)* | GLM-specific format |
+| Llama 3.x | `llama` | *(none)* | JSON tool format |
+| DeepSeek-R1 | `deepseek` | `deepseek_r1` | With reasoning |
+| DeepSeek-V3.1 | `deepseek_v31` | *(none)* | Updated format |
+| Mistral | `hermes` | *(none)* | Hermes-compatible |
+| Functionary | `functionary` | *(none)* | Custom format |
+
+All 17 parsers include automatic text-format tool call recovery — if a quantized model degrades and outputs tool calls as plain text, they're automatically converted back to structured `tool_calls`.
+
+### Eval Benchmarks
+
+17 models benchmarked across 4 eval suites: tool calling (30 scenarios), coding (HumanEval+), reasoning (MATH-500), and general knowledge (MMLU-Pro). All run with `enable_thinking: false` on Mac Studio M3 Ultra (256GB).
+
+<details>
+<summary><strong>Full eval results table</strong></summary>
+
+| Model | Quant | RAM | Decode | Tools | Code | Reason | General | Avg |
+|-------|-------|-----|--------|-------|------|--------|---------|-----|
+| Qwen3.5-122B-A10B | 8bit | 129.8 GB | 43 t/s | 87% | **90%** | **90%** | **90%** | **89%** |
+| Qwen3.5-122B-A10B | mxfp4 | 65.0 GB | 57 t/s | **90%** | **90%** | 80% | **90%** | 88% |
+| Qwen3.5-35B-A3B | 8bit | 36.9 GB | 80 t/s | **90%** | **90%** | 80% | 80% | 85% |
+| Qwen3-Coder-Next | 6bit | 64.8 GB | 66 t/s | 87% | **90%** | 80% | 70% | 82% |
+| Qwen3-Coder-Next | 4bit | 44.9 GB | 74 t/s | **90%** | **90%** | 70% | 70% | 80% |
+| GLM-4.5-Air | 4bit | 60.3 GB | 54 t/s | 73% | **90%** | 70% | 80% | 78% |
+| GLM-4.7-Flash | 8bit | 31.9 GB | 57 t/s | 73% | **100%** | **90%** | 50% | 78% |
+| Qwen3.5-27B | 4bit | 15.3 GB | 38 t/s | 83% | **90%** | 50% | 80% | 76% |
+| Qwen3.5-35B-A3B | 4bit | 19.6 GB | 95 t/s | 87% | **90%** | 50% | 70% | 74% |
+| Qwen3.5-9B | 4bit | 5.1 GB | 106 t/s | 83% | 70% | 60% | 70% | 71% |
+| MiniMax-M2.5 | 4bit | 128.9 GB | 50 t/s | 87% | 10%\* | 80% | **90%** | 67% |
+| Devstral-Small-2 | 4bit | 13.4 GB | 47 t/s | 17% | **90%** | 70% | 70% | 62% |
+| GPT-OSS-20B | mxfp4-q8 | 12.1 GB | 124 t/s | 80% | 20% | 60% | **90%** | 62% |
+| Qwen3.5-4B | 4bit | 2.4 GB | 158 t/s | 73% | 50% | 50% | 50% | 56% |
+| Mistral-Small-3.2 | 4bit | 13.4 GB | 47 t/s | 17% | 80% | 60% | 60% | 54% |
+| Hermes-3-Llama-8B | 4bit | 4.6 GB | 123 t/s | 17% | 20% | 30% | 40% | 27% |
+| Qwen3-0.6B | 4bit | 0.4 GB | 365 t/s | 30% | 20% | 20% | 30% | 25% |
+
+\* *MiniMax coding score likely affected by a code extraction parser issue, not model capability.*
+
+</details>
+
+```bash
+# Run all eval suites against a running server (~5 min)
+python evals/run_eval.py --model "My-Model" --quantization 4bit --port 8000
+```
+
+See **[evals/](evals/)** for methodology, prompts, and how to contribute your results.
 
 ---
 
 ## Client Setup
 
-### Claude Code
+<details>
+<summary><strong>Claude Code</strong></summary>
 
 ```bash
 # Option 1: Environment variable (recommended)
@@ -193,14 +401,20 @@ OPENAI_BASE_URL=http://localhost:8000/v1 claude
 
 Set the model name in Claude Code with `/model` — use `default` or match whatever `--model` you loaded.
 
-### Cursor
+</details>
+
+<details>
+<summary><strong>Cursor</strong></summary>
 
 1. Open **Settings > Models > OpenAI API Base**
 2. Set the base URL to `http://localhost:8000/v1`
 3. Add a model named `default` (or match your `--model`)
 4. Set API key to any non-empty string (e.g. `not-needed`)
 
-### Continue.dev (VS Code / JetBrains)
+</details>
+
+<details>
+<summary><strong>Continue.dev (VS Code / JetBrains)</strong></summary>
 
 Add to `~/.continue/config.yaml`:
 
@@ -213,7 +427,10 @@ models:
     apiKey: not-needed
 ```
 
-### OpenCode
+</details>
+
+<details>
+<summary><strong>OpenCode</strong></summary>
 
 Add to `~/.config/opencode/opencode.json`:
 
@@ -234,7 +451,10 @@ Add to `~/.config/opencode/opencode.json`:
 }
 ```
 
-### Open WebUI (Self-Hosted ChatGPT)
+</details>
+
+<details>
+<summary><strong>Open WebUI (Self-Hosted ChatGPT)</strong></summary>
 
 Use Rapid-MLX as the backend for [Open WebUI](https://github.com/open-webui/open-webui) — a self-hosted ChatGPT-style interface with chat history, multi-user support, and RAG. No Ollama required.
 
@@ -253,7 +473,10 @@ Then open `http://localhost:3000`, create an account, and start chatting. Your R
 
 > **Migrating from Ollama?** Just swap the backend — Open WebUI works identically with Rapid-MLX, but you get prompt caching (10-30x faster multi-turn), reliable tool calling, and better agent stability.
 
-### Aider
+</details>
+
+<details>
+<summary><strong>Aider</strong></summary>
 
 ```bash
 aider --openai-api-base http://localhost:8000/v1 --openai-api-key not-needed
@@ -266,6 +489,8 @@ export OPENAI_API_BASE=http://localhost:8000/v1
 export OPENAI_API_KEY=not-needed
 aider
 ```
+
+</details>
 
 ---
 
@@ -386,154 +611,6 @@ rapid-mlx serve \
   --mllm \
   --port 8000
 ```
-
----
-
-## Supported Models
-
-### Recommended
-
-| Model | Params | Quant | RAM | Decode | Tool Parser | Best For |
-|-------|--------|-------|-----|--------|-------------|----------|
-| [Qwen3.5-122B-A10B](https://huggingface.co/mlx-community/Qwen3.5-122B-A10B-8bit) | 122B/10B | 8bit | 130GB | 43 tok/s | `hermes` | **Best overall** — 89% avg |
-| [Qwen3.5-122B-A10B](https://huggingface.co/nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx) | 122B/10B | mxfp4 | 65GB | 57 tok/s | `hermes` | **Best value** — same quality, half the RAM |
-| [Qwen3.5-35B-A3B](https://huggingface.co/mlx-community/Qwen3.5-35B-A3B-8bit) | 35B/3B | 8bit | 37GB | 80 tok/s | `hermes` | Best for 64GB Macs — 85% avg |
-| [Qwen3-Coder-Next](https://huggingface.co/lmstudio-community/Qwen3-Coder-Next-MLX-4bit) | 80B/3B | 4bit | 45GB | 74 tok/s | `hermes` | Fast coding agent |
-| [Qwen3.5-9B](https://huggingface.co/mlx-community/Qwen3.5-9B-4bit) | 9B | 4bit | 5.1GB | 106 tok/s | `hermes` | Best small model — 71% avg, fits any Mac |
-| [Qwen3.5-4B](https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit) | 4B | 4bit | 2.4GB | 158 tok/s | `hermes` | Ultralight — 56% avg, 16GB MacBook Air |
-
-Benchmarks on Mac Studio M3 Ultra (256GB), 800 GB/s memory bandwidth.
-
-### Hardware Requirements
-
-How much RAM do you need? Model weights must fit in unified memory, plus ~20% headroom for KV cache. If your Mac uses >90% of RAM, you'll hit swap thrashing and decode speed drops to <5 tok/s.
-
-| Mac RAM | Recommended Model | Weights | Decode Speed | Notes |
-|---------|-------------------|---------|-------------|-------|
-| 16 GB | Qwen3.5-4B 4bit | 2.4 GB | ~158 tok/s | Chat, simple tasks, 73% tool calling |
-| 24 GB | Qwen3.5-9B 4bit | 5.1 GB | ~106 tok/s | Good all-rounder — 71% avg |
-| 32 GB | Qwen3.5-27B 4bit | 15.3 GB | ~38 tok/s | 76% avg, solid for coding |
-| 64 GB | Qwen3.5-35B-A3B 8bit | 37 GB | ~80 tok/s | **Sweet spot** — 85% avg, fast MoE |
-| 96 GB | Qwen3.5-122B mxfp4 | 65 GB | ~57 tok/s | Best model fits comfortably |
-| 128 GB | Qwen3.5-122B mxfp4 + `--kv-bits 4` | 65 GB | ~57 tok/s | Long contexts (50K+ tokens) |
-| 192 GB+ | Qwen3.5-122B 8bit | 130 GB | ~43 tok/s | Maximum quality — 89% avg |
-
-**Rule of thumb:** model weights + 20% = minimum RAM. Use `--kv-bits 4` or `--kv-bits 8` to halve KV cache memory for long contexts.
-
-#### Help Us Fill This Table
-
-These numbers are from a single M3 Ultra (256GB). We need community data for other configs — M1, M2, M4, MacBook Air/Pro, different RAM tiers. If you test a model, **copy the template below into a [new issue](https://github.com/raullenchai/Rapid-MLX/issues/new):**
-
-```
-**Hardware:** Mac ___ (___GB RAM), macOS ___
-**Model:** ___ (quantization: ___)
-**Server flags:** `rapid-mlx serve --model ___ ...`
-**Decode speed:** ___ tok/s
-**TTFT (cold / cached):** ___s / ___s
-**Agent client tested:** Claude Code / Cursor / Aider / other
-**Did it fit in RAM?** Yes / No (swap used: ___GB)
-**Notes:** ___
-```
-
-### Eval Benchmarks
-
-17 models benchmarked across 4 eval suites: tool calling (30 scenarios), coding (HumanEval+), reasoning (MATH-500), and general knowledge (MMLU-Pro). All run with `enable_thinking: false` on Mac Studio M3 Ultra (256GB).
-
-| Model | Quant | RAM | Decode | Tools | Code | Reason | General | Avg |
-|-------|-------|-----|--------|-------|------|--------|---------|-----|
-| Qwen3.5-122B-A10B | 8bit | 129.8 GB | 43 t/s | 87% | **90%** | **90%** | **90%** | **89%** |
-| Qwen3.5-122B-A10B | mxfp4 | 65.0 GB | 57 t/s | **90%** | **90%** | 80% | **90%** | 88% |
-| Qwen3.5-35B-A3B | 8bit | 36.9 GB | 80 t/s | **90%** | **90%** | 80% | 80% | 85% |
-| Qwen3-Coder-Next | 6bit | 64.8 GB | 66 t/s | 87% | **90%** | 80% | 70% | 82% |
-| Qwen3-Coder-Next | 4bit | 44.9 GB | 74 t/s | **90%** | **90%** | 70% | 70% | 80% |
-| GLM-4.5-Air | 4bit | 60.3 GB | 54 t/s | 73% | **90%** | 70% | 80% | 78% |
-| GLM-4.7-Flash | 8bit | 31.9 GB | 57 t/s | 73% | **100%** | **90%** | 50% | 78% |
-| Qwen3.5-27B | 4bit | 15.3 GB | 38 t/s | 83% | **90%** | 50% | 80% | 76% |
-| Qwen3.5-35B-A3B | 4bit | 19.6 GB | 95 t/s | 87% | **90%** | 50% | 70% | 74% |
-| Qwen3.5-9B | 4bit | 5.1 GB | 106 t/s | 83% | 70% | 60% | 70% | 71% |
-| MiniMax-M2.5 | 4bit | 128.9 GB | 50 t/s | 87% | 10%\* | 80% | **90%** | 67% |
-| Devstral-Small-2 | 4bit | 13.4 GB | 47 t/s | 17% | **90%** | 70% | 70% | 62% |
-| GPT-OSS-20B | mxfp4-q8 | 12.1 GB | 124 t/s | 80% | 20% | 60% | **90%** | 62% |
-| Qwen3.5-4B | 4bit | 2.4 GB | 158 t/s | 73% | 50% | 50% | 50% | 56% |
-| Mistral-Small-3.2 | 4bit | 13.4 GB | 47 t/s | 17% | 80% | 60% | 60% | 54% |
-| Hermes-3-Llama-8B | 4bit | 4.6 GB | 123 t/s | 17% | 20% | 30% | 40% | 27% |
-| Qwen3-0.6B | 4bit | 0.4 GB | 365 t/s | 30% | 20% | 20% | 30% | 25% |
-
-\* *MiniMax coding score likely affected by a code extraction parser issue, not model capability.*
-
-```bash
-# Run all eval suites against a running server (~5 min)
-python evals/run_eval.py --model "My-Model" --quantization 4bit --port 8000
-```
-
-See **[evals/](evals/)** for methodology, prompts, and how to contribute your results.
-
-### Quick Start Commands
-
-```bash
-# Qwen3.5-122B — best overall for agent workloads (74GB, 41-47 tok/s)
-rapid-mlx serve \
-  --model nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx \
-  --tool-call-parser hermes \
-  --reasoning-parser qwen3 \
-  --prefill-step-size 8192 \
-  --kv-bits 8 \
-  --port 8000
-
-# Qwen3-Coder-Next — fast coding agent (3B active, ~100 tok/s)
-rapid-mlx serve \
-  --model lmstudio-community/Qwen3-Coder-Next-MLX-4bit \
-  --tool-call-parser hermes \
-  --prefill-step-size 8192 \
-  --port 8000
-
-# Qwen3.5-35B-A3B — best for 64GB Macs (85% avg, 80 tok/s)
-rapid-mlx serve \
-  --model mlx-community/Qwen3.5-35B-A3B-8bit \
-  --tool-call-parser hermes \
-  --reasoning-parser qwen3 \
-  --prefill-step-size 8192 \
-  --port 8000
-
-# Qwen3.5-9B — lightweight, fits any Mac (71% avg, 106 tok/s)
-rapid-mlx serve \
-  --model mlx-community/Qwen3.5-9B-4bit \
-  --tool-call-parser hermes \
-  --reasoning-parser qwen3 \
-  --port 8000
-
-# DeepSeek-R1 — reasoning-focused
-rapid-mlx serve \
-  --model mlx-community/DeepSeek-R1-Distill-Qwen-14B-4bit \
-  --tool-call-parser deepseek \
-  --reasoning-parser deepseek_r1 \
-  --port 8000
-
-# Qwen3 VL — vision + language
-rapid-mlx serve \
-  --model mlx-community/Qwen3-VL-4B-Instruct-MLX-4bit \
-  --mllm \
-  --port 8000
-```
-
-### Tool Parser Selection Guide
-
-| Model Family | `--tool-call-parser` | `--reasoning-parser` | Notes |
-|-------------|---------------------|---------------------|-------|
-| Qwen3.5-122B-A10B | `hermes` | `qwen3` | **Recommended** — best agent stability |
-| Qwen3.5-35B/27B/9B/4B | `hermes` | `qwen3` | Same family, same parsers |
-| Qwen3-Coder-Next | `hermes` | *(none)* | Non-thinking mode, fast |
-| Qwen3 (thinking) | `qwen` or `qwen3_coder` | `qwen3` | With `<think>` tags |
-| MiniMax-M2.5 | `minimax` | `minimax` | XML tool format |
-| GPT-OSS | `seed_oss` | `gpt_oss` | Native format |
-| GLM-4.7 | `glm47` | *(none)* | GLM-specific format |
-| Llama 3.x | `llama` | *(none)* | JSON tool format |
-| DeepSeek-R1 | `deepseek` | `deepseek_r1` | With reasoning |
-| DeepSeek-V3.1 | `deepseek_v31` | *(none)* | Updated format |
-| Mistral | `hermes` | *(none)* | Hermes-compatible |
-| Functionary | `functionary` | *(none)* | Custom format |
-
-All 17 parsers include automatic text-format tool call recovery — if a quantized model degrades and outputs tool calls as plain text, they're automatically converted back to structured `tool_calls`.
 
 ---
 

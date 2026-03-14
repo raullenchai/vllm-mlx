@@ -174,7 +174,7 @@ class SeedOssToolParser(ToolParser):
             return None
         function_name = function_call_str[:end_index]
         param_config = _get_arguments_config(function_name, tools)
-        parameters = function_call_str[end_index + 1:]
+        parameters = function_call_str[end_index + 1 :]
         param_dict = {}
         for match in self.tool_call_parameter_regex.findall(parameters):
             match_text = match[0] if match[0] else match[1]
@@ -183,7 +183,7 @@ class SeedOssToolParser(ToolParser):
             except ValueError:
                 continue
             p_name = match_text[:idx]
-            p_value = str(match_text[idx + 1:])
+            p_value = str(match_text[idx + 1 :])
             if p_value.startswith("\n"):
                 p_value = p_value[1:]
             if p_value.endswith("\n"):
@@ -199,9 +199,7 @@ class SeedOssToolParser(ToolParser):
 
     def _get_function_calls(self, model_output: str) -> list[str]:
         matched_ranges = self.tool_call_regex.findall(model_output)
-        raw_tool_calls = [
-            m[0] if m[0] else m[1] for m in matched_ranges
-        ]
+        raw_tool_calls = [m[0] if m[0] else m[1] for m in matched_ranges]
         if not raw_tool_calls:
             raw_tool_calls = [model_output]
 
@@ -310,12 +308,14 @@ class SeedOssToolParser(ToolParser):
         # Check if thinking ended (or never started)
         if not self.is_thinking_end:
             # If there's no <seed:think> in the text at all, skip thinking gate
-            if self.think_start_token not in current_text:
-                self.is_thinking_end = True
-            elif (
-                self.think_end_token_id is not None
-                and self.think_end_token_id in delta_token_ids
-            ) or self.think_end_token in delta_text:
+            if (
+                self.think_start_token not in current_text
+                or (
+                    self.think_end_token_id is not None
+                    and self.think_end_token_id in delta_token_ids
+                )
+                or self.think_end_token in delta_text
+            ):
                 self.is_thinking_end = True
 
         if not self.is_thinking_end:
@@ -373,7 +373,7 @@ class SeedOssToolParser(ToolParser):
             tool_text = current_text[tool_start_idx:]
         else:
             tool_text = current_text[
-                tool_start_idx: tool_end_idx + len(self.tool_call_end_token)
+                tool_start_idx : tool_end_idx + len(self.tool_call_end_token)
             ]
 
         # Parse function header
@@ -397,9 +397,11 @@ class SeedOssToolParser(ToolParser):
                         tools = None
                         if request and isinstance(request, dict):
                             tools = request.get("tools")
-                        fc = tool_text[func_start:tool_text.find(
-                            self.function_end_token, func_start
-                        )]
+                        fc = tool_text[
+                            func_start : tool_text.find(
+                                self.function_end_token, func_start
+                            )
+                        ]
                         parsed = self._parse_xml_function_call(fc, tools)
                         args = parsed["arguments"] if parsed else "{}"
                         self.json_started = True
@@ -516,8 +518,10 @@ class SeedOssToolParser(ToolParser):
                                 self.current_function_name or "", tools
                             )
                             converted = _convert_param_value(
-                                pv, param_name, param_config,
-                                self.current_function_name or ""
+                                pv,
+                                param_name,
+                                param_config,
+                                self.current_function_name or "",
                             )
                             serialized = json.dumps(converted, ensure_ascii=False)
                             if self.param_count == 0:

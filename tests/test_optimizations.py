@@ -73,12 +73,12 @@ class TestMemoryBandwidth:
         assert "4MB" in results
         assert "16MB" in results
 
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print("Memory Bandwidth Benchmark")
-        print(f"{'='*50}")
+        print(f"{'=' * 50}")
         for size, bandwidth in results.items():
             print(f"{size}: {bandwidth}")
-        print(f"{'='*50}")
+        print(f"{'=' * 50}")
 
 
 def run_quick_test():

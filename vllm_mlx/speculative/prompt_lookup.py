@@ -137,9 +137,7 @@ class PromptLookupDecoder:
                 continue
 
             cont_begin = start + self.ngram_size
-            cont_end = min(
-                cont_begin + self.num_draft_tokens, len(self._token_history)
-            )
+            cont_end = min(cont_begin + self.num_draft_tokens, len(self._token_history))
             continuation = self._token_history[cont_begin:cont_end]
 
             if len(continuation) > best_continuation_length:

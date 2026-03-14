@@ -191,6 +191,7 @@ class MLXPlatform:
     def seed_everything(cls, seed: int | None = None) -> None:
         """Set random seeds for reproducibility."""
         import random
+
         import numpy as np
 
         if seed is not None:
@@ -281,8 +282,7 @@ class MLXPlatform:
         supported = ["mlx-4bit", "mlx-8bit", None, ""]
         if quant and quant not in supported:
             raise ValueError(
-                f"Quantization '{quant}' not supported on MLX. "
-                f"Supported: {supported}"
+                f"Quantization '{quant}' not supported on MLX. Supported: {supported}"
             )
 
     @classmethod
@@ -294,7 +294,6 @@ class MLXPlatform:
     def get_current_memory_usage(cls, device=None) -> float:
         """Get current memory usage in bytes."""
         try:
-
             # MLX doesn't have a direct memory query
             # Use system memory info instead
             import psutil

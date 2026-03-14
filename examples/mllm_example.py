@@ -35,7 +35,7 @@ def main():
             prompt="What is the capital of Japan?",
             max_tokens=100,
         )
-        print(f"Q: What is the capital of Japan?")
+        print("Q: What is the capital of Japan?")
         print(f"A: {output.text}")
         return
 

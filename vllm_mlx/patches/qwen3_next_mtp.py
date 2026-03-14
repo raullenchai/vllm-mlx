@@ -53,7 +53,7 @@ def validate_mtp_support(model: Any) -> bool:
             )
         else:
             logger.info(
-                "[MTP] Model does not have MTP config " "(num_nextn_predict_layers=0)."
+                "[MTP] Model does not have MTP config (num_nextn_predict_layers=0)."
             )
         return False
 
@@ -86,7 +86,7 @@ def validate_mtp_support(model: Any) -> bool:
 
     # All checks passed
     args = getattr(model, "args", None)
-    num_layers = getattr(args, "num_nextn_predict_layers", "?")
+    num_layers = getattr(args, "num_nextn_predict_layers", 0) if args else 0
     logger.info(
         "[MTP] Model has working MTP support: "
         "%d MTP layer(s), %d predictor decoder layer(s)",

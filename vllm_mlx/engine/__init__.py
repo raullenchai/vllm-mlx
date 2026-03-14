@@ -9,13 +9,12 @@ Provides two engine implementations:
 Also re-exports core engine components for backwards compatibility.
 """
 
+# Re-export from parent engine.py for backwards compatibility
+from ..engine_core import AsyncEngineCore, EngineConfig, EngineCore
 from .base import BaseEngine, GenerationOutput
-from .simple import SimpleEngine
 from .batched import BatchedEngine
 from .hybrid import HybridEngine
-
-# Re-export from parent engine.py for backwards compatibility
-from ..engine_core import EngineCore, AsyncEngineCore, EngineConfig
+from .simple import SimpleEngine
 
 __all__ = [
     "BaseEngine",

@@ -12,16 +12,17 @@ import re
 import shutil
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Whitelist of allowed MCP server commands
 # These are well-known, trusted MCP server executables
-ALLOWED_COMMANDS: Set[str] = {
+ALLOWED_COMMANDS: set[str] = {
     # Node.js package runners (for official MCP servers)
     "npx",
     "npm",
@@ -49,7 +50,7 @@ ALLOWED_COMMANDS: Set[str] = {
 }
 
 # Patterns that indicate dangerous commands
-DANGEROUS_PATTERNS: List[re.Pattern] = [
+DANGEROUS_PATTERNS: list[re.Pattern] = [
     re.compile(r";\s*"),  # Command chaining with ;
     re.compile(r"\|\s*"),  # Piping
     re.compile(r"&&\s*"),  # Command chaining with &&
@@ -63,7 +64,7 @@ DANGEROUS_PATTERNS: List[re.Pattern] = [
 ]
 
 # Dangerous argument patterns
-DANGEROUS_ARG_PATTERNS: List[re.Pattern] = [
+DANGEROUS_ARG_PATTERNS: list[re.Pattern] = [
     re.compile(r";\s*"),
     re.compile(r"\|\s*"),
     re.compile(r"&&\s*"),
@@ -92,9 +93,9 @@ class MCPCommandValidator:
 
     def __init__(
         self,
-        allowed_commands: Optional[Set[str]] = None,
+        allowed_commands: set[str] | None = None,
         allow_unsafe: bool = False,
-        custom_whitelist: Optional[Set[str]] = None,
+        custom_whitelist: set[str] | None = None,
         check_path_exists: bool = True,
     ):
         """
@@ -182,7 +183,7 @@ class MCPCommandValidator:
             f"MCP server '{server_name}': Command '{command}' validated successfully"
         )
 
-    def validate_args(self, args: List[str], server_name: str) -> None:
+    def validate_args(self, args: list[str], server_name: str) -> None:
         """
         Validate command arguments for dangerous patterns.
 
@@ -208,7 +209,7 @@ class MCPCommandValidator:
             f"MCP server '{server_name}': {len(args)} arguments validated successfully"
         )
 
-    def validate_env(self, env: Optional[Dict[str, str]], server_name: str) -> None:
+    def validate_env(self, env: dict[str, str] | None, server_name: str) -> None:
         """
         Validate environment variables for dangerous values.
 
@@ -292,7 +293,7 @@ class MCPCommandValidator:
 
 
 # Global validator instance (can be reconfigured)
-_validator: Optional[MCPCommandValidator] = None
+_validator: MCPCommandValidator | None = None
 
 
 def get_validator() -> MCPCommandValidator:
@@ -311,10 +312,10 @@ def set_validator(validator: MCPCommandValidator) -> None:
 
 def validate_mcp_server_config(
     server_name: str,
-    command: Optional[str] = None,
-    args: Optional[List[str]] = None,
-    env: Optional[Dict[str, str]] = None,
-    url: Optional[str] = None,
+    command: str | None = None,
+    args: list[str] | None = None,
+    env: dict[str, str] | None = None,
+    url: str | None = None,
 ) -> None:
     """
     Validate MCP server configuration for security.
@@ -351,7 +352,7 @@ def validate_mcp_server_config(
 # ============================================================================
 
 # Dangerous tool argument patterns (for tool execution, not command args)
-DANGEROUS_TOOL_ARG_PATTERNS: List[re.Pattern] = [
+DANGEROUS_TOOL_ARG_PATTERNS: list[re.Pattern] = [
     re.compile(r"\.\./"),  # Path traversal
     re.compile(r"/etc/"),  # System config access
     re.compile(r"/proc/"),  # Process info
@@ -361,7 +362,7 @@ DANGEROUS_TOOL_ARG_PATTERNS: List[re.Pattern] = [
 ]
 
 # Tools that are considered high-risk and require explicit allowlisting
-HIGH_RISK_TOOL_PATTERNS: List[str] = [
+HIGH_RISK_TOOL_PATTERNS: list[str] = [
     "execute",
     "run_command",
     "shell",
@@ -379,10 +380,10 @@ class ToolExecutionAudit:
     timestamp: float
     tool_name: str
     server_name: str
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
     success: bool
-    error_message: Optional[str] = None
-    execution_time_ms: Optional[float] = None
+    error_message: str | None = None
+    execution_time_ms: float | None = None
 
 
 class ToolSandbox:
@@ -398,11 +399,11 @@ class ToolSandbox:
 
     def __init__(
         self,
-        allowed_tools: Optional[Set[str]] = None,
-        blocked_tools: Optional[Set[str]] = None,
-        blocked_arg_patterns: Optional[List[re.Pattern]] = None,
+        allowed_tools: set[str] | None = None,
+        blocked_tools: set[str] | None = None,
+        blocked_arg_patterns: list[re.Pattern] | None = None,
         max_calls_per_minute: int = 60,
-        audit_callback: Optional[Callable[[ToolExecutionAudit], None]] = None,
+        audit_callback: Callable[[ToolExecutionAudit], None] | None = None,
         enabled: bool = True,
     ):
         """
@@ -426,11 +427,11 @@ class ToolSandbox:
         self.enabled = enabled
 
         # Rate limiting state
-        self._call_times: Dict[str, List[float]] = defaultdict(list)
+        self._call_times: dict[str, list[float]] = defaultdict(list)
         self._rate_limit_lock = Lock()
 
         # Audit log (in-memory, bounded)
-        self._audit_log: List[ToolExecutionAudit] = []
+        self._audit_log: list[ToolExecutionAudit] = []
         self._audit_log_max_size = 1000
         self._audit_lock = Lock()
 
@@ -444,7 +445,7 @@ class ToolSandbox:
         self,
         tool_name: str,
         server_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> None:
         """
         Validate that a tool execution is allowed.
@@ -507,7 +508,7 @@ class ToolSandbox:
                 )
                 break
 
-    def _validate_arguments(self, tool_name: str, arguments: Dict[str, Any]) -> None:
+    def _validate_arguments(self, tool_name: str, arguments: dict[str, Any]) -> None:
         """Validate tool arguments for dangerous patterns."""
 
         def check_value(key: str, value: Any, path: str = "") -> None:
@@ -558,10 +559,10 @@ class ToolSandbox:
         self,
         tool_name: str,
         server_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         success: bool,
-        error_message: Optional[str] = None,
-        execution_time_ms: Optional[float] = None,
+        error_message: str | None = None,
+        execution_time_ms: float | None = None,
     ) -> ToolExecutionAudit:
         """
         Record a tool execution for audit purposes.
@@ -616,7 +617,7 @@ class ToolSandbox:
 
         return audit
 
-    def _sanitize_arguments_for_log(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_arguments_for_log(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Sanitize arguments for logging (redact sensitive data)."""
         sensitive_keys = {"password", "token", "secret", "key", "credential", "auth"}
 
@@ -641,10 +642,10 @@ class ToolSandbox:
     def get_audit_log(
         self,
         limit: int = 100,
-        tool_filter: Optional[str] = None,
-        server_filter: Optional[str] = None,
+        tool_filter: str | None = None,
+        server_filter: str | None = None,
         errors_only: bool = False,
-    ) -> List[ToolExecutionAudit]:
+    ) -> list[ToolExecutionAudit]:
         """
         Get audit log entries.
 
@@ -680,7 +681,7 @@ class ToolSandbox:
 
 
 # Global sandbox instance
-_sandbox: Optional[ToolSandbox] = None
+_sandbox: ToolSandbox | None = None
 
 
 def get_sandbox() -> ToolSandbox:

@@ -38,8 +38,8 @@ TEST_IMAGE_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M
 def create_test_image(path: str, size: tuple = (32, 32)) -> str:
     """Create a test image file."""
     try:
-        from PIL import Image
         import numpy as np
+        from PIL import Image
 
         img = Image.fromarray(np.random.randint(0, 255, (*size, 3), dtype=np.uint8))
         img.save(path)
@@ -494,8 +494,9 @@ class TestMLLMSchedulerIntegration:
 
     async def test_single_request(self, test_image_path):
         """Test single MLLM request."""
-        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
         from mlx_vlm import load
+
+        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
 
         # Load a small model
         model, processor = load("mlx-community/Qwen3-VL-4B-Instruct-3bit")
@@ -528,8 +529,9 @@ class TestMLLMSchedulerIntegration:
 
     async def test_concurrent_requests(self, test_image_path):
         """Test multiple concurrent MLLM requests."""
-        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
         from mlx_vlm import load
+
+        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
 
         model, processor = load("mlx-community/Qwen3-VL-4B-Instruct-3bit")
 
@@ -567,8 +569,9 @@ class TestMLLMSchedulerIntegration:
 
     async def test_streaming(self, test_image_path):
         """Test streaming MLLM generation."""
-        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
         from mlx_vlm import load
+
+        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
 
         model, processor = load("mlx-community/Qwen3-VL-4B-Instruct-3bit")
 

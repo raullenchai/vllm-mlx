@@ -52,9 +52,7 @@ class MiniMaxToolParser(ToolParser):
         r'<parameter\s+name="([^"]+)">(.*?)</parameter>', re.DOTALL
     )
     # Fallback: <parameter name="..."> without closing </parameter>
-    PARAM_PARTIAL = re.compile(
-        r'<parameter\s+name="([^"]+)">([^<]*)', re.DOTALL
-    )
+    PARAM_PARTIAL = re.compile(r'<parameter\s+name="([^"]+)">([^<]*)', re.DOTALL)
     THINK_PATTERN = re.compile(r"<think>.*?</think>", re.DOTALL)
 
     def has_pending_tool_call(self, text: str) -> bool:
@@ -166,7 +164,10 @@ class MiniMaxToolParser(ToolParser):
         """Check if text contains the start of a tool call block."""
         return (
             "<minimax:tool_call>" in text
-            or ('<invoke name="' in text and self.INVOKE_PATTERN.search(text) is not None)
+            or (
+                '<invoke name="' in text
+                and self.INVOKE_PATTERN.search(text) is not None
+            )
             or self.has_text_format_tool_call(text)
         )
 
@@ -180,10 +181,13 @@ class MiniMaxToolParser(ToolParser):
         # Bare invoke: new </invoke> appeared
         if current.count("</invoke>") > previous.count("</invoke>"):
             return True
+
         # Text-format: [Calling tool="..." ...] or [Calling tool: name({...})]
         def _text_tc_count(text: str) -> int:
-            return (len(TEXT_TOOL_CALL_KV_PATTERN.findall(text))
-                    + len(TEXT_TOOL_CALL_FN_PATTERN.findall(text)))
+            return len(TEXT_TOOL_CALL_KV_PATTERN.findall(text)) + len(
+                TEXT_TOOL_CALL_FN_PATTERN.findall(text)
+            )
+
         cur_count = _text_tc_count(current)
         prev_count = _text_tc_count(previous)
         if cur_count > prev_count:
@@ -215,10 +219,9 @@ class MiniMaxToolParser(ToolParser):
                     if "<minimax:tool_call>" not in previous_text:
                         prev_complete = previous_text.count("</invoke>")
                 # Also count text-format completions from previous text
-                prev_complete += (
-                    len(TEXT_TOOL_CALL_KV_PATTERN.findall(previous_text))
-                    + len(TEXT_TOOL_CALL_FN_PATTERN.findall(previous_text))
-                )
+                prev_complete += len(
+                    TEXT_TOOL_CALL_KV_PATTERN.findall(previous_text)
+                ) + len(TEXT_TOOL_CALL_FN_PATTERN.findall(previous_text))
                 new_calls = result.tool_calls[prev_complete:]
                 if new_calls:
                     return {

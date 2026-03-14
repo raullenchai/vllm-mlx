@@ -207,7 +207,11 @@ def _maybe_pin_system_prompt(messages: list) -> None:
     for msg in messages:
         role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
         if role == "system":
-            content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+            content = (
+                msg.get("content")
+                if isinstance(msg, dict)
+                else getattr(msg, "content", None)
+            )
             if isinstance(content, str):
                 system_content = content
                 break
@@ -382,7 +386,8 @@ class RateLimiter:
             # Periodically purge stale client keys (every ~100 requests)
             if len(self._requests) > 100:
                 stale = [
-                    k for k, v in self._requests.items()
+                    k
+                    for k, v in self._requests.items()
                     if not v or max(v) <= window_start
                 ]
                 for k in stale:
@@ -485,9 +490,7 @@ def _parse_tool_calls_with_parser(
                     tokenizer = getattr(_engine, "_tokenizer", None)
                     parser = parser_cls(tokenizer)
                     parser.reset()
-                    result = parser.extract_tool_calls(
-                        output_text, request_dict
-                    )
+                    result = parser.extract_tool_calls(output_text, request_dict)
                     if result.tools_called:
                         tool_calls = [
                             ToolCall(
@@ -549,9 +552,7 @@ def _parse_tool_calls_with_parser(
         return parse_tool_calls(output_text, request_dict)
 
 
-def _validate_tool_call_params(
-    tool_calls: list, tools: list
-) -> None:
+def _validate_tool_call_params(tool_calls: list, tools: list) -> None:
     """
     Validate tool call parameter values against their schemas (post-generation).
 
@@ -567,7 +568,11 @@ def _validate_tool_call_params(
     for tc in tool_calls:
         func = tc.function if hasattr(tc, "function") else tc.get("function", {})
         func_name = func.name if hasattr(func, "name") else func.get("name", "")
-        args_str = func.arguments if hasattr(func, "arguments") else func.get("arguments", "{}")
+        args_str = (
+            func.arguments
+            if hasattr(func, "arguments")
+            else func.get("arguments", "{}")
+        )
 
         try:
             args = json.loads(args_str)
@@ -585,13 +590,9 @@ def _validate_tool_call_params(
             schema = schemas.get(schema_key)
             if not schema:
                 continue
-            is_valid, error = validate_param_value(
-                json.dumps(param_value), schema
-            )
+            is_valid, error = validate_param_value(json.dumps(param_value), schema)
             if not is_valid:
-                logger.warning(
-                    f"Tool call '{func_name}' param '{param_name}': {error}"
-                )
+                logger.warning(f"Tool call '{func_name}' param '{param_name}': {error}")
 
 
 def _detect_native_tool_support() -> bool:
@@ -687,7 +688,12 @@ def load_model(
         kv_bits: KV cache quantization bits (None=no quantization, 4 or 8)
         kv_group_size: Group size for KV cache quantization (default: 64)
     """
-    global _engine, _model_name, _default_max_tokens, _tool_parser_instance, _cloud_router
+    global \
+        _engine, \
+        _model_name, \
+        _default_max_tokens, \
+        _tool_parser_instance, \
+        _cloud_router
 
     _default_max_tokens = max_tokens
     _model_name = model_name
@@ -788,19 +794,16 @@ def load_model(
                         return create_tool_logits_processor(
                             parser_name, tok, tools=tools
                         )
+
                     return factory
 
                 factory = _make_factory(_tool_call_parser, tokenizer)
                 # Set on BatchedEngine for use during scheduler init
                 if hasattr(_engine, "_tool_logits_processor_factory"):
                     _engine._tool_logits_processor_factory = factory
-                logger.info(
-                    f"Tool logits bias enabled for parser: {_tool_call_parser}"
-                )
+                logger.info(f"Tool logits bias enabled for parser: {_tool_call_parser}")
             else:
-                logger.warning(
-                    "Tool logits bias requested but tokenizer not available"
-                )
+                logger.warning("Tool logits bias requested but tokenizer not available")
         except Exception as e:
             logger.warning(f"Failed to set up tool logits bias: {e}")
 
@@ -1089,8 +1092,7 @@ async def create_embeddings(request: EmbeddingRequest) -> EmbeddingResponse:
 
         elapsed = time.perf_counter() - start_time
         logger.info(
-            f"Embeddings: {len(texts)} inputs, {prompt_tokens} tokens "
-            f"in {elapsed:.2f}s"
+            f"Embeddings: {len(texts)} inputs, {prompt_tokens} tokens in {elapsed:.2f}s"
         )
 
         # Build OpenAI-compatible response with ordered indices
@@ -1111,8 +1113,7 @@ async def create_embeddings(request: EmbeddingRequest) -> EmbeddingResponse:
         raise HTTPException(
             status_code=503,
             detail=(
-                "mlx-embeddings not installed. "
-                "Install with: pip install mlx-embeddings"
+                "mlx-embeddings not installed. Install with: pip install mlx-embeddings"
             ),
         )
     except HTTPException:
@@ -1765,12 +1766,15 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 
     if _inject_suffix:
         has_system = any(
-            (m.get("role") if isinstance(m, dict) else getattr(m, "role", None)) == "system"
+            (m.get("role") if isinstance(m, dict) else getattr(m, "role", None))
+            == "system"
             for m in messages
         )
         if has_system:
             for i, m in enumerate(messages):
-                role = m.get("role") if isinstance(m, dict) else getattr(m, "role", None)
+                role = (
+                    m.get("role") if isinstance(m, dict) else getattr(m, "role", None)
+                )
                 if role == "system":
                     if isinstance(m, dict):
                         messages[i] = {**m, "content": m["content"] + _inject_suffix}
@@ -1883,7 +1887,9 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
                     f"<= threshold {_cloud_router.threshold}, using local inference"
                 )
         except Exception as e:
-            logger.warning(f"[CLOUD ROUTE] Error during routing check: {e}, falling back to local")
+            logger.warning(
+                f"[CLOUD ROUTE] Error during routing check: {e}, falling back to local"
+            )
 
     if request.stream:
         return StreamingResponse(
@@ -1996,7 +2002,9 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if response_format and not tool_calls:
         json_input = cleaned_text or output.text
         try:
-            _, parsed_json, is_valid, error = parse_json_output(json_input, response_format)
+            _, parsed_json, is_valid, error = parse_json_output(
+                json_input, response_format
+            )
             if parsed_json is not None:
                 # Return JSON as string
                 cleaned_text = json.dumps(parsed_json)
@@ -2520,7 +2528,9 @@ async def stream_chat_completion(
 
         # Track if we need to add <think> prefix for thinking models (when no reasoning parser)
         # The template adds <think> to the prompt, so the model output starts inside the think block
-        is_thinking_model = "nemotron" in request.model.lower() and not _reasoning_parser
+        is_thinking_model = (
+            "nemotron" in request.model.lower() and not _reasoning_parser
+        )
         think_prefix_sent = False
 
         # Reset reasoning parser state for this stream
@@ -2649,7 +2659,9 @@ async def stream_chat_completion(
                                 ],
                                 usage=get_usage(output) if output.finished else None,
                             )
-                            _tc_sse = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                            _tc_sse = (
+                                f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                            )
                             logger.info(f"[SSE-TC] {_tc_sse.strip()[:300]}")
                             yield _tc_sse
                             continue
@@ -2739,7 +2751,9 @@ async def stream_chat_completion(
                                 ],
                                 usage=get_usage(output) if output.finished else None,
                             )
-                            _tc_sse = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                            _tc_sse = (
+                                f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                            )
                             logger.info(f"[SSE-TC] {_tc_sse.strip()[:300]}")
                             yield _tc_sse
                             continue

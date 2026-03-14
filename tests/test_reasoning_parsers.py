@@ -4,25 +4,23 @@
 import pytest
 
 from vllm_mlx.reasoning.base import DeltaMessage, ReasoningParser
-from vllm_mlx.reasoning.think_parser import BaseThinkingReasoningParser
 from vllm_mlx.reasoning.deepseek_r1_parser import DeepSeekR1ReasoningParser
 from vllm_mlx.reasoning.gpt_oss_parser import (
-    GptOssReasoningParser,
-    _extract_channel,
     _CHANNEL_RE,
     _STRUCTURAL_TOKENS,
+    GptOssReasoningParser,
+    _extract_channel,
 )
-from vllm_mlx.reasoning.qwen3_parser import Qwen3ReasoningParser
-from vllm_mlx.reasoning.minimax_parser import MiniMaxReasoningParser
 from vllm_mlx.reasoning.harmony_parser import HarmonyReasoningParser
-
+from vllm_mlx.reasoning.minimax_parser import MiniMaxReasoningParser
+from vllm_mlx.reasoning.qwen3_parser import Qwen3ReasoningParser
 
 # ---------------------------------------------------------------------------
 # DeltaMessage
 # ---------------------------------------------------------------------------
 
-class TestDeltaMessage:
 
+class TestDeltaMessage:
     def test_reasoning_only(self):
         dm = DeltaMessage(reasoning="thinking")
         assert dm.reasoning == "thinking"
@@ -53,8 +51,8 @@ class TestDeltaMessage:
 # ReasoningParser (abstract base)
 # ---------------------------------------------------------------------------
 
-class TestReasoningParserBase:
 
+class TestReasoningParserBase:
     def test_cannot_instantiate(self):
         with pytest.raises(TypeError):
             ReasoningParser()
@@ -63,8 +61,10 @@ class TestReasoningParserBase:
         class Dummy(ReasoningParser):
             def extract_reasoning(self, model_output):
                 return None, model_output
+
             def extract_reasoning_streaming(self, prev, curr, delta):
                 return None
+
         d = Dummy()
         d.reset_state()  # should not raise
 
@@ -72,8 +72,10 @@ class TestReasoningParserBase:
         class Dummy(ReasoningParser):
             def extract_reasoning(self, model_output):
                 return None, model_output
+
             def extract_reasoning_streaming(self, prev, curr, delta):
                 return None
+
         d = Dummy()
         assert d.finalize_streaming("some text") is None
 
@@ -81,6 +83,7 @@ class TestReasoningParserBase:
 # ---------------------------------------------------------------------------
 # BaseThinkingReasoningParser (via DeepSeek-R1 as concrete subclass)
 # ---------------------------------------------------------------------------
+
 
 class TestBaseThinkExtractReasoning:
     """Tests for extract_reasoning using DeepSeekR1ReasoningParser."""
@@ -149,8 +152,8 @@ class TestBaseThinkExtractReasoning:
 # BaseThinkingReasoningParser streaming
 # ---------------------------------------------------------------------------
 
-class TestBaseThinkStreaming:
 
+class TestBaseThinkStreaming:
     def setup_method(self):
         self.parser = DeepSeekR1ReasoningParser()
         self.parser.reset_state()
@@ -232,8 +235,8 @@ class TestBaseThinkStreaming:
 # DeepSeekR1ReasoningParser specifics
 # ---------------------------------------------------------------------------
 
-class TestDeepSeekR1:
 
+class TestDeepSeekR1:
     def setup_method(self):
         self.parser = DeepSeekR1ReasoningParser()
 
@@ -309,8 +312,8 @@ class TestDeepSeekR1:
 # GptOssReasoningParser
 # ---------------------------------------------------------------------------
 
-class TestGptOssHelpers:
 
+class TestGptOssHelpers:
     def test_extract_channel_analysis(self):
         text = "<|channel|>analysis<|message|>my reasoning<|start|>assistant"
         result = _extract_channel(text, "analysis")
@@ -355,12 +358,18 @@ class TestGptOssHelpers:
         assert m.group(1) == "final"
 
     def test_structural_tokens_regex(self):
-        for tok in ["<|start|>", "<|end|>", "<|channel|>", "<|return|>", "<|call|>", "<|constrain|>"]:
+        for tok in [
+            "<|start|>",
+            "<|end|>",
+            "<|channel|>",
+            "<|return|>",
+            "<|call|>",
+            "<|constrain|>",
+        ]:
             assert _STRUCTURAL_TOKENS.search(tok) is not None
 
 
 class TestGptOssExtractReasoning:
-
     def setup_method(self):
         self.parser = GptOssReasoningParser()
 
@@ -403,7 +412,7 @@ class TestGptOssExtractReasoning:
     def test_constrain_format(self):
         text = (
             "<|channel|>analysis<|message|>thinking"
-            "<|start|>assistant<|channel|>final <|constrain|>JSON<|message|>{\"key\": \"val\"}<|return|>"
+            '<|start|>assistant<|channel|>final <|constrain|>JSON<|message|>{"key": "val"}<|return|>'
         )
         reasoning, content = self.parser.extract_reasoning(text)
         assert reasoning == "thinking"
@@ -420,7 +429,6 @@ class TestGptOssExtractReasoning:
 
 
 class TestGptOssStreaming:
-
     def setup_method(self):
         self.parser = GptOssReasoningParser()
 
@@ -487,7 +495,9 @@ class TestGptOssStreaming:
         curr = prev + delta
         result = self.parser.extract_reasoning_streaming(prev, curr, delta)
         # Phase transitions to "transition", delta is structural → skip
-        assert result is None or (result and "<|start|>" not in (result.reasoning or ""))
+        assert result is None or (
+            result and "<|start|>" not in (result.reasoning or "")
+        )
 
     def test_strip_return(self):
         assert GptOssReasoningParser._strip_return("text<|return|>") == "text"
@@ -495,18 +505,23 @@ class TestGptOssStreaming:
 
     def test_extract_content_after_marker(self):
         text = "<|channel|>analysis<|message|>the content"
-        result = GptOssReasoningParser._extract_content_after_marker_in_delta(text, "analysis")
+        result = GptOssReasoningParser._extract_content_after_marker_in_delta(
+            text, "analysis"
+        )
         assert result == "the content"
 
     def test_extract_content_after_marker_not_found(self):
         text = "<|channel|>analysis<|message|>content"
-        result = GptOssReasoningParser._extract_content_after_marker_in_delta(text, "final")
+        result = GptOssReasoningParser._extract_content_after_marker_in_delta(
+            text, "final"
+        )
         assert result is None
 
 
 # ---------------------------------------------------------------------------
 # Full streaming simulation tests
 # ---------------------------------------------------------------------------
+
 
 class TestFullStreamingSimulation:
     """Simulate realistic streaming token-by-token delivery."""
@@ -596,8 +611,8 @@ class TestFullStreamingSimulation:
 # Qwen3ReasoningParser
 # ---------------------------------------------------------------------------
 
-class TestQwen3:
 
+class TestQwen3:
     def setup_method(self):
         self.parser = Qwen3ReasoningParser()
 
@@ -606,12 +621,16 @@ class TestQwen3:
         assert self.parser.end_token == "</think>"
 
     def test_both_tags(self):
-        reasoning, content = self.parser.extract_reasoning("<think>analysis</think>answer")
+        reasoning, content = self.parser.extract_reasoning(
+            "<think>analysis</think>answer"
+        )
         assert reasoning == "analysis"
         assert content == "answer"
 
     def test_only_end_tag(self):
-        reasoning, content = self.parser.extract_reasoning("implicit reasoning</think>answer")
+        reasoning, content = self.parser.extract_reasoning(
+            "implicit reasoning</think>answer"
+        )
         assert reasoning == "implicit reasoning"
         assert content == "answer"
 
@@ -637,8 +656,8 @@ class TestQwen3:
 # MiniMaxReasoningParser
 # ---------------------------------------------------------------------------
 
-class TestMiniMaxExtractReasoning:
 
+class TestMiniMaxExtractReasoning:
     def setup_method(self):
         self.parser = MiniMaxReasoningParser()
 
@@ -712,7 +731,6 @@ class TestMiniMaxExtractReasoning:
 
 
 class TestMiniMaxStreaming:
-
     def setup_method(self):
         self.parser = MiniMaxReasoningParser()
         self.parser.reset_state()
@@ -730,13 +748,17 @@ class TestMiniMaxStreaming:
         assert result is None  # tag stripped, nothing left
 
     def test_explicit_think_tag_with_content(self):
-        result = self.parser.extract_reasoning_streaming("", "<think>reasoning", "<think>reasoning")
+        result = self.parser.extract_reasoning_streaming(
+            "", "<think>reasoning", "<think>reasoning"
+        )
         assert result.reasoning == "reasoning"
 
     def test_end_think_tag_transition(self):
         self.parser._decided = True
         self.parser._is_reasoning = True
-        result = self.parser.extract_reasoning_streaming("thinking", "thinking</think>answer", "</think>answer")
+        result = self.parser.extract_reasoning_streaming(
+            "thinking", "thinking</think>answer", "</think>answer"
+        )
         assert result.content == "answer"
 
     def test_buffering_phase(self):
@@ -746,7 +768,9 @@ class TestMiniMaxStreaming:
 
     def test_direct_content_detected_early(self):
         """Code blocks detected immediately as content."""
-        result = self.parser.extract_reasoning_streaming("", "```python\n", "```python\n")
+        result = self.parser.extract_reasoning_streaming(
+            "", "```python\n", "```python\n"
+        )
         assert result is not None
         assert result.content is not None
 
@@ -785,8 +809,8 @@ class TestMiniMaxStreaming:
 # HarmonyReasoningParser
 # ---------------------------------------------------------------------------
 
-class TestHarmonyExtractReasoning:
 
+class TestHarmonyExtractReasoning:
     def setup_method(self):
         self.parser = HarmonyReasoningParser()
 
@@ -830,7 +854,6 @@ class TestHarmonyExtractReasoning:
 
 
 class TestHarmonyStreaming:
-
     def setup_method(self):
         self.parser = HarmonyReasoningParser()
         self.parser.reset_state()
@@ -877,7 +900,9 @@ class TestHarmonyStreaming:
         self.parser._current_channel = "analysis"
         self.parser._in_message = True
         result = self.parser.extract_reasoning_streaming(
-            "<|channel|>analysis<|message|>", "<|channel|>analysis<|message|>reasoning", "reasoning"
+            "<|channel|>analysis<|message|>",
+            "<|channel|>analysis<|message|>reasoning",
+            "reasoning",
         )
         assert result.reasoning == "reasoning"
 
@@ -893,7 +918,9 @@ class TestHarmonyStreaming:
         self.parser._current_channel = "analysis"
         self.parser._in_message = True
         result = self.parser.extract_reasoning_streaming(
-            "<|channel|>analysis<|message|>r", "<|channel|>analysis<|message|>r<|end|>", "<|end|>"
+            "<|channel|>analysis<|message|>r",
+            "<|channel|>analysis<|message|>r<|end|>",
+            "<|end|>",
         )
         assert result is None
         assert self.parser._in_message is False
@@ -902,7 +929,9 @@ class TestHarmonyStreaming:
         self.parser._current_channel = "final"
         self.parser._in_message = True
         result = self.parser.extract_reasoning_streaming(
-            "<|channel|>final<|message|>c", "<|channel|>final<|message|>c<|return|>", "<|return|>"
+            "<|channel|>final<|message|>c",
+            "<|channel|>final<|message|>c<|return|>",
+            "<|return|>",
         )
         assert result is None
         assert self.parser._in_message is False
@@ -918,9 +947,7 @@ class TestHarmonyStreaming:
         assert result.content == " tool_call"
 
     def test_control_tokens_skipped(self):
-        result = self.parser.extract_reasoning_streaming(
-            "", "<|start|>", "<|start|>"
-        )
+        result = self.parser.extract_reasoning_streaming("", "<|start|>", "<|start|>")
         assert result is None
 
     def test_full_streaming_simulation(self):

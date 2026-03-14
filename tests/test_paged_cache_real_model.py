@@ -14,7 +14,6 @@ import argparse
 import platform
 import sys
 import time
-from typing import List
 
 # Skip if not on Apple Silicon
 if sys.platform != "darwin" or platform.machine() != "arm64":
@@ -39,7 +38,7 @@ def print_header(title: str) -> None:
 
 
 def print_table(
-    headers: List[str], rows: List[List[str]], col_widths: List[int] = None
+    headers: list[str], rows: list[list[str]], col_widths: list[int] = None
 ) -> None:
     """Print a formatted table."""
     if col_widths is None:
@@ -183,7 +182,7 @@ Let's begin the session. I'm ready to help with any technical questions you have
     print(f"  Users processed: {num_users}")
     print(f"  Cache hits: {standard_stats['hits']}")
     print(f"  Tokens saved: {standard_stats['tokens_saved']}")
-    print(f"  Time: {standard_time*1000:.1f}ms")
+    print(f"  Time: {standard_time * 1000:.1f}ms")
 
     # Test WITH paged cache
     print("\n--- Test WITH Paged Cache ---")
@@ -225,7 +224,7 @@ Let's begin the session. I'm ready to help with any technical questions you have
     print(f"  Tokens saved: {paged_stats['tokens_saved']}")
     print(f"  Blocks allocated: {paged_stats['allocated_blocks']}")
     print(f"  Shared blocks: {paged_stats['shared_blocks']}")
-    print(f"  Time: {paged_time*1000:.1f}ms")
+    print(f"  Time: {paged_time * 1000:.1f}ms")
 
     # Calculate theoretical blocks without sharing
     avg_tokens_per_request = sum(r["total_tokens"] for r in paged_results) / num_users
@@ -254,7 +253,7 @@ Let's begin the session. I'm ready to help with any technical questions you have
             [
                 "Memory savings",
                 "0%",
-                f"{(1 - paged_stats['allocated_blocks']/theoretical_blocks)*100:.1f}%",
+                f"{(1 - paged_stats['allocated_blocks'] / theoretical_blocks) * 100:.1f}%",
             ],
         ],
         [20, 18, 18],
@@ -288,6 +287,7 @@ async def run_real_concurrent_inference(model_name: str):
     This uses actual model generation, not simulation.
     """
     import asyncio
+
     from mlx_lm import load
 
     from vllm_mlx.engine import AsyncEngineCore, EngineConfig
@@ -435,7 +435,7 @@ Always explain your reasoning thoroughly and provide learning resources when hel
 
     print(f"  Time: {time_no_paged:.2f}s")
     print(f"  Total completion tokens: {total_tokens_no_paged}")
-    print(f"  Throughput: {total_tokens_no_paged/time_no_paged:.1f} tok/s")
+    print(f"  Throughput: {total_tokens_no_paged / time_no_paged:.1f} tok/s")
     if "prefix_cache" in stats_no_paged:
         pc = stats_no_paged["prefix_cache"]
         print(f"  Cache hits: {pc.get('hits', 0)}")
@@ -493,7 +493,7 @@ Always explain your reasoning thoroughly and provide learning resources when hel
 
     print(f"  Time: {time_paged:.2f}s")
     print(f"  Total completion tokens: {total_tokens_paged}")
-    print(f"  Throughput: {total_tokens_paged/time_paged:.1f} tok/s")
+    print(f"  Throughput: {total_tokens_paged / time_paged:.1f} tok/s")
 
     if "paged_cache" in stats:
         pc = stats["paged_cache"]
@@ -516,8 +516,8 @@ Always explain your reasoning thoroughly and provide learning resources when hel
             ["Time", f"{time_no_paged:.2f}s", f"{time_paged:.2f}s"],
             [
                 "Throughput",
-                f"{total_tokens_no_paged/time_no_paged:.1f} tok/s",
-                f"{total_tokens_paged/time_paged:.1f} tok/s",
+                f"{total_tokens_no_paged / time_no_paged:.1f} tok/s",
+                f"{total_tokens_paged / time_paged:.1f} tok/s",
             ],
             [
                 "Blocks allocated",
@@ -548,8 +548,8 @@ Always explain your reasoning thoroughly and provide learning resources when hel
     all_results = results1 + results2
     for i, r in enumerate(all_results[:3]):
         if r:
-            print(f"\nQ{i+1}: {user_questions[i][:50]}...")
-            print(f"A{i+1}: {r.output_text[:100]}...")
+            print(f"\nQ{i + 1}: {user_questions[i][:50]}...")
+            print(f"A{i + 1}: {r.output_text[:100]}...")
 
     return stats
 

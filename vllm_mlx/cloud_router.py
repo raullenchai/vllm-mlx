@@ -176,9 +176,15 @@ class CloudRouter:
 
         # Pass through standard OpenAI params (litellm handles provider compatibility)
         for key in (
-            "temperature", "max_tokens", "top_p", "stop",
-            "frequency_penalty", "presence_penalty",
-            "tools", "tool_choice", "response_format",
+            "temperature",
+            "max_tokens",
+            "top_p",
+            "stop",
+            "frequency_penalty",
+            "presence_penalty",
+            "tools",
+            "tool_choice",
+            "response_format",
         ):
             if key in kwargs and kwargs[key] is not None:
                 call_kwargs[key] = kwargs[key]

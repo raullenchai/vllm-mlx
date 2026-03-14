@@ -327,9 +327,7 @@ def parse_tool_calls(
                 )
             # Clean the JSON and surrounding tags from text
             cleaned_text = re.sub(r"</?tool_call>", "", cleaned_text)
-            cleaned_text = re.sub(
-                r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", "", cleaned_text
-            )
+            cleaned_text = re.sub(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", "", cleaned_text)
             cleaned_text = cleaned_text.strip()
 
     return cleaned_text, tool_calls if tool_calls else None

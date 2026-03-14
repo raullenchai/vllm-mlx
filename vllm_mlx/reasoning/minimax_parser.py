@@ -117,9 +117,7 @@ class MiniMaxReasoningParser(ReasoningParser):
         self._is_reasoning = False
         self._transition_pos = 0
 
-    def extract_reasoning(
-        self, model_output: str
-    ) -> tuple[str | None, str | None]:
+    def extract_reasoning(self, model_output: str) -> tuple[str | None, str | None]:
         """
         Extract reasoning from complete MiniMax output.
 
@@ -177,7 +175,7 @@ class MiniMaxReasoningParser(ReasoningParser):
         if "</think>" in delta_text:
             idx = delta_text.find("</think>")
             reasoning_part = delta_text[:idx]
-            content_part = delta_text[idx + len("</think>"):]
+            content_part = delta_text[idx + len("</think>") :]
             self._decided = True
             self._is_reasoning = False
             return DeltaMessage(
@@ -197,7 +195,9 @@ class MiniMaxReasoningParser(ReasoningParser):
         if self._decided:
             if self._is_reasoning:
                 # Still in reasoning phase - check for transition
-                match = self._CONTENT_TRANSITION_RE.search(current_text[self._transition_pos:])
+                match = self._CONTENT_TRANSITION_RE.search(
+                    current_text[self._transition_pos :]
+                )
                 if match:
                     # Found transition to content
                     abs_pos = self._transition_pos + match.start()
@@ -266,9 +266,7 @@ class MiniMaxReasoningParser(ReasoningParser):
         # Flush entire buffer as reasoning
         return DeltaMessage(reasoning=current_text)
 
-    def finalize_streaming(
-        self, accumulated_text: str
-    ) -> DeltaMessage | None:
+    def finalize_streaming(self, accumulated_text: str) -> DeltaMessage | None:
         """
         Finalize streaming - handle cases where content was never emitted:
         1. Still buffering (never decided) - emit buffer as content

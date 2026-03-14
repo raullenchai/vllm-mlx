@@ -14,11 +14,10 @@ Usage:
 
 import argparse
 import asyncio
-import time
-from typing import List
 
 # Add parent to path for development
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -67,9 +66,9 @@ async def run_single_request(
 
 async def run_concurrent_requests(
     engine: AsyncEngineCore,
-    prompts: List[str],
+    prompts: list[str],
     sampling_params: SamplingParams,
-) -> List[dict]:
+) -> list[dict]:
     """Run multiple requests concurrently."""
     tasks = []
     for i, prompt in enumerate(prompts):
@@ -79,7 +78,7 @@ async def run_concurrent_requests(
     return await asyncio.gather(*tasks)
 
 
-def print_results(results: List[dict], total_time: float):
+def print_results(results: list[dict], total_time: float):
     """Print benchmark results."""
     print("\n" + "=" * 60)
     print("CONTINUOUS BATCHING BENCHMARK RESULTS")
@@ -109,7 +108,11 @@ def print_results(results: List[dict], total_time: float):
     print("Sample outputs:")
     print("-" * 60)
     for r in results[:3]:  # Show first 3
-        text = r["output_text"][:100] + "..." if len(r["output_text"]) > 100 else r["output_text"]
+        text = (
+            r["output_text"][:100] + "..."
+            if len(r["output_text"]) > 100
+            else r["output_text"]
+        )
         print(f"  {r['request_id']}: {text}")
 
 

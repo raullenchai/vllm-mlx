@@ -9,17 +9,17 @@ inputs that can be batched together efficiently.
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import mlx.core as mx
 
 from .models.mllm import (
-    process_image_input,
-    process_video_input,
-    extract_video_frames_smart,
-    save_frames_to_temp,
     DEFAULT_FPS,
     MAX_FRAMES,
+    extract_video_frames_smart,
+    process_image_input,
+    process_video_input,
+    save_frames_to_temp,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,12 +41,12 @@ class ProcessedMultimodalInput:
     """
 
     input_ids: mx.array
-    pixel_values: Optional[mx.array] = None
-    attention_mask: Optional[mx.array] = None
-    image_grid_thw: Optional[mx.array] = None
+    pixel_values: mx.array | None = None
+    attention_mask: mx.array | None = None
+    image_grid_thw: mx.array | None = None
     num_images: int = 0
     num_tokens: int = 0
-    extra_kwargs: Dict[str, Any] = field(default_factory=dict)
+    extra_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 class MultimodalProcessor:
@@ -69,7 +69,7 @@ class MultimodalProcessor:
         self,
         model: Any,
         processor: Any,
-        config: Optional[Any] = None,
+        config: Any | None = None,
     ):
         """
         Initialize the multimodal processor.
@@ -96,8 +96,8 @@ class MultimodalProcessor:
     def process(
         self,
         prompt: str,
-        images: Optional[List[str]] = None,
-        videos: Optional[List[str]] = None,
+        images: list[str] | None = None,
+        videos: list[str] | None = None,
         video_fps: float = DEFAULT_FPS,
         video_max_frames: int = MAX_FRAMES,
         add_special_tokens: bool = True,
@@ -188,10 +188,10 @@ class MultimodalProcessor:
     def process_for_request(
         self,
         prompt: str,
-        images: Optional[List[str]] = None,
-        videos: Optional[List[str]] = None,
+        images: list[str] | None = None,
+        videos: list[str] | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process inputs and return a dict suitable for Request fields.
 
@@ -225,8 +225,8 @@ class MultimodalProcessor:
 
     def batch_pixel_values(
         self,
-        pixel_values_list: List[Optional[mx.array]],
-    ) -> Optional[mx.array]:
+        pixel_values_list: list[mx.array | None],
+    ) -> mx.array | None:
         """
         Batch multiple pixel_values tensors together.
 
@@ -256,8 +256,8 @@ class MultimodalProcessor:
 
     def batch_image_grid_thw(
         self,
-        grid_thw_list: List[Optional[mx.array]],
-    ) -> Optional[mx.array]:
+        grid_thw_list: list[mx.array | None],
+    ) -> mx.array | None:
         """
         Batch multiple image_grid_thw tensors together.
 
@@ -280,8 +280,8 @@ class MultimodalProcessor:
 
     def prepare_for_batch(
         self,
-        processed_inputs: List[ProcessedMultimodalInput],
-    ) -> Tuple[mx.array, Dict[str, Any], List[int]]:
+        processed_inputs: list[ProcessedMultimodalInput],
+    ) -> tuple[mx.array, dict[str, Any], list[int]]:
         """
         Prepare multiple processed inputs for batch generation.
 
@@ -368,7 +368,7 @@ class MultimodalProcessor:
     def extract_vision_embeddings(
         self,
         pixel_values: mx.array,
-        image_grid_thw: Optional[mx.array] = None,
+        image_grid_thw: mx.array | None = None,
     ) -> mx.array:
         """
         Extract vision embeddings from pixel values.
@@ -431,7 +431,7 @@ class MultimodalProcessor:
         return hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
 
-def create_mllm_prompt_cache(model: Any, max_kv_size: Optional[int] = None) -> Any:
+def create_mllm_prompt_cache(model: Any, max_kv_size: int | None = None) -> Any:
     """
     Create a prompt cache for VLM generation.
 

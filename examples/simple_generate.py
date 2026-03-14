@@ -58,9 +58,7 @@ def main():
     print("Chat interface:")
     print("=" * 50 + "\n")
 
-    messages = [
-        {"role": "user", "content": "Hello! Can you introduce yourself?"}
-    ]
+    messages = [{"role": "user", "content": "Hello! Can you introduce yourself?"}]
 
     response = model.chat(messages, max_tokens=150)
     print(f"User: {messages[0]['content']}")

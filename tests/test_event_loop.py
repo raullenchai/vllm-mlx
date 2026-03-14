@@ -18,12 +18,12 @@ Usage:
     python tests/test_event_loop.py --all              # run everything
 """
 
-import asyncio
-import json
-import time
-import aiohttp
-import sys
 import argparse
+import asyncio
+import sys
+import time
+
+import aiohttp
 
 BASE = "http://127.0.0.1:8000"
 
@@ -41,7 +41,9 @@ async def stream_completions(session, prompt, max_tokens=128, timeout=120):
     ttft = None
     try:
         async with session.post(
-            f"{BASE}/v1/completions", json=payload, timeout=aiohttp.ClientTimeout(total=timeout)
+            f"{BASE}/v1/completions",
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=timeout),
         ) as resp:
             async for line in resp.content:
                 text = line.decode().strip()
@@ -64,7 +66,9 @@ async def test_event_loop_responsiveness():
 
     async with aiohttp.ClientSession() as session:
         gen_task = asyncio.create_task(
-            stream_completions(session, "Write a very long story about a dragon. ", max_tokens=256)
+            stream_completions(
+                session, "Write a very long story about a dragon. ", max_tokens=256
+            )
         )
         await asyncio.sleep(3)
 
@@ -85,7 +89,9 @@ async def test_event_loop_responsiveness():
             print(f"  FAIL: GET /v1/models timed out ({latency:.1f}s)")
 
         tokens, elapsed, _ = await gen_task
-        print(f"  Generation: {tokens} tokens in {elapsed:.1f}s ({tokens/elapsed:.1f} tok/s)")
+        print(
+            f"  Generation: {tokens} tokens in {elapsed:.1f}s ({tokens / elapsed:.1f} tok/s)"
+        )
 
 
 async def test_disconnect_recovery():
@@ -101,7 +107,9 @@ async def test_disconnect_recovery():
         }
         tokens = 0
         async with session.post(
-            f"{BASE}/v1/completions", json=payload, timeout=aiohttp.ClientTimeout(total=30)
+            f"{BASE}/v1/completions",
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=30),
         ) as resp:
             async for line in resp.content:
                 text = line.decode().strip()
@@ -114,7 +122,9 @@ async def test_disconnect_recovery():
     await asyncio.sleep(1)
     async with aiohttp.ClientSession() as session:
         t0 = time.monotonic()
-        tokens, elapsed, _ = await stream_completions(session, "Say hello. ", max_tokens=16, timeout=30)
+        tokens, elapsed, _ = await stream_completions(
+            session, "Say hello. ", max_tokens=16, timeout=30
+        )
         print(f"  Next request: {tokens} tokens in {elapsed:.1f}s")
         if elapsed < 20:
             print("  PASS: Recovery after disconnect")
@@ -128,12 +138,16 @@ async def test_request_queuing():
 
     async with aiohttp.ClientSession() as session:
         task_a = asyncio.create_task(
-            stream_completions(session, "Tell me about quantum physics. ", max_tokens=64, timeout=60)
+            stream_completions(
+                session, "Tell me about quantum physics. ", max_tokens=64, timeout=60
+            )
         )
         await asyncio.sleep(2)
 
         task_b = asyncio.create_task(
-            stream_completions(session, "Tell me about biology. ", max_tokens=32, timeout=60)
+            stream_completions(
+                session, "Tell me about biology. ", max_tokens=32, timeout=60
+            )
         )
 
         tokens_a, elapsed_a, _ = await task_a
@@ -209,7 +223,9 @@ async def run_golden_benchmarks(level=None, tag=None):
 
             ttft_str = f"{ttft:.2f}s" if ttft else "N/A"
             expect_short = p["expect"][:30]
-            print(f"  {p['id']:<18} {tokens:>6} {ttft_str:>7} {elapsed:>7.1f}s {tok_s:>6.1f}  {expect_short}")
+            print(
+                f"  {p['id']:<18} {tokens:>6} {ttft_str:>7} {elapsed:>7.1f}s {tok_s:>6.1f}  {expect_short}"
+            )
 
     # Summary
     if results:
@@ -229,13 +245,15 @@ async def run_golden_benchmarks(level=None, tag=None):
 async def main(args):
     # Health check
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
+        async with (
+            aiohttp.ClientSession() as session,
+            session.get(
                 f"{BASE}/v1/models", timeout=aiohttp.ClientTimeout(total=3)
-            ) as resp:
-                data = await resp.json()
-                model = data["data"][0]["id"] if data.get("data") else "unknown"
-                print(f"Server is up. Model: {model}")
+            ) as resp,
+        ):
+            data = await resp.json()
+            model = data["data"][0]["id"] if data.get("data") else "unknown"
+            print(f"Server is up. Model: {model}")
     except Exception as e:
         print(f"Cannot connect to server at {BASE}: {e}")
         sys.exit(1)
@@ -253,7 +271,9 @@ async def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Event loop & benchmark tests")
-    parser.add_argument("--bench", action="store_true", help="Run golden prompt benchmarks")
+    parser.add_argument(
+        "--bench", action="store_true", help="Run golden prompt benchmarks"
+    )
     parser.add_argument("--all", action="store_true", help="Run all tests + benchmarks")
     parser.add_argument("--level", type=int, help="Filter prompts by level (1-5)")
     parser.add_argument("--tag", type=str, help="Filter prompts by tag")

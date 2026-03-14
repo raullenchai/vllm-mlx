@@ -166,7 +166,7 @@ class Qwen3CoderToolParser(ToolParser):
             return None
         function_name = function_call_str[:end_index]
         param_config = _get_arguments_config(function_name, tools)
-        parameters = function_call_str[end_index + 1:]
+        parameters = function_call_str[end_index + 1 :]
         param_dict = {}
         for match_text in self.tool_call_parameter_regex.findall(parameters):
             try:
@@ -174,7 +174,7 @@ class Qwen3CoderToolParser(ToolParser):
             except ValueError:
                 continue
             p_name = match_text[:idx]
-            p_value = str(match_text[idx + 1:])
+            p_value = str(match_text[idx + 1 :])
             if p_value.startswith("\n"):
                 p_value = p_value[1:]
             if p_value.endswith("\n"):
@@ -190,9 +190,7 @@ class Qwen3CoderToolParser(ToolParser):
 
     def _get_function_calls(self, model_output: str) -> list[str]:
         matched_ranges = self.tool_call_regex.findall(model_output)
-        raw_tool_calls = [
-            m[0] if m[0] else m[1] for m in matched_ranges
-        ]
+        raw_tool_calls = [m[0] if m[0] else m[1] for m in matched_ranges]
         if not raw_tool_calls:
             raw_tool_calls = [model_output]
 
@@ -325,7 +323,7 @@ class Qwen3CoderToolParser(ToolParser):
             tool_text = current_text[tool_start_idx:]
         else:
             tool_text = current_text[
-                tool_start_idx: tool_end_idx + len(self.tool_call_end_token)
+                tool_start_idx : tool_end_idx + len(self.tool_call_end_token)
             ]
 
         # Parse function header
@@ -349,9 +347,11 @@ class Qwen3CoderToolParser(ToolParser):
                         tools = None
                         if request and isinstance(request, dict):
                             tools = request.get("tools")
-                        fc = tool_text[func_start:tool_text.find(
-                            self.function_end_token, func_start
-                        )]
+                        fc = tool_text[
+                            func_start : tool_text.find(
+                                self.function_end_token, func_start
+                            )
+                        ]
                         parsed = self._parse_xml_function_call(fc, tools)
                         args = parsed["arguments"] if parsed else "{}"
                         self.json_started = True
@@ -461,14 +461,19 @@ class Qwen3CoderToolParser(ToolParser):
                 # Type conversion
                 tools = None
                 if self._streaming_request:
-                    tools = self._streaming_request.get("tools") if isinstance(
-                        self._streaming_request, dict
-                    ) else None
+                    tools = (
+                        self._streaming_request.get("tools")
+                        if isinstance(self._streaming_request, dict)
+                        else None
+                    )
                 param_config = _get_arguments_config(
                     self.current_function_name or "", tools
                 )
                 converted = _convert_param_value(
-                    pv, current_param_name, param_config, self.current_function_name or ""
+                    pv,
+                    current_param_name,
+                    param_config,
+                    self.current_function_name or "",
                 )
                 serialized = json.dumps(converted, ensure_ascii=False)
 
@@ -497,9 +502,11 @@ class Qwen3CoderToolParser(ToolParser):
                 # Update prev_tool_call_arr with final arguments
                 tools = None
                 if self._streaming_request:
-                    tools = self._streaming_request.get("tools") if isinstance(
-                        self._streaming_request, dict
-                    ) else None
+                    tools = (
+                        self._streaming_request.get("tools")
+                        if isinstance(self._streaming_request, dict)
+                        else None
+                    )
                 func_start = tool_text.find(self.tool_call_prefix) + len(
                     self.tool_call_prefix
                 )

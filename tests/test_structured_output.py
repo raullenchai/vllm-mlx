@@ -6,14 +6,16 @@ Tests the JSON parsing, validation, and response_format handling.
 """
 
 import json
+
 import pytest
+
+from vllm_mlx.api.models import ResponseFormat, ResponseFormatJsonSchema
 from vllm_mlx.api.tool_calling import (
-    validate_json_schema,
+    build_json_system_prompt,
     extract_json_from_text,
     parse_json_output,
-    build_json_system_prompt,
+    validate_json_schema,
 )
-from vllm_mlx.api.models import ResponseFormat, ResponseFormatJsonSchema
 
 
 class TestValidateJsonSchema:

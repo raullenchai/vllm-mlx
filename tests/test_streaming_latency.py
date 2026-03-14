@@ -20,7 +20,6 @@ import asyncio
 import json
 import statistics
 import time
-from typing import List, Tuple
 
 import httpx
 import pytest
@@ -30,7 +29,7 @@ async def measure_streaming_latency(
     prompt: str,
     server_url: str = "http://localhost:8000",
     max_tokens: int = 50,
-) -> Tuple[float, List[float], float, int]:
+) -> tuple[float, list[float], float, int]:
     """
     Measure streaming latency metrics.
 
@@ -39,7 +38,7 @@ async def measure_streaming_latency(
     """
     start_time = time.perf_counter()
     first_token_time = None
-    token_times: List[float] = []
+    token_times: list[float] = []
     token_count = 0
 
     payload = {
@@ -50,36 +49,38 @@ async def measure_streaming_latency(
         "stream": True,
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        async with client.stream(
+    async with (
+        httpx.AsyncClient(timeout=60.0) as client,
+        client.stream(
             "POST",
             f"{server_url}/v1/chat/completions",
             json=payload,
-        ) as response:
-            async for line in response.aiter_lines():
-                if not line:
+        ) as response,
+    ):
+        async for line in response.aiter_lines():
+            if not line:
+                continue
+            if line.startswith("data: "):
+                data = line[6:]
+                if data == "[DONE]":
+                    break
+
+                current_time = time.perf_counter()
+
+                try:
+                    chunk = json.loads(data)
+                    content = (
+                        chunk.get("choices", [{}])[0]
+                        .get("delta", {})
+                        .get("content", "")
+                    )
+                    if content:
+                        token_count += 1
+                        if first_token_time is None:
+                            first_token_time = current_time
+                        token_times.append(current_time)
+                except json.JSONDecodeError:
                     continue
-                if line.startswith("data: "):
-                    data = line[6:]
-                    if data == "[DONE]":
-                        break
-
-                    current_time = time.perf_counter()
-
-                    try:
-                        chunk = json.loads(data)
-                        content = (
-                            chunk.get("choices", [{}])[0]
-                            .get("delta", {})
-                            .get("content", "")
-                        )
-                        if content:
-                            token_count += 1
-                            if first_token_time is None:
-                                first_token_time = current_time
-                            token_times.append(current_time)
-                    except json.JSONDecodeError:
-                        continue
 
     end_time = time.perf_counter()
 
@@ -99,7 +100,7 @@ async def measure_streaming_latency(
 async def run_benchmark(
     num_iterations: int = 5,
     server_url: str = "http://localhost:8000",
-    prompts: List[str] = None,
+    prompts: list[str] = None,
 ) -> None:
     """Run the streaming latency benchmark."""
     if prompts is None:
@@ -116,10 +117,10 @@ async def run_benchmark(
     print(f"Iterations per prompt: {num_iterations}")
     print()
 
-    all_ttft: List[float] = []
-    all_itl: List[float] = []
-    all_total: List[float] = []
-    all_tokens: List[int] = []
+    all_ttft: list[float] = []
+    all_itl: list[float] = []
+    all_total: list[float] = []
+    all_tokens: list[int] = []
 
     for prompt in prompts:
         print(
@@ -146,11 +147,11 @@ async def run_benchmark(
                 prompt_tokens.append(tokens)
 
                 print(
-                    f"  Run {i+1}: TTFT={ttft:.1f}ms, Tokens={tokens}, Total={total:.1f}ms"
+                    f"  Run {i + 1}: TTFT={ttft:.1f}ms, Tokens={tokens}, Total={total:.1f}ms"
                 )
 
             except Exception as e:
-                print(f"  Run {i+1}: ERROR - {e}")
+                print(f"  Run {i + 1}: ERROR - {e}")
 
         if prompt_ttft:
             avg_ttft = statistics.mean(prompt_ttft)

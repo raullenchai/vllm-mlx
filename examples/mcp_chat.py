@@ -14,6 +14,7 @@ Example prompts:
 """
 
 import json
+
 import requests
 
 BASE_URL = "http://localhost:8000"
@@ -24,14 +25,16 @@ def get_mcp_tools():
     response = requests.get(f"{BASE_URL}/v1/mcp/tools").json()
     tools = []
     for tool in response.get("tools", []):
-        tools.append({
-            "type": "function",
-            "function": {
-                "name": tool["name"],
-                "description": tool["description"],
-                "parameters": tool["parameters"]
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": tool["parameters"],
+                },
             }
-        })
+        )
     return tools
 
 
@@ -39,7 +42,7 @@ def execute_tool(tool_name: str, arguments: dict):
     """Execute an MCP tool."""
     response = requests.post(
         f"{BASE_URL}/v1/mcp/execute",
-        json={"tool_name": tool_name, "arguments": arguments}
+        json={"tool_name": tool_name, "arguments": arguments},
     ).json()
     return response
 
@@ -53,9 +56,9 @@ def chat(messages: list, tools: list):
                 "model": "default",
                 "messages": messages,
                 "tools": tools,
-                "max_tokens": 1000
+                "max_tokens": 1000,
             },
-            timeout=120
+            timeout=120,
         )
         if response.status_code != 200:
             return {"error": f"HTTP {response.status_code}: {response.text[:200]}"}
@@ -86,7 +89,12 @@ def main():
         print(f"  ... and {len(tools) - 5} more\n")
 
     # Build tools description for system prompt
-    tools_desc = "\n".join([f"- {t['function']['name']}: {t['function']['description'][:100]}" for t in tools[:10]])
+    tools_desc = "\n".join(
+        [
+            f"- {t['function']['name']}: {t['function']['description'][:100]}"
+            for t in tools[:10]
+        ]
+    )
 
     system_prompt = f"""You are an assistant with access to filesystem tools.
 
@@ -101,9 +109,7 @@ To list directories, use filesystem__list_directory.
 
 ALWAYS respond with tool_calls when you need to perform file operations."""
 
-    messages = [
-        {"role": "system", "content": system_prompt}
-    ]
+    messages = [{"role": "system", "content": system_prompt}]
 
     while True:
         try:
@@ -139,11 +145,13 @@ ALWAYS respond with tool_calls when you need to perform file operations."""
             print(f"\nAssistant: [Using {len(tool_calls)} tool(s)...]")
 
             # Add assistant message with tool_calls
-            messages.append({
-                "role": "assistant",
-                "content": assistant_message.get("content"),
-                "tool_calls": tool_calls
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": assistant_message.get("content"),
+                    "tool_calls": tool_calls,
+                }
+            )
 
             # Execute each tool call
             for tc in tool_calls:
@@ -160,14 +168,14 @@ ALWAYS respond with tool_calls when you need to perform file operations."""
                 else:
                     tool_result = str(result.get("content", ""))
 
-                print(f"     Result: {tool_result[:100]}{'...' if len(tool_result) > 100 else ''}")
+                print(
+                    f"     Result: {tool_result[:100]}{'...' if len(tool_result) > 100 else ''}"
+                )
 
                 # Add tool result
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": tool_result
-                })
+                messages.append(
+                    {"role": "tool", "tool_call_id": tc["id"], "content": tool_result}
+                )
 
             # Get final LLM response
             response = chat(messages, tools)

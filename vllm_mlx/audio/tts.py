@@ -11,9 +11,9 @@ Supports:
 
 import io
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Union
 
 import numpy as np
 
@@ -155,9 +155,7 @@ class TTSEngine:
                     sample_rate = result.sample_rate
 
                 # Convert mlx array to numpy
-                if isinstance(audio_data, mx.array):
-                    audio_np = np.array(audio_data.tolist(), dtype=np.float32)
-                elif hasattr(audio_data, "tolist"):
+                if isinstance(audio_data, mx.array) or hasattr(audio_data, "tolist"):
                     audio_np = np.array(audio_data.tolist(), dtype=np.float32)
                 else:
                     audio_np = np.array(audio_data, dtype=np.float32)
@@ -229,7 +227,7 @@ class TTSEngine:
     def save(
         self,
         audio: AudioOutput,
-        path: Union[str, Path],
+        path: str | Path,
         format: str = "wav",
     ) -> None:
         """

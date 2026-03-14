@@ -15,7 +15,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import mlx.core as mx
 from mlx_lm.generate import BatchGenerator
@@ -69,7 +69,7 @@ class SchedulerConfig:
 
     # Memory-aware cache settings (recommended for large models)
     use_memory_aware_cache: bool = True  # Use memory-based eviction
-    cache_memory_mb: Optional[int] = None  # None = auto-detect (20% of available RAM)
+    cache_memory_mb: int | None = None  # None = auto-detect (20% of available RAM)
     cache_memory_percent: float = 0.20  # Fraction of available RAM if auto-detecting
 
     # KV cache quantization (reduces prefix cache memory)
@@ -112,13 +112,13 @@ class SchedulerOutput:
     """
 
     # Requests scheduled in this step
-    scheduled_request_ids: List[str] = field(default_factory=list)
+    scheduled_request_ids: list[str] = field(default_factory=list)
     # Total tokens scheduled
     num_scheduled_tokens: int = 0
     # Requests that finished in this step
-    finished_request_ids: Set[str] = field(default_factory=set)
+    finished_request_ids: set[str] = field(default_factory=set)
     # Request outputs (tokens generated)
-    outputs: List[RequestOutput] = field(default_factory=list)
+    outputs: list[RequestOutput] = field(default_factory=list)
     # Whether any work was done
     has_work: bool = False
 
@@ -128,9 +128,9 @@ def _install_chunked_prefill(
     budget: int,
     mid_prefill_save=None,
     prompt_cache_save=None,
-    pending_abort_ids: Optional[Set[str]] = None,
-    uid_to_request_id: Optional[Dict[int, str]] = None,
-    requests: Optional[Dict[str, Any]] = None,
+    pending_abort_ids: set[str] | None = None,
+    uid_to_request_id: dict[int, str] | None = None,
+    requests: dict[str, Any] | None = None,
 ) -> None:
     """
     Monkey-patch a BatchGenerator instance so that large prefills are
@@ -938,7 +938,7 @@ def _install_mtp(
 
     mode_str = "optimistic (no verify)" if optimistic else "always-advance"
     logger.info(
-        f"[MTP] installed with num_draft_tokens={num_draft_tokens}, " f"{mode_str} mode"
+        f"[MTP] installed with num_draft_tokens={num_draft_tokens}, {mode_str} mode"
     )
 
 
@@ -960,8 +960,8 @@ class Scheduler:
         self,
         model: Any,
         tokenizer: Any,
-        config: Optional[SchedulerConfig] = None,
-        tool_logits_processor_factory: Optional[Any] = None,
+        config: SchedulerConfig | None = None,
+        tool_logits_processor_factory: Any | None = None,
     ):
         """
         Initialize the scheduler.
@@ -984,23 +984,23 @@ class Scheduler:
 
         # Request management - following vLLM's design
         self.waiting: deque[Request] = deque()  # Waiting queue (FCFS)
-        self.running: Dict[str, Request] = {}  # Running requests by ID
-        self.requests: Dict[str, Request] = {}  # All requests by ID
-        self.finished_req_ids: Set[str] = set()  # Recently finished
+        self.running: dict[str, Request] = {}  # Running requests by ID
+        self.requests: dict[str, Request] = {}  # All requests by ID
+        self.finished_req_ids: set[str] = set()  # Recently finished
 
         # Mapping between our request IDs and BatchGenerator UIDs
-        self.request_id_to_uid: Dict[str, int] = {}
-        self.uid_to_request_id: Dict[int, str] = {}
+        self.request_id_to_uid: dict[str, int] = {}
+        self.uid_to_request_id: dict[int, str] = {}
 
         # BatchGenerator - the actual batching engine
-        self.batch_generator: Optional[BatchGenerator] = None
-        self._current_sampler_params: Optional[Tuple] = None
+        self.batch_generator: BatchGenerator | None = None
+        self._current_sampler_params: tuple | None = None
 
         # Prefix cache for KV state reuse
-        self.prefix_cache: Optional[PrefixCacheManager] = None
-        self.memory_aware_cache: Optional[MemoryAwarePrefixCache] = None
-        self.paged_cache_manager: Optional[PagedCacheManager] = None
-        self.block_aware_cache: Optional[BlockAwarePrefixCache] = None
+        self.prefix_cache: PrefixCacheManager | None = None
+        self.memory_aware_cache: MemoryAwarePrefixCache | None = None
+        self.paged_cache_manager: PagedCacheManager | None = None
+        self.block_aware_cache: BlockAwarePrefixCache | None = None
 
         if self.config.enable_prefix_cache:
             if self.config.use_paged_cache:
@@ -1047,7 +1047,7 @@ class Scheduler:
 
         # Thread-safe set for deferred aborts (main thread → executor thread)
         # CPython GIL guarantees set.add() and `x in set` are atomic.
-        self._pending_abort_ids: Set[str] = set()
+        self._pending_abort_ids: set[str] = set()
 
         # Statistics
         self.num_requests_processed = 0
@@ -1076,13 +1076,13 @@ class Scheduler:
         # Fallback to the original
         return tokenizer
 
-    def _decode_tokens(self, token_ids: List[int]) -> str:
+    def _decode_tokens(self, token_ids: list[int]) -> str:
         """
         Decode token IDs to text, handling both tokenizers and processors.
         """
         return self._actual_tokenizer.decode(token_ids)
 
-    def _get_stop_tokens(self) -> Set[int]:
+    def _get_stop_tokens(self) -> set[int]:
         """Get stop token IDs from tokenizer or processor."""
         stop_tokens = set()
         # Check both the processor/tokenizer and the actual tokenizer
@@ -1406,7 +1406,7 @@ class Scheduler:
 
         return True
 
-    def _extract_cache_states(self, raw_cache: List[Any]) -> List[Dict[str, Any]]:
+    def _extract_cache_states(self, raw_cache: list[Any]) -> list[dict[str, Any]]:
         """
         Extract actual tensor state from each layer cache.
 
@@ -1444,8 +1444,8 @@ class Scheduler:
         return extracted if len(extracted) == len(raw_cache) else []
 
     def _reconstruct_cache_from_states(
-        self, extracted_states: List[Dict[str, Any]]
-    ) -> Optional[List[Any]]:
+        self, extracted_states: list[dict[str, Any]]
+    ) -> list[Any] | None:
         """
         Reconstruct cache objects from extracted cache states.
 
@@ -1477,6 +1477,8 @@ class Scheduler:
                     # (safe because mid-prefill save is always batch_size=1).
                     from mlx_lm.models.cache import (
                         BatchKVCache as _BatchKVCache,
+                    )
+                    from mlx_lm.models.cache import (
                         KVCache as _KVCache,
                     )
 
@@ -1718,7 +1720,7 @@ class Scheduler:
         """Get number of running requests."""
         return len(self.running)
 
-    def _schedule_waiting(self) -> List[Request]:
+    def _schedule_waiting(self) -> list[Request]:
         """
         Move requests from waiting queue to running.
 
@@ -1833,8 +1835,8 @@ class Scheduler:
         return scheduled
 
     def _process_batch_responses(
-        self, responses: List[Any]
-    ) -> Tuple[List[RequestOutput], Set[str]]:
+        self, responses: list[Any]
+    ) -> tuple[list[RequestOutput], set[str]]:
         """
         Process responses from BatchGenerator.
 
@@ -1944,7 +1946,7 @@ class Scheduler:
 
         return outputs, finished_ids
 
-    def _cleanup_finished(self, finished_ids: Set[str]) -> None:
+    def _cleanup_finished(self, finished_ids: set[str]) -> None:
         """Clean up finished requests and store caches for reuse."""
         for request_id in finished_ids:
             request = self.running.get(request_id)
@@ -2116,7 +2118,7 @@ class Scheduler:
 
         logger.info("Cache recovery completed")
 
-    def _recover_from_generation_error(self) -> Set[str]:
+    def _recover_from_generation_error(self) -> set[str]:
         """Recover from fatal generation error (OOM, Metal crash).
 
         Aborts all running requests and resets batch state.
@@ -2131,7 +2133,7 @@ class Scheduler:
         self._current_sampler_params = None
 
         # Abort all running requests
-        aborted_ids: Set[str] = set()
+        aborted_ids: set[str] = set()
         for request_id in list(self.running):
             request = self.running.get(request_id)
             if request is not None:
@@ -2298,15 +2300,15 @@ class Scheduler:
 
         return output
 
-    def get_request(self, request_id: str) -> Optional[Request]:
+    def get_request(self, request_id: str) -> Request | None:
         """Get a request by ID."""
         return self.requests.get(request_id)
 
-    def remove_finished_request(self, request_id: str) -> Optional[Request]:
+    def remove_finished_request(self, request_id: str) -> Request | None:
         """Remove a finished request from tracking."""
         return self.requests.pop(request_id, None)
 
-    def get_running_requests_info(self) -> List[Dict[str, Any]]:
+    def get_running_requests_info(self) -> list[dict[str, Any]]:
         """Per-request details for status endpoint."""
         import time as _time
 
@@ -2374,7 +2376,7 @@ class Scheduler:
 
         return result
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get scheduler statistics."""
         stats = {
             "num_waiting": len(self.waiting),
@@ -2401,7 +2403,7 @@ class Scheduler:
             stats["prefix_cache"] = self.prefix_cache.get_stats()
         return stats
 
-    def get_cache_stats(self) -> Optional[Dict[str, Any]]:
+    def get_cache_stats(self) -> dict[str, Any] | None:
         """Get cache statistics."""
         if self.block_aware_cache is not None:
             return self.block_aware_cache.get_stats()

@@ -8,7 +8,6 @@ provides a BatchMambaCache wrapper that adds batching support.
 """
 
 import logging
-from typing import List, Optional
 
 import mlx.core as mx
 
@@ -34,7 +33,7 @@ class BatchMambaCache(MambaCache):
     mlx-lm's BatchGenerator, specifically the `extract` method.
     """
 
-    def __init__(self, left_padding: Optional[List[int]] = None, size: int = 2):
+    def __init__(self, left_padding: list[int] | None = None, size: int = 2):
         """
         Initialize BatchMambaCache.
 
@@ -72,7 +71,7 @@ class BatchMambaCache(MambaCache):
         return cache
 
     @classmethod
-    def merge(cls, caches: List[MambaCache]) -> "BatchMambaCache":
+    def merge(cls, caches: list[MambaCache]) -> "BatchMambaCache":
         """
         Merge multiple MambaCache objects into a BatchMambaCache.
 
@@ -116,10 +115,10 @@ def patch_mlx_lm_for_mamba():
 
     gen_module = importlib.import_module("mlx_lm.generate")
     from mlx_lm.models.cache import (
-        KVCache,
         ArraysCache,
-        RotatingKVCache,
         CacheList,
+        KVCache,
+        RotatingKVCache,
     )
 
     # MambaCache was removed in mlx-lm 0.30.6

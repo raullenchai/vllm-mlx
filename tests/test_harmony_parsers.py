@@ -281,7 +281,7 @@ class TestHarmonyReasoningParser:
 
     def test_no_analysis_channel(self, parser):
         """Output with no analysis returns None reasoning."""
-        output = "<|channel|>final\n" "<|message|>Direct answer.\n" "<|return|>"
+        output = "<|channel|>final\n<|message|>Direct answer.\n<|return|>"
         reasoning, content = parser.extract_reasoning(output)
 
         assert reasoning is None
@@ -289,7 +289,7 @@ class TestHarmonyReasoningParser:
 
     def test_analysis_only_no_final(self, parser):
         """Output with only analysis returns None content."""
-        output = "<|channel|>analysis\n" "<|message|>Just thinking...\n" "<|end|>"
+        output = "<|channel|>analysis\n<|message|>Just thinking...\n<|end|>"
         reasoning, content = parser.extract_reasoning(output)
 
         assert reasoning == "Just thinking..."
@@ -642,7 +642,7 @@ class TestHarmonyEdgeCases:
     def test_tool_parser_incomplete_call(self):
         """Incomplete tool call (missing <|call|>) is not parsed."""
         parser = HarmonyToolParser()
-        text = "<|channel|>commentary to=functions.func\n" '<|message|>{"arg": "value"}'
+        text = '<|channel|>commentary to=functions.func\n<|message|>{"arg": "value"}'
         result = parser.extract_tool_calls(text)
         assert not result.tools_called
 
@@ -816,11 +816,7 @@ class TestHarmonyExtractToolCalls:
 
     def test_no_tool_call_final_channel_only(self, parser):
         """No tool call, final channel only -- returns content, no tools."""
-        text = (
-            "<|channel|>final\n"
-            "<|message|>Sure, I can help with that.\n"
-            "<|return|>"
-        )
+        text = "<|channel|>final\n<|message|>Sure, I can help with that.\n<|return|>"
         result = parser.extract_tool_calls(text)
         assert not result.tools_called
         assert result.tool_calls == []
@@ -959,7 +955,7 @@ class TestHarmonyStreaming:
             previous = current
 
         joined = "".join(content_parts)
-        assert "The weather is sunny." == joined
+        assert joined == "The weather is sunny."
 
     def test_final_channel_empty_content_before_message(self, parser):
         """In final channel before <|message|> content, returns empty content dict."""
@@ -1000,9 +996,7 @@ class TestHarmonyStreaming:
 
     def test_no_channel_markers_pass_through(self, parser):
         """Text with no channel markers passes through as content."""
-        result = parser.extract_tool_calls_streaming(
-            "", "Hello world", "Hello world"
-        )
+        result = parser.extract_tool_calls_streaming("", "Hello world", "Hello world")
         assert result == {"content": "Hello world"}
 
         result2 = parser.extract_tool_calls_streaming(
@@ -1112,20 +1106,12 @@ class TestHarmonyHasPendingToolCall:
 
     def test_returns_false_for_final_channel_only(self, parser):
         """Returns False when only final channel is present."""
-        text = (
-            "<|channel|>final\n"
-            "<|message|>Here is the answer.\n"
-            "<|return|>"
-        )
+        text = "<|channel|>final\n<|message|>Here is the answer.\n<|return|>"
         assert parser.has_pending_tool_call(text) is False
 
     def test_returns_false_for_analysis_channel(self, parser):
         """Returns False for analysis channel (no tool call pending)."""
-        text = (
-            "<|channel|>analysis\n"
-            "<|message|>Let me think about this.\n"
-            "<|end|>"
-        )
+        text = "<|channel|>analysis\n<|message|>Let me think about this.\n<|end|>"
         assert parser.has_pending_tool_call(text) is False
 
     def test_returns_false_after_call_completed(self, parser):
@@ -1275,7 +1261,6 @@ class TestHarmonyCLIIntegration:
         We inspect the argparse tree rather than calling main() so no server
         is started.
         """
-        import argparse
         import importlib
         import inspect
 

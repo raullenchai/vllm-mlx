@@ -18,7 +18,7 @@ No server needed. Runs at the model layer directly.
 import argparse
 import gc
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import mlx.core as mx
 
@@ -128,7 +128,8 @@ def run_baseline(model, tokenizer, prompt_str: str, max_tokens: int) -> RunResul
 
     for (token_id, _logprobs), _ in zip(
         generate_step(
-            tokens, model,
+            tokens,
+            model,
             prompt_cache=kv_cache,
             max_tokens=max_tokens,
         ),
@@ -243,15 +244,21 @@ def apply_chat_template(tokenizer, prompt: str) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="A/B benchmark: baseline vs prompt lookup")
+    parser = argparse.ArgumentParser(
+        description="A/B benchmark: baseline vs prompt lookup"
+    )
     parser.add_argument(
         "--model",
         default="mlx-community/Llama-3.2-3B-Instruct-4bit",
         help="Model path or HF repo",
     )
     parser.add_argument("--max-tokens", type=int, default=512)
-    parser.add_argument("--num-draft", type=int, default=4, help="Draft tokens for lookup")
-    parser.add_argument("--ngram-size", type=int, default=3, help="N-gram size for lookup")
+    parser.add_argument(
+        "--num-draft", type=int, default=4, help="Draft tokens for lookup"
+    )
+    parser.add_argument(
+        "--ngram-size", type=int, default=3, help="N-gram size for lookup"
+    )
     parser.add_argument(
         "--prompts",
         nargs="*",
@@ -262,9 +269,24 @@ def main():
 
     # Load model once
     print(f"Loading model: {args.model}")
-    from mlx_lm import load as mlx_load
+    try:
+        from mlx_lm import load as mlx_load
 
-    model, tokenizer = mlx_load(args.model)
+        model, tokenizer = mlx_load(args.model)
+    except (ValueError, Exception) as e:
+        if "parameters not in model" in str(e) or "Missing" in str(e):
+            print(
+                f"  Standard load failed ({e.__class__.__name__}), retrying with strict=False..."
+            )
+            from pathlib import Path
+
+            from mlx_lm.utils import load_model, load_tokenizer
+
+            model_path = Path(args.model)
+            model, _ = load_model(model_path, strict=False)
+            tokenizer = load_tokenizer(model_path, {})
+        else:
+            raise
     print(f"Model loaded. Max tokens per prompt: {args.max_tokens}\n")
 
     # Filter prompts
@@ -331,7 +353,9 @@ def main():
     print()
     print("=" * 100)
     print(f"  MODEL: {args.model}")
-    print(f"  SETTINGS: max_tokens={args.max_tokens}, num_draft={args.num_draft}, ngram={args.ngram_size}")
+    print(
+        f"  SETTINGS: max_tokens={args.max_tokens}, num_draft={args.num_draft}, ngram={args.ngram_size}"
+    )
     print("=" * 100)
     print(
         f"  {'Prompt':<18} {'Category':<12} {'Method':<15} "
@@ -351,8 +375,12 @@ def main():
     for pname in prompt_names_seen:
         pair = [r for r in results if r.name == pname]
         for r in pair:
-            draft_str = str(r.draft_tokens_accepted) if r.method == "prompt_lookup" else "--"
-            accept_str = f"{r.acceptance_rate:.0%}" if r.method == "prompt_lookup" else "--"
+            draft_str = (
+                str(r.draft_tokens_accepted) if r.method == "prompt_lookup" else "--"
+            )
+            accept_str = (
+                f"{r.acceptance_rate:.0%}" if r.method == "prompt_lookup" else "--"
+            )
             print(
                 f"  {r.name:<18} {r.category:<12} {r.method:<15} "
                 f"{r.completion_tokens:>7} {r.elapsed_sec:>8.2f} "
@@ -365,7 +393,9 @@ def main():
         if base and lookup and base[0].tok_per_sec > 0:
             sp = lookup[0].tok_per_sec / base[0].tok_per_sec
             speedups.append((pname, pair[0].category, sp))
-            print(f"  {'':>18} {'':>12} {'>>> SPEEDUP':<15} {'':>7} {'':>8} {sp:>7.2f}x")
+            print(
+                f"  {'':>18} {'':>12} {'>>> SPEEDUP':<15} {'':>7} {'':>8} {sp:>7.2f}x"
+            )
         print()
 
     # --- Aggregate ---
@@ -382,7 +412,9 @@ def main():
         print(f"  Average speedup (high_repeat):  {avg(high):.2f}x  (n={len(high)})")
         print(f"  Average speedup (med_repeat):   {avg(med):.2f}x  (n={len(med)})")
         print(f"  Average speedup (low_repeat):   {avg(low):.2f}x  (n={len(low)})")
-        print(f"  Average speedup (ALL):          {avg(all_sp):.2f}x  (n={len(all_sp)})")
+        print(
+            f"  Average speedup (ALL):          {avg(all_sp):.2f}x  (n={len(all_sp)})"
+        )
     print("=" * 100)
 
 

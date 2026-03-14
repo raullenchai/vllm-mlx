@@ -29,7 +29,7 @@ class AnthropicContentBlock(BaseModel):
     input: dict | None = None
     # tool_result block
     tool_use_id: str | None = None
-    content: str | list | None = None
+    content: str | list[Any] | None = None
     is_error: bool | None = None
     # image block
     source: dict | None = None

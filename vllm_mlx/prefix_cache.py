@@ -15,7 +15,7 @@ import logging
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 try:
     import mlx.core as mx
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 class CacheEntry:
     """Entry in the prefix cache."""
 
-    prompt_cache: List[Any]  # The cached KV state
+    prompt_cache: list[Any]  # The cached KV state
     count: int  # Reference count for sharing
 
 
@@ -54,7 +54,7 @@ class PrefixCacheStats:
             return 0.0
         return self.hits / self.total_queries
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert stats to dictionary."""
         return {
             "hits": self.hits,
@@ -105,7 +105,7 @@ class PrefixCacheManager:
 
         # Trie-based cache: nested dicts with token keys
         # Structure: {model_key: {token1: {token2: {..., "cache": CacheEntry}}}}
-        self._cache: Dict[Any, Dict] = {}
+        self._cache: dict[Any, dict] = {}
 
         # LRU tracking: (model_key, tuple(tokens)) ordered by access time
         self._lru: deque = deque()
@@ -117,8 +117,8 @@ class PrefixCacheManager:
         self.stats = PrefixCacheStats()
 
     def _search(
-        self, tokens: List[int]
-    ) -> Tuple[Optional[List[int]], Optional[List[int]], Optional[List[int]], int]:
+        self, tokens: list[int]
+    ) -> tuple[list[int] | None, list[int] | None, list[int] | None, int]:
         """
         Search for cached prefix matching tokens.
 
@@ -165,7 +165,7 @@ class PrefixCacheManager:
 
         return None, None, None, 0
 
-    def fetch_cache(self, tokens: List[int]) -> Tuple[Optional[List[Any]], List[int]]:
+    def fetch_cache(self, tokens: list[int]) -> tuple[list[Any] | None, list[int]]:
         """
         Find cached prefix for the given tokens.
 
@@ -222,7 +222,7 @@ class PrefixCacheManager:
         self.stats.misses += 1
         return None, tokens
 
-    def store_cache(self, tokens: List[int], prompt_cache: List[Any]) -> None:
+    def store_cache(self, tokens: list[int], prompt_cache: list[Any]) -> None:
         """
         Store computed cache for future reuse.
 
@@ -266,7 +266,7 @@ class PrefixCacheManager:
         while len(self._lru) + len(self._pinned) > self.max_size and len(self._lru) > 0:
             self._evict_lru()
 
-    def _get_cache_entry(self, tokens: List[int]) -> Optional[CacheEntry]:
+    def _get_cache_entry(self, tokens: list[int]) -> CacheEntry | None:
         """Get cache entry for given tokens."""
         if self.model_key not in self._cache:
             return None
@@ -299,7 +299,7 @@ class PrefixCacheManager:
         self._delete_cache(model_key, list(tokens_tuple))
         self.stats.evictions += 1
 
-    def _delete_cache(self, model_key: Any, tokens: List[int]) -> None:
+    def _delete_cache(self, model_key: Any, tokens: list[int]) -> None:
         """Delete cache entry and clean up empty trie branches."""
         if model_key not in self._cache:
             return
@@ -325,7 +325,7 @@ class PrefixCacheManager:
             if not node:  # Empty dict
                 del parent[tok]
 
-    def _can_trim_cache(self, prompt_cache: List[Any]) -> bool:
+    def _can_trim_cache(self, prompt_cache: list[Any]) -> bool:
         """Check if cache can be trimmed."""
         if not prompt_cache:
             return False
@@ -335,14 +335,14 @@ class PrefixCacheManager:
             return first_cache.is_trimmable()
         return hasattr(first_cache, "trim")
 
-    def _trim_cache(self, prompt_cache: List[Any], num_tokens: int) -> List[Any]:
+    def _trim_cache(self, prompt_cache: list[Any], num_tokens: int) -> list[Any]:
         """Trim cache by removing num_tokens from the end."""
         for cache in prompt_cache:
             if hasattr(cache, "trim"):
                 cache.trim(num_tokens)
         return prompt_cache
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         return self.stats.to_dict()
 
@@ -357,7 +357,7 @@ class PrefixCacheManager:
         self._pinned.clear()
         self.reset_stats()
 
-    def pin_prefix(self, tokens: List[int]) -> bool:
+    def pin_prefix(self, tokens: list[int]) -> bool:
         """
         Pin a prefix in the cache to prevent eviction.
 
@@ -380,7 +380,7 @@ class PrefixCacheManager:
         # Verify entry exists in trie
         entry = self._get_cache_entry(tokens)
         if entry is None:
-            logger.warning(f"Cannot pin prefix: not found in cache")
+            logger.warning("Cannot pin prefix: not found in cache")
             return False
         # Reject if pinning would make capacity unenforceable
         if key not in self._pinned and len(self._pinned) >= self.max_size:
@@ -397,7 +397,7 @@ class PrefixCacheManager:
         logger.info(f"Pinned prefix ({len(tokens)} tokens)")
         return True
 
-    def unpin_prefix(self, tokens: List[int]) -> bool:
+    def unpin_prefix(self, tokens: list[int]) -> bool:
         """
         Unpin a prefix, making it eligible for LRU eviction again.
 
@@ -433,7 +433,7 @@ class BlockCacheEntry:
     """Entry mapping a token sequence to cache blocks."""
 
     block_table: BlockTable
-    cache_data: List[Any]  # Actual KV cache data per block
+    cache_data: list[Any]  # Actual KV cache data per block
     last_access: float
 
 
@@ -483,10 +483,10 @@ class BlockAwarePrefixCache:
 
         # Hash table for quick prefix lookup
         # Maps hash(tokens[:block_size*n]) -> (tokens, block_ids)
-        self._prefix_index: Dict[str, Tuple[List[int], List[int]]] = {}
+        self._prefix_index: dict[str, tuple[list[int], list[int]]] = {}
 
         # Request to block table mapping
-        self._request_tables: Dict[str, BlockCacheEntry] = {}
+        self._request_tables: dict[str, BlockCacheEntry] = {}
 
         # Statistics
         self._hits = 0
@@ -496,8 +496,8 @@ class BlockAwarePrefixCache:
     def fetch_cache(
         self,
         request_id: str,
-        tokens: List[int],
-    ) -> Tuple[Optional[BlockTable], List[int]]:
+        tokens: list[int],
+    ) -> tuple[BlockTable | None, list[int]]:
         """
         Find cached prefix blocks for the given tokens.
 
@@ -572,9 +572,9 @@ class BlockAwarePrefixCache:
     def store_cache(
         self,
         request_id: str,
-        tokens: List[int],
-        cache_data: List[Any],
-    ) -> Optional[BlockTable]:
+        tokens: list[int],
+        cache_data: list[Any],
+    ) -> BlockTable | None:
         """
         Store computed cache for future reuse.
 
@@ -697,10 +697,10 @@ class BlockAwarePrefixCache:
 
     def _extract_block_tensor_slice(
         self,
-        cache_data: List[Dict[str, Any]],
+        cache_data: list[dict[str, Any]],
         start_idx: int,
         end_idx: int,
-    ) -> Optional[List[Tuple[Any, Any]]]:
+    ) -> list[tuple[Any, Any]] | None:
         """
         Extract tensor slices for a single block from cache data.
 
@@ -753,7 +753,7 @@ class BlockAwarePrefixCache:
     def get_cache_for_generation(
         self,
         request_id: str,
-    ) -> Tuple[Optional[List[Any]], bool]:
+    ) -> tuple[list[Any] | None, bool]:
         """
         Get cache data for generation, applying COW if needed.
 
@@ -797,7 +797,7 @@ class BlockAwarePrefixCache:
         self,
         source_request_id: str,
         new_request_id: str,
-    ) -> Optional[BlockTable]:
+    ) -> BlockTable | None:
         """
         Fork cache from one request to another (COW).
 
@@ -832,7 +832,7 @@ class BlockAwarePrefixCache:
     def reconstruct_cache(
         self,
         block_table: BlockTable,
-    ) -> Optional[List[Any]]:
+    ) -> list[Any] | None:
         """
         Reconstruct KVCache objects from stored block tensor data.
 
@@ -952,8 +952,8 @@ class BlockAwarePrefixCache:
 
     def _find_best_prefix_match(
         self,
-        tokens: List[int],
-    ) -> Optional[Tuple[List[int], List[int]]]:
+        tokens: list[int],
+    ) -> tuple[list[int], list[int]] | None:
         """Find best matching prefix in the index."""
         best_match = None
         best_len = 0
@@ -977,8 +977,8 @@ class BlockAwarePrefixCache:
 
     def _update_prefix_index(
         self,
-        tokens: List[int],
-        block_ids: List[int],
+        tokens: list[int],
+        block_ids: list[int],
     ) -> None:
         """Update prefix index with new token sequence."""
         # Index block-aligned prefixes
@@ -988,7 +988,7 @@ class BlockAwarePrefixCache:
             prefix_hash = self.paged_cache.compute_block_hash(prefix_tokens)
             self._prefix_index[prefix_hash] = (prefix_tokens, block_ids[:i])
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         paged_stats = self.paged_cache.get_memory_usage()
         return {
@@ -1018,7 +1018,7 @@ class BlockAwarePrefixCache:
         self.paged_cache.clear()
         self.reset_stats()
 
-    def pin_prefix(self, tokens: List[int]) -> bool:
+    def pin_prefix(self, tokens: list[int]) -> bool:
         """
         Pin blocks covering a token prefix to prevent eviction.
 
@@ -1033,10 +1033,7 @@ class BlockAwarePrefixCache:
         if shared_block_ids:
             pinned = self.paged_cache.pin_blocks(shared_block_ids)
             if pinned > 0:
-                logger.info(
-                    f"Pinned prefix: {pinned} blocks, "
-                    f"{len(tokens)} tokens"
-                )
+                logger.info(f"Pinned prefix: {pinned} blocks, {len(tokens)} tokens")
                 return True
 
         # Try prefix index
@@ -1046,15 +1043,16 @@ class BlockAwarePrefixCache:
             pinned = self.paged_cache.pin_blocks(block_ids)
             if pinned > 0:
                 logger.info(
-                    f"Pinned prefix via index: {pinned} blocks, "
-                    f"{len(tokens)} tokens"
+                    f"Pinned prefix via index: {pinned} blocks, {len(tokens)} tokens"
                 )
                 return True
 
-        logger.warning(f"Cannot pin prefix: no cached blocks found for {len(tokens)} tokens")
+        logger.warning(
+            f"Cannot pin prefix: no cached blocks found for {len(tokens)} tokens"
+        )
         return False
 
-    def unpin_prefix(self, tokens: List[int]) -> bool:
+    def unpin_prefix(self, tokens: list[int]) -> bool:
         """
         Unpin blocks covering a token prefix.
 

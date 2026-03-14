@@ -13,7 +13,6 @@ import pytest
 from vllm_mlx.engine.base import GenerationOutput
 from vllm_mlx.engine.simple import SimpleEngine
 
-
 # ---------------------------------------------------------------------------
 # GenerationOutput dataclass
 # ---------------------------------------------------------------------------
@@ -199,11 +198,13 @@ def _make_chunk(text, finished=False, finish_reason=None, prompt_tokens=5, token
 
 def _collect_stream(engine, **kwargs):
     """Helper to collect async generator results synchronously."""
+
     async def _run():
         outputs = []
         async for out in engine.stream_generate(**kwargs):
             outputs.append(out)
         return outputs
+
     return asyncio.run(_run())
 
 

@@ -7,8 +7,9 @@ Run with: pytest tests/test_batching_deterministic.py -v
 """
 
 import asyncio
-import pytest
 import time
+
+import pytest
 
 # Model to use for tests - small model for fast testing
 TEST_MODEL = "mlx-community/Llama-3.2-1B-Instruct-4bit"
@@ -183,9 +184,9 @@ class TestDeterministicConcurrentRequests:
                 all_results.append(results)
 
         # Each run should produce same results
-        assert (
-            all_results[0] == all_results[1]
-        ), f"Results differ between runs: {all_results}"
+        assert all_results[0] == all_results[1], (
+            f"Results differ between runs: {all_results}"
+        )
 
 
 class TestBatchingPerformance:
@@ -262,7 +263,7 @@ class TestBatchingPerformance:
 
         print(f"\nSequential: {seq_throughput:.1f} tok/s")
         print(f"Batched: {batch_throughput:.1f} tok/s")
-        print(f"Speedup: {batch_throughput/seq_throughput:.2f}x")
+        print(f"Speedup: {batch_throughput / seq_throughput:.2f}x")
 
         # Batched should have better throughput (allow 10% tolerance for variance)
         assert batch_throughput > seq_throughput * 0.9, (

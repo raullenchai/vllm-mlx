@@ -58,7 +58,7 @@ def fmt_ms(val_s) -> str:
     if isinstance(val_s, (int, float)):
         ms = val_s * 1000
         if ms >= 1000:
-            return f"{ms/1000:.1f}s"
+            return f"{ms / 1000:.1f}s"
         return f"{ms:.0f}ms"
     return str(val_s)
 
@@ -85,7 +85,9 @@ def generate_scorecard(results: list[dict]) -> str:
     lines = []
     lines.append("# vllm-mlx Model Scorecard")
     lines.append("")
-    lines.append(f"*Auto-generated on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}*")
+    lines.append(
+        f"*Auto-generated on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}*"
+    )
     lines.append("")
 
     # Extract hardware from first result for header note
@@ -93,13 +95,28 @@ def generate_scorecard(results: list[dict]) -> str:
     hw_note = ", ".join(sorted(hw_labels)) if hw_labels else "Apple Silicon"
     lines.append(f"> **Tested on**: {hw_note}")
     lines.append(">")
-    lines.append("> **Methodology**: All suites use `enable_thinking: false`. Cache cleared between suites. See [README](README.md) for details.")
+    lines.append(
+        "> **Methodology**: All suites use `enable_thinking: false`. Cache cleared between suites. See [README](README.md) for details."
+    )
     lines.append("")
     lines.append("## Comparison Table")
     lines.append("")
 
     # Header — new layout with RAM, TTFT, Avg; without Hardware, Parser
-    cols = ["Model", "Quant", "RAM", "TTFT", "Decode (s)", "Decode (l)", "Tools", "Coding", "Reasoning", "General", "Avg", "Date"]
+    cols = [
+        "Model",
+        "Quant",
+        "RAM",
+        "TTFT",
+        "Decode (s)",
+        "Decode (l)",
+        "Tools",
+        "Coding",
+        "Reasoning",
+        "General",
+        "Avg",
+        "Date",
+    ]
     lines.append("| " + " | ".join(cols) + " |")
     lines.append("| " + " | ".join(["---"] * len(cols)) + " |")
 
@@ -149,8 +166,12 @@ def generate_scorecard(results: list[dict]) -> str:
 
         speed = r.get("speed", {})
         if speed:
-            lines.append(f"- **TTFT**: cold={fmt_ms(speed.get('ttft_cold_s'))}, warm={fmt_ms(speed.get('ttft_warm_s'))}")
-            lines.append(f"- **Decode**: short={fmt_num(speed.get('decode_short_tps'), ' t/s')}, long={fmt_num(speed.get('decode_long_tps'), ' t/s')}")
+            lines.append(
+                f"- **TTFT**: cold={fmt_ms(speed.get('ttft_cold_s'))}, warm={fmt_ms(speed.get('ttft_warm_s'))}"
+            )
+            lines.append(
+                f"- **Decode**: short={fmt_num(speed.get('decode_short_tps'), ' t/s')}, long={fmt_num(speed.get('decode_long_tps'), ' t/s')}"
+            )
             if speed.get("ram_active_gb") is not None:
                 ram_line = f"- **RAM**: active={fmt_ram(speed.get('ram_active_gb'))}"
                 if speed.get("ram_peak_gb") is not None:
@@ -160,7 +181,9 @@ def generate_scorecard(results: list[dict]) -> str:
         for suite_name in ["tool_calling", "coding", "reasoning", "general"]:
             suite = r.get(suite_name, {})
             if suite:
-                lines.append(f"- **{suite_name.replace('_', ' ').title()}**: {fmt_pct(suite.get('score'))} ({suite.get('passed', '?')}/{suite.get('total', '?')})")
+                lines.append(
+                    f"- **{suite_name.replace('_', ' ').title()}**: {fmt_pct(suite.get('score'))} ({suite.get('passed', '?')}/{suite.get('total', '?')})"
+                )
 
         if r.get("total_eval_time_s"):
             lines.append(f"- **Eval time**: {r['total_eval_time_s']}s")
@@ -172,8 +195,12 @@ def generate_scorecard(results: list[dict]) -> str:
     lines.append("")
     lines.append("## How to Add Your Results")
     lines.append("")
-    lines.append("1. Start vllm-mlx with your model: `vllm-mlx serve <model> --port 8000`")
-    lines.append('2. Run the eval: `python evals/run_eval.py --model "<model-name>" --quantization <quant>`')
+    lines.append(
+        "1. Start vllm-mlx with your model: `vllm-mlx serve <model> --port 8000`"
+    )
+    lines.append(
+        '2. Run the eval: `python evals/run_eval.py --model "<model-name>" --quantization <quant>`'
+    )
     lines.append("3. Your results are saved to `evals/results/<model>.json`")
     lines.append("4. Regenerate this table: `python evals/generate_scorecard.py`")
     lines.append("5. Submit a PR with your JSON file!")
@@ -183,9 +210,14 @@ def generate_scorecard(results: list[dict]) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate SCORECARD.md from eval results")
-    parser.add_argument("--output", default=str(EVALS_DIR / "SCORECARD.md"),
-                        help="Output file (default: evals/SCORECARD.md)")
+    parser = argparse.ArgumentParser(
+        description="Generate SCORECARD.md from eval results"
+    )
+    parser.add_argument(
+        "--output",
+        default=str(EVALS_DIR / "SCORECARD.md"),
+        help="Output file (default: evals/SCORECARD.md)",
+    )
     args = parser.parse_args()
 
     results = load_results()

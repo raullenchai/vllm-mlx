@@ -71,7 +71,6 @@ class SimpleEngine(BaseEngine):
         self._prefill_step_size = prefill_step_size
         self._kv_bits = kv_bits
         self._kv_group_size = kv_group_size
-
         self._model = None
         self._loaded = False
 

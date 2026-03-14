@@ -35,9 +35,7 @@ def download_sample_video() -> str:
     logger.info("Downloading sample video...")
 
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
-        }
+        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
         response = requests.get(video_url, timeout=60, headers=headers, stream=True)
         response.raise_for_status()
 
@@ -71,13 +69,13 @@ def create_test_video() -> str:
     temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     temp_file.close()
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(temp_file.name, fourcc, 30.0, (640, 480))
 
     colors = [
-        (255, 0, 0),    # Blue
-        (0, 255, 0),    # Green
-        (0, 0, 255),    # Red
+        (255, 0, 0),  # Blue
+        (0, 255, 0),  # Green
+        (0, 0, 255),  # Red
         (255, 255, 0),  # Cyan
         (255, 0, 255),  # Magenta
     ]
@@ -96,7 +94,7 @@ def create_test_video() -> str:
             cv2.FONT_HERSHEY_SIMPLEX,
             1.5,
             (255, 255, 255),
-            3
+            3,
         )
         out.write(frame)
 
@@ -120,7 +118,9 @@ def get_video_info(video_path: str) -> dict:
         "width": int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
         "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
     }
-    info["duration_seconds"] = info["total_frames"] / info["fps"] if info["fps"] > 0 else 0
+    info["duration_seconds"] = (
+        info["total_frames"] / info["fps"] if info["fps"] > 0 else 0
+    )
 
     cap.release()
     return info
@@ -149,7 +149,7 @@ def test_video_generation(video_path: str, model_name: str):
     """Test video understanding with VLM."""
     from vllm_mlx.models.vlm import MLXVisionLanguageModel
 
-    logger.info(f"\n=== Testing Video Generation ===")
+    logger.info("\n=== Testing Video Generation ===")
     logger.info(f"Model: {model_name}")
     logger.info(f"Video: {video_path}")
 
@@ -189,7 +189,9 @@ def test_video_generation(video_path: str, model_name: str):
     elapsed = time.time() - start
 
     logger.info(f"Time: {elapsed:.2f}s")
-    logger.info(f"Tokens: prompt={output.prompt_tokens}, completion={output.completion_tokens}")
+    logger.info(
+        f"Tokens: prompt={output.prompt_tokens}, completion={output.completion_tokens}"
+    )
     logger.info(f"Response:\n{output.text}")
 
     # Test chat() with video (OpenAI format)
@@ -199,8 +201,8 @@ def test_video_generation(video_path: str, model_name: str):
             "role": "user",
             "content": [
                 {"type": "video", "video": video_path},
-                {"type": "text", "text": "Summarize this video in one sentence."}
-            ]
+                {"type": "text", "text": "Summarize this video in one sentence."},
+            ],
         }
     ]
 
@@ -221,7 +223,7 @@ def test_video_generation(video_path: str, model_name: str):
 
 def test_video_url(model, video_url: str):
     """Test video from URL."""
-    logger.info(f"\n=== Testing Video from URL ===")
+    logger.info("\n=== Testing Video from URL ===")
     logger.info(f"URL: {video_url}")
 
     # Test with video_url format (OpenAI style)
@@ -231,8 +233,11 @@ def test_video_url(model, video_url: str):
             "role": "user",
             "content": [
                 {"type": "video_url", "video_url": {"url": video_url}},
-                {"type": "text", "text": "What is happening in this video? Describe briefly."}
-            ]
+                {
+                    "type": "text",
+                    "text": "What is happening in this video? Describe briefly.",
+                },
+            ],
         }
     ]
 
@@ -271,33 +276,31 @@ def main():
     parser.add_argument(
         "--video",
         type=str,
-        help="Path to video file (will create test video if not provided)"
+        help="Path to video file (will create test video if not provided)",
     )
     parser.add_argument(
-        "--video-url",
-        type=str,
-        help="URL to a video file to test URL support"
+        "--video-url", type=str, help="URL to a video file to test URL support"
     )
     parser.add_argument(
         "--model",
         type=str,
         default="mlx-community/Qwen3-VL-4B-Instruct-3bit",
-        help="VLM model to use"
+        help="VLM model to use",
     )
     parser.add_argument(
         "--extract-only",
         action="store_true",
-        help="Only test frame extraction (no model loading)"
+        help="Only test frame extraction (no model loading)",
     )
     parser.add_argument(
         "--create-test-video",
         action="store_true",
-        help="Create synthetic test video instead of downloading"
+        help="Create synthetic test video instead of downloading",
     )
     parser.add_argument(
         "--url-only",
         action="store_true",
-        help="Only test video URL support (requires --video-url)"
+        help="Only test video URL support (requires --video-url)",
     )
 
     args = parser.parse_args()
@@ -318,9 +321,9 @@ def main():
             video_path = create_test_video()
 
     # Run tests
-    logger.info(f"\n{'='*50}")
+    logger.info(f"\n{'=' * 50}")
     logger.info("VLM Video Test")
-    logger.info(f"{'='*50}")
+    logger.info(f"{'=' * 50}")
 
     model = None
 
@@ -336,6 +339,7 @@ def main():
     if args.video_url:
         if model is None:
             from vllm_mlx.models.vlm import MLXVisionLanguageModel
+
             logger.info(f"\nLoading model for URL test: {args.model}")
             model = MLXVisionLanguageModel(args.model)
             model.load()

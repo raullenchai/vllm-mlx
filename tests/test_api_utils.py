@@ -114,9 +114,9 @@ class TestSpecialTokensPattern:
             "[CLS]",
         ]
         for token in tokens:
-            assert (
-                SPECIAL_TOKENS_PATTERN.search(token) is not None
-            ), f"Pattern should match {token}"
+            assert SPECIAL_TOKENS_PATTERN.search(token) is not None, (
+                f"Pattern should match {token}"
+            )
 
     def test_does_not_match_think_tags(self):
         assert SPECIAL_TOKENS_PATTERN.search("<think>") is None

@@ -13,13 +13,11 @@ Usage:
 """
 
 import base64
+
 from openai import OpenAI
 
 # Connect to vllm-mlx server
-client = OpenAI(
-    base_url="http://localhost:8000/v1",
-    api_key="not-needed"
-)
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="not-needed")
 
 print("=" * 60)
 print("OpenAI API Demo - Image Analysis")
@@ -34,14 +32,19 @@ print("Question: What animal is in this image?")
 
 response = client.chat.completions.create(
     model="default",
-    messages=[{
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "What animal is in this image? Describe it briefly."},
-            {"type": "image_url", "image_url": {"url": image_url}}
-        ]
-    }],
-    max_tokens=150
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "What animal is in this image? Describe it briefly.",
+                },
+                {"type": "image_url", "image_url": {"url": image_url}},
+            ],
+        }
+    ],
+    max_tokens=150,
 )
 print(f"Answer: {response.choices[0].message.content}")
 
@@ -54,14 +57,19 @@ print("Question: What famous building is this?")
 
 response = client.chat.completions.create(
     model="default",
-    messages=[{
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "What famous building is shown in this image? Where is it located?"},
-            {"type": "image_url", "image_url": {"url": scene_url}}
-        ]
-    }],
-    max_tokens=150
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "What famous building is shown in this image? Where is it located?",
+                },
+                {"type": "image_url", "image_url": {"url": scene_url}},
+            ],
+        }
+    ],
+    max_tokens=150,
 )
 print(f"Answer: {response.choices[0].message.content}")
 
@@ -71,28 +79,34 @@ print("-" * 40)
 
 # Create a simple red square image for testing
 try:
-    from PIL import Image
     import io
 
+    from PIL import Image
+
     # Create a simple 100x100 red image
-    img = Image.new('RGB', (100, 100), color='red')
+    img = Image.new("RGB", (100, 100), color="red")
     buffer = io.BytesIO()
-    img.save(buffer, format='PNG')
-    base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    img.save(buffer, format="PNG")
+    base64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
     print("Created: 100x100 red square image")
     print("Question: What color is this image?")
 
     response = client.chat.completions.create(
         model="default",
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What color is this image?"},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
-            ]
-        }],
-        max_tokens=50
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What color is this image?"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{base64_image}"},
+                    },
+                ],
+            }
+        ],
+        max_tokens=50,
     )
     print(f"Answer: {response.choices[0].message.content}")
 except ImportError:
@@ -104,20 +118,20 @@ print("-" * 40)
 food_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Good_Food_Display_-_NCI_Visuals_Online.jpg/800px-Good_Food_Display_-_NCI_Visuals_Online.jpg"
 print(f"Image URL: {food_url}")
 
-messages = [{
-    "role": "user",
-    "content": [
-        {"type": "text", "text": "What foods do you see in this image?"},
-        {"type": "image_url", "image_url": {"url": food_url}}
-    ]
-}]
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "What foods do you see in this image?"},
+            {"type": "image_url", "image_url": {"url": food_url}},
+        ],
+    }
+]
 
 response = client.chat.completions.create(
-    model="default",
-    messages=messages,
-    max_tokens=150
+    model="default", messages=messages, max_tokens=150
 )
-print(f"Q1: What foods do you see in this image?")
+print("Q1: What foods do you see in this image?")
 print(f"A1: {response.choices[0].message.content}")
 
 # Follow-up (note: image context may not persist in all models)
@@ -125,11 +139,9 @@ messages.append({"role": "assistant", "content": response.choices[0].message.con
 messages.append({"role": "user", "content": "Which of these foods are fruits?"})
 
 response = client.chat.completions.create(
-    model="default",
-    messages=messages,
-    max_tokens=100
+    model="default", messages=messages, max_tokens=100
 )
-print(f"\nQ2: Which of these foods are fruits?")
+print("\nQ2: Which of these foods are fruits?")
 print(f"A2: {response.choices[0].message.content}")
 
 print("\n" + "=" * 60)

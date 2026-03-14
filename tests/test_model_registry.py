@@ -2,14 +2,16 @@
 """Tests for model registry and multi-engine scenarios."""
 
 import gc
+
 import pytest
+
 from vllm_mlx import (
-    EngineCore,
     EngineConfig,
+    EngineCore,
+    ModelOwnershipError,
     SamplingParams,
     SchedulerConfig,
     get_registry,
-    ModelOwnershipError,
 )
 
 # Use a small model for fast tests

@@ -19,7 +19,7 @@ import logging
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import mlx.core as mx
 
@@ -66,9 +66,9 @@ class PixelCacheEntry:
 
     pixel_values: mx.array
     input_ids: mx.array
-    attention_mask: Optional[mx.array]
-    image_grid_thw: Optional[mx.array]
-    extra_kwargs: Dict[str, Any]
+    attention_mask: mx.array | None
+    image_grid_thw: mx.array | None
+    extra_kwargs: dict[str, Any]
     processing_time: float = 0.0
 
 
@@ -82,7 +82,7 @@ class PixelOnlyCacheEntry:
     """
 
     pixel_values: mx.array
-    image_grid_thw: Optional[mx.array]
+    image_grid_thw: mx.array | None
     processing_time: float = 0.0
 
 
@@ -117,7 +117,7 @@ def compute_image_hash(image_path: str) -> str:
         return hashlib.sha256(str(image_path).encode()).hexdigest()[:16]
 
 
-def compute_images_hash(images: List[str]) -> str:
+def compute_images_hash(images: list[str]) -> str:
     """Compute combined hash for multiple images."""
     if not images:
         return "no_images"
@@ -177,14 +177,14 @@ class VisionEmbeddingCache:
 
         self.stats = VisionCacheStats()
 
-    def _make_key(self, images: List[str], prompt: str) -> str:
+    def _make_key(self, images: list[str], prompt: str) -> str:
         """Create cache key from images and prompt."""
         img_hash = compute_images_hash(images)
         # Use shorter prompt hash for cache key
         prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:12]
         return f"{img_hash}_{prompt_hash}"
 
-    def _make_image_only_key(self, images: List[str]) -> str:
+    def _make_image_only_key(self, images: list[str]) -> str:
         """Create cache key from images only (prompt-independent)."""
         return compute_images_hash(images)
 
@@ -192,9 +192,9 @@ class VisionEmbeddingCache:
 
     def get_pixel_cache(
         self,
-        images: List[str],
+        images: list[str],
         prompt: str,
-    ) -> Optional[PixelCacheEntry]:
+    ) -> PixelCacheEntry | None:
         """
         Get cached pixel values for images+prompt.
 
@@ -223,13 +223,13 @@ class VisionEmbeddingCache:
 
     def set_pixel_cache(
         self,
-        images: List[str],
+        images: list[str],
         prompt: str,
         pixel_values: mx.array,
         input_ids: mx.array,
-        attention_mask: Optional[mx.array] = None,
-        image_grid_thw: Optional[mx.array] = None,
-        extra_kwargs: Optional[Dict[str, Any]] = None,
+        attention_mask: mx.array | None = None,
+        image_grid_thw: mx.array | None = None,
+        extra_kwargs: dict[str, Any] | None = None,
         processing_time: float = 0.0,
     ) -> None:
         """Store pixel values in cache."""
@@ -260,8 +260,8 @@ class VisionEmbeddingCache:
 
     def get_pixel_values(
         self,
-        images: List[str],
-    ) -> Optional[PixelOnlyCacheEntry]:
+        images: list[str],
+    ) -> PixelOnlyCacheEntry | None:
         """
         Get cached pixel values for images (prompt-independent).
 
@@ -293,9 +293,9 @@ class VisionEmbeddingCache:
 
     def set_pixel_values(
         self,
-        images: List[str],
+        images: list[str],
         pixel_values: mx.array,
-        image_grid_thw: Optional[mx.array] = None,
+        image_grid_thw: mx.array | None = None,
         processing_time: float = 0.0,
     ) -> None:
         """Store pixel values in cache (prompt-independent)."""
@@ -322,9 +322,9 @@ class VisionEmbeddingCache:
 
     def get_encoding_cache(
         self,
-        images: List[str],
+        images: list[str],
         prompt: str,
-    ) -> Optional[EncodingCacheEntry]:
+    ) -> EncodingCacheEntry | None:
         """
         Get cached vision encoding output.
 
@@ -352,7 +352,7 @@ class VisionEmbeddingCache:
 
     def set_encoding_cache(
         self,
-        images: List[str],
+        images: list[str],
         prompt: str,
         logits: mx.array,
         first_token: int,

@@ -14,12 +14,9 @@ Tests three scenarios matching real-world usage:
 Each test checks both the streaming content AND the final assembled output.
 """
 
-import pytest
-
-from vllm_mlx.reasoning import get_parser
-
 # Mirror SPECIAL_TOKENS_PATTERN from server.py
 from vllm_mlx.api.utils import SPECIAL_TOKENS_PATTERN
+from vllm_mlx.reasoning import get_parser
 
 
 def simulate_server_streaming_no_parser(tokens: list[str]) -> list[str]:
@@ -49,7 +46,7 @@ def simulate_server_streaming_no_parser(tokens: list[str]) -> list[str]:
             content = None
 
         # Compute finish reason
-        is_finished = (i == len(tokens) - 1)
+        is_finished = i == len(tokens) - 1
         finish_reason = "stop" if is_finished else None
 
         # Skip empty chunks (server.py line 2709)
@@ -81,7 +78,7 @@ def simulate_tokenizer_decode(tokens: list[str]) -> list[str]:
     deltas = []
 
     for _raw_text in tokens:
-        new_text = _raw_text[len(_prev_raw_text):]
+        new_text = _raw_text[len(_prev_raw_text) :]
 
         # Guard against multi-byte character boundaries (llm.py)
         if "\ufffd" in new_text:
@@ -115,7 +112,7 @@ def simulate_server_streaming(tokens: list[str], use_reasoning_parser: str = "qw
 
     for i, token in enumerate(tokens):
         delta_text = token
-        is_finished = (i == len(tokens) - 1)
+        is_finished = i == len(tokens) - 1
 
         previous_text = accumulated_text
         accumulated_text += delta_text
@@ -143,7 +140,7 @@ def simulate_server_streaming(tokens: list[str], use_reasoning_parser: str = "qw
             sse_chunks.append(content)
 
     # Server line 2761: finalize_streaming correction
-    if hasattr(parser, 'finalize_streaming'):
+    if hasattr(parser, "finalize_streaming"):
         correction = parser.finalize_streaming(accumulated_text)
         if correction and correction.content:
             sse_chunks.append(correction.content)
@@ -156,7 +153,15 @@ class TestScenario1_ExplicitThinkTags:
 
     def test_basic_think_then_content(self):
         """Standard flow: think tags → reasoning extracted, content streamed."""
-        tokens = ["<think>", "Let me ", "analyze.", "</think>", "The ", "answer ", "is 42."]
+        tokens = [
+            "<think>",
+            "Let me ",
+            "analyze.",
+            "</think>",
+            "The ",
+            "answer ",
+            "is 42.",
+        ]
         chunks = simulate_server_streaming(tokens)
         full = "".join(chunks)
         assert "The answer is 42." in full
@@ -165,8 +170,14 @@ class TestScenario1_ExplicitThinkTags:
 
     def test_multiline_reasoning_then_content(self):
         tokens = [
-            "<think>", "Step 1\n", "Step 2\n", "Step 3\n", "</think>",
-            "# Result\n", "\n", "The answer is **42**.\n",
+            "<think>",
+            "Step 1\n",
+            "Step 2\n",
+            "Step 3\n",
+            "</think>",
+            "# Result\n",
+            "\n",
+            "The answer is **42**.\n",
         ]
         chunks = simulate_server_streaming(tokens)
         full = "".join(chunks)
@@ -199,9 +210,9 @@ class TestScenario2_ImplicitThinkMode:
         # Generate reasoning > 64 chars
         reasoning_tokens = [
             "Let me think about this problem step by step.\n",  # 47 chars
-            "First, I need to consider the constraints.\n",     # 44 chars (total: 91)
-            "Then apply the algorithm.\n",                       # 27 chars (total: 118)
-            "Finally verify the result.\n",                      # 28 chars (total: 146)
+            "First, I need to consider the constraints.\n",  # 44 chars (total: 91)
+            "Then apply the algorithm.\n",  # 27 chars (total: 118)
+            "Finally verify the result.\n",  # 28 chars (total: 146)
         ]
         content_tokens = ["The ", "answer ", "is ", "42."]
 
@@ -220,7 +231,7 @@ class TestScenario2_ImplicitThinkMode:
         """Very long reasoning (> 500 chars) before </think>."""
         reasoning = "Analyzing step by step. " * 30  # ~720 chars
         # Break into tokens
-        reasoning_tokens = [reasoning[i:i+20] for i in range(0, len(reasoning), 20)]
+        reasoning_tokens = [reasoning[i : i + 20] for i in range(0, len(reasoning), 20)]
         content_tokens = ["Here is the answer."]
 
         tokens = reasoning_tokens + ["</think>"] + content_tokens
@@ -248,7 +259,7 @@ class TestScenario3_NoTagModel:
     def test_long_no_tag_output(self):
         """Long output (> 64 chars) with no tags — the core bug."""
         text = "Here is a markdown example:\n\n# Heading\n\n- Item 1\n- Item 2\n\nDone."
-        tokens = [text[i:i+5] for i in range(0, len(text), 5)]
+        tokens = [text[i : i + 5] for i in range(0, len(text), 5)]
         chunks = simulate_server_streaming(tokens)
         full = "".join(chunks)
 
@@ -256,12 +267,14 @@ class TestScenario3_NoTagModel:
         assert "- Item 1" in full, f"Content missing: {full!r}"
         assert "Done." in full, f"Content missing: {full!r}"
         # ALL text should be in content, nothing lost
-        assert full == text, f"Content mismatch:\n  Expected: {text!r}\n  Got:      {full!r}"
+        assert full == text, (
+            f"Content mismatch:\n  Expected: {text!r}\n  Got:      {full!r}"
+        )
 
     def test_very_long_no_tag_output(self):
         """Very long output with no tags — no chars should be lost."""
         text = "The quick brown fox. " * 20  # 420 chars
-        tokens = [text[i:i+10] for i in range(0, len(text), 10)]
+        tokens = [text[i : i + 10] for i in range(0, len(text), 10)]
         chunks = simulate_server_streaming(tokens)
         full = "".join(chunks)
         assert full == text, f"Length mismatch: expected {len(text)}, got {len(full)}"
@@ -269,13 +282,23 @@ class TestScenario3_NoTagModel:
     def test_no_tag_with_newlines(self):
         """No-tag output with markdown newlines — the original Reddit bug."""
         tokens = [
-            "# Title", "\n", "\n",
-            "Some text.", "\n", "\n",
-            "- bullet 1", "\n",
-            "- bullet 2", "\n", "\n",
-            "```python", "\n",
-            "print('hello')", "\n",
-            "```", "\n",
+            "# Title",
+            "\n",
+            "\n",
+            "Some text.",
+            "\n",
+            "\n",
+            "- bullet 1",
+            "\n",
+            "- bullet 2",
+            "\n",
+            "\n",
+            "```python",
+            "\n",
+            "print('hello')",
+            "\n",
+            "```",
+            "\n",
         ]
         chunks = simulate_server_streaming(tokens)
         full = "".join(chunks)
@@ -314,8 +337,16 @@ class TestScenario4_NewlinePreservation:
 
     def test_newline_in_code_block(self):
         tokens = [
-            "<think>", "ok", "</think>",
-            "```", "\n", "line1", "\n", "line2", "\n", "```",
+            "<think>",
+            "ok",
+            "</think>",
+            "```",
+            "\n",
+            "line1",
+            "\n",
+            "line2",
+            "\n",
+            "```",
         ]
         chunks = simulate_server_streaming(tokens)
         full = "".join(chunks)
@@ -335,7 +366,7 @@ class TestScenario5_EdgeCases:
     def test_deepseek_no_tag_threshold(self):
         """DeepSeek-R1 should also handle no-tag output correctly."""
         text = "A regular response without thinking tags, should be content."
-        tokens = [text[i:i+5] for i in range(0, len(text), 5)]
+        tokens = [text[i : i + 5] for i in range(0, len(text), 5)]
         chunks = simulate_server_streaming(tokens, use_reasoning_parser="deepseek_r1")
         full = "".join(chunks)
         assert full == text, f"DeepSeek no-tag mismatch: {full!r}"
@@ -382,11 +413,13 @@ class TestScenario6_NoParserThinkTagPassthrough:
 
     def test_100_emojis(self):
         """The exact test case from the Reddit report: 'Output 100 different emojis'."""
-        emojis = list("😀😃😄😁😆😅🤣😂🙂🙃😉😊😇🥰😍🤩😘😗☺😚😙"
-                       "🥲😋😛😜🤪😝🤑🤗🤭🤫🤔🫡🤐🤨😐😑😶🫥😏😒"
-                       "🙄😬🤥🫨😌😔😪🤤😴😷🤒🤕🤢🤮🤧🥵🥶🥴😵🤯"
-                       "🤠🥳🥸😎🤓🧐😕🫤😟🙁☹😮😯😲😳🥺🥹😦😧😨"
-                       "😰😥😢😭😱😖😣😞😓😩😫🥱😤😡😠🤬😈👿💀☠💩")
+        emojis = list(
+            "😀😃😄😁😆😅🤣😂🙂🙃😉😊😇🥰😍🤩😘😗☺😚😙"
+            "🥲😋😛😜🤪😝🤑🤗🤭🤫🤔🫡🤐🤨😐😑😶🫥😏😒"
+            "🙄😬🤥🫨😌😔😪🤤😴😷🤒🤕🤢🤮🤧🥵🥶🥴😵🤯"
+            "🤠🥳🥸😎🤓🧐😕🫤😟🙁☹😮😯😲😳🥺🥹😦😧😨"
+            "😰😥😢😭😱😖😣😞😓😩😫🥱😤😡😠🤬😈👿💀☠💩"
+        )
         # Take first 100
         emoji_tokens = emojis[:100]
         chunks = simulate_server_streaming_no_parser(emoji_tokens)
@@ -401,8 +434,17 @@ class TestScenario6_NoParserThinkTagPassthrough:
     def test_think_then_emojis(self):
         """Model thinks first, then outputs emojis — both should pass through."""
         tokens = [
-            "<think>", "Let me list emojis", "</think>", "\n\n",
-            "😀", " ", "😃", " ", "😄", " ", "😁",
+            "<think>",
+            "Let me list emojis",
+            "</think>",
+            "\n\n",
+            "😀",
+            " ",
+            "😃",
+            " ",
+            "😄",
+            " ",
+            "😁",
         ]
         chunks = simulate_server_streaming_no_parser(tokens)
         full = "".join(chunks)
@@ -456,9 +498,9 @@ class TestScenario7_MultiByteBoundary:
         """Emoji completed on second token — should emit once, correctly."""
         # Simulate: tok1 decodes to "Hello \ufffd", tok2 completes to "Hello 😀"
         cumulative_decodes = [
-            "Hello ",       # tok0: normal text
-            "Hello \ufffd", # tok1: partial emoji (first bytes)
-            "Hello 😀",     # tok2: emoji complete
+            "Hello ",  # tok0: normal text
+            "Hello \ufffd",  # tok1: partial emoji (first bytes)
+            "Hello 😀",  # tok2: emoji complete
         ]
         deltas = simulate_tokenizer_decode(cumulative_decodes)
         assert deltas[0] == "Hello "
@@ -472,9 +514,9 @@ class TestScenario7_MultiByteBoundary:
         """Emoji needing 3 tokens to complete."""
         cumulative_decodes = [
             "Hi ",
-            "Hi \ufffd",      # partial
-            "Hi \ufffd",      # still partial (different bytes, same result)
-            "Hi 🏳️‍🌈",     # complete (rainbow flag, multi-codepoint)
+            "Hi \ufffd",  # partial
+            "Hi \ufffd",  # still partial (different bytes, same result)
+            "Hi 🏳️‍🌈",  # complete (rainbow flag, multi-codepoint)
         ]
         deltas = simulate_tokenizer_decode(cumulative_decodes)
         assert deltas[1] == ""  # skipped
@@ -498,14 +540,14 @@ class TestScenario7_MultiByteBoundary:
     def test_multiple_emojis_some_split(self):
         """Multiple emojis, some split across tokens, some single-token."""
         cumulative_decodes = [
-            "😀",           # emoji as single token
-            "😀\ufffd",     # next emoji partial
-            "😀🎉",         # second emoji complete
-            "😀🎉 done",    # trailing text
+            "😀",  # emoji as single token
+            "😀\ufffd",  # next emoji partial
+            "😀🎉",  # second emoji complete
+            "😀🎉 done",  # trailing text
         ]
         deltas = simulate_tokenizer_decode(cumulative_decodes)
         assert deltas[0] == "😀"
-        assert deltas[1] == ""       # skipped
+        assert deltas[1] == ""  # skipped
         assert deltas[2] == "🎉"
         assert deltas[3] == " done"
         full = "".join(deltas)
@@ -555,7 +597,10 @@ class TestScenario8_RegressionNoParser:
     def test_no_parser_preserves_full_output(self):
         """WITHOUT a reasoning parser, nothing is stripped — full output preserved."""
         tokens = [
-            "<think>", "I need to reason.", "</think>", "\n",
+            "<think>",
+            "I need to reason.",
+            "</think>",
+            "\n",
             "The answer is 42.",
         ]
         chunks = simulate_server_streaming_no_parser(tokens)
@@ -569,10 +614,21 @@ class TestScenario8_RegressionNoParser:
     def test_no_parser_markdown_with_emojis(self):
         """Markdown + emojis stream correctly without parser."""
         tokens = [
-            "# Emoji List ", "🎯", "\n\n",
-            "1. ", "😀", " - Grinning", "\n",
-            "2. ", "🎉", " - Party", "\n",
-            "3. ", "🚀", " - Rocket", "\n",
+            "# Emoji List ",
+            "🎯",
+            "\n\n",
+            "1. ",
+            "😀",
+            " - Grinning",
+            "\n",
+            "2. ",
+            "🎉",
+            " - Party",
+            "\n",
+            "3. ",
+            "🚀",
+            " - Rocket",
+            "\n",
         ]
         chunks = simulate_server_streaming_no_parser(tokens)
         full = "".join(chunks)
@@ -584,8 +640,9 @@ class TestScenario8_RegressionNoParser:
     def test_no_parser_long_emoji_sequence(self):
         """Long emoji-only output streams immediately, not buffered."""
         # 50 emojis — old code would buffer all, new code streams immediately
-        emojis = list("🌍🌎🌏🌐🗺🧭🏔⛰🌋🗻🏕🏖🏜🏝🏞🏟🏛🏗🧱🪨"
-                       "🪵🛖🏘🏚🏠🏡🏢🏣🏤🏥🏦🏨🏩🏪🏫🏬🏭🏯🏰💒")
+        emojis = list(
+            "🌍🌎🌏🌐🗺🧭🏔⛰🌋🗻🏕🏖🏜🏝🏞🏟🏛🏗🧱🪨🪵🛖🏘🏚🏠🏡🏢🏣🏤🏥🏦🏨🏩🏪🏫🏬🏭🏯🏰💒"
+        )
         chunks = simulate_server_streaming_no_parser(emojis)
         # Each emoji should be a separate chunk (not batched)
         assert len(chunks) == len(emojis), (

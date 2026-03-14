@@ -35,11 +35,11 @@ class TestExtractToolCalls:
 
     def test_single_tool_wrapped(self, parser):
         text = (
-            '<minimax:tool_call>\n'
+            "<minimax:tool_call>\n"
             '<invoke name="get_weather">\n'
             '<parameter name="city">Tokyo</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>'
+            "</invoke>\n"
+            "</minimax:tool_call>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -51,12 +51,12 @@ class TestExtractToolCalls:
 
     def test_multiple_params_wrapped(self, parser):
         text = (
-            '<minimax:tool_call>\n'
+            "<minimax:tool_call>\n"
             '<invoke name="search_web">\n'
             '<parameter name="query">MLX benchmarks</parameter>\n'
             '<parameter name="max_results">5</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>'
+            "</invoke>\n"
+            "</minimax:tool_call>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -68,14 +68,14 @@ class TestExtractToolCalls:
 
     def test_multiple_invokes_in_one_block(self, parser):
         text = (
-            '<minimax:tool_call>\n'
+            "<minimax:tool_call>\n"
             '<invoke name="get_weather">\n'
             '<parameter name="city">Tokyo</parameter>\n'
-            '</invoke>\n'
+            "</invoke>\n"
             '<invoke name="get_time">\n'
             '<parameter name="timezone">JST</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>'
+            "</invoke>\n"
+            "</minimax:tool_call>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -86,16 +86,16 @@ class TestExtractToolCalls:
 
     def test_multiple_blocks(self, parser):
         text = (
-            '<minimax:tool_call>\n'
+            "<minimax:tool_call>\n"
             '<invoke name="func1">\n'
             '<parameter name="a">1</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>\n'
-            '<minimax:tool_call>\n'
+            "</invoke>\n"
+            "</minimax:tool_call>\n"
+            "<minimax:tool_call>\n"
             '<invoke name="func2">\n'
             '<parameter name="b">2</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>'
+            "</invoke>\n"
+            "</minimax:tool_call>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -106,12 +106,12 @@ class TestExtractToolCalls:
 
     def test_content_before_tool_call(self, parser):
         text = (
-            'Let me check the weather for you.\n'
-            '<minimax:tool_call>\n'
+            "Let me check the weather for you.\n"
+            "<minimax:tool_call>\n"
             '<invoke name="get_weather">\n'
             '<parameter name="city">Paris</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>'
+            "</invoke>\n"
+            "</minimax:tool_call>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -120,12 +120,12 @@ class TestExtractToolCalls:
 
     def test_think_tags_stripped_from_content(self, parser):
         text = (
-            '<think>The user wants weather info</think>\n'
-            '<minimax:tool_call>\n'
+            "<think>The user wants weather info</think>\n"
+            "<minimax:tool_call>\n"
             '<invoke name="get_weather">\n'
             '<parameter name="city">NYC</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>'
+            "</invoke>\n"
+            "</minimax:tool_call>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -139,7 +139,7 @@ class TestExtractToolCalls:
         text = (
             '<invoke name="run_python">\n'
             '<parameter name="code">print("hello")</parameter>\n'
-            '</invoke>'
+            "</invoke>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -151,11 +151,11 @@ class TestExtractToolCalls:
     def test_bare_invoke_inside_think(self, parser):
         """Model sometimes emits tool calls inside <think> without wrapper."""
         text = (
-            '<think>I should call this tool\n'
+            "<think>I should call this tool\n"
             '<invoke name="search">\n'
             '<parameter name="query">test</parameter>\n'
-            '</invoke>\n'
-            '</think>'
+            "</invoke>\n"
+            "</think>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -167,7 +167,7 @@ class TestExtractToolCalls:
     def test_truncated_invoke_no_closing_tag(self, parser):
         """Streaming may end before </invoke> arrives."""
         text = (
-            '<minimax:tool_call>\n'
+            "<minimax:tool_call>\n"
             '<invoke name="get_weather">\n'
             '<parameter name="city">Tokyo</parameter>\n'
             # Missing </invoke> and </minimax:tool_call>
@@ -182,8 +182,7 @@ class TestExtractToolCalls:
     def test_truncated_parameter_no_closing_tag(self, parser):
         """Parameter value without closing </parameter>."""
         text = (
-            '<invoke name="search">\n'
-            '<parameter name="query">partial value'
+            '<invoke name="search">\n<parameter name="query">partial value'
             # Missing </parameter> and </invoke>
         )
         result = parser.extract_tool_calls(text)
@@ -208,13 +207,13 @@ class TestExtractToolCalls:
     def test_json_value_parameter(self, parser):
         """Parameter values that are valid JSON should be parsed."""
         text = (
-            '<minimax:tool_call>\n'
+            "<minimax:tool_call>\n"
             '<invoke name="func">\n'
             '<parameter name="count">42</parameter>\n'
             '<parameter name="flag">true</parameter>\n'
             '<parameter name="items">["a", "b"]</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>'
+            "</invoke>\n"
+            "</minimax:tool_call>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -226,11 +225,11 @@ class TestExtractToolCalls:
 
     def test_unicode_in_parameters(self, parser):
         text = (
-            '<minimax:tool_call>\n'
+            "<minimax:tool_call>\n"
             '<invoke name="translate">\n'
             '<parameter name="text">日本語テスト</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>'
+            "</invoke>\n"
+            "</minimax:tool_call>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -244,7 +243,7 @@ class TestExtractToolCalls:
             '<invoke name="func">\n'
             '<parameter name="empty"></parameter>\n'
             '<parameter name="real">value</parameter>\n'
-            '</invoke>'
+            "</invoke>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -262,14 +261,14 @@ class TestExtractToolCalls:
 
     def test_tool_call_id_uniqueness(self, parser):
         text = (
-            '<minimax:tool_call>\n'
+            "<minimax:tool_call>\n"
             '<invoke name="func1">\n'
             '<parameter name="a">1</parameter>\n'
-            '</invoke>\n'
+            "</invoke>\n"
             '<invoke name="func2">\n'
             '<parameter name="b">2</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>'
+            "</invoke>\n"
+            "</minimax:tool_call>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -282,7 +281,7 @@ class TestExtractToolCalls:
         text = (
             '<invoke name="  get_weather  ">\n'
             '<parameter name="city">NYC</parameter>\n'
-            '</invoke>'
+            "</invoke>"
         )
         result = parser.extract_tool_calls(text)
 
@@ -292,13 +291,13 @@ class TestExtractToolCalls:
     def test_escape_sequence_cleanup(self, parser):
         """Content after tool call should have [e~[ junk cleaned."""
         text = (
-            'Some content\n'
-            '<minimax:tool_call>\n'
+            "Some content\n"
+            "<minimax:tool_call>\n"
             '<invoke name="func">\n'
             '<parameter name="x">1</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>\n'
-            '[e~[extra junk'
+            "</invoke>\n"
+            "</minimax:tool_call>\n"
+            "[e~[extra junk"
         )
         result = parser.extract_tool_calls(text)
 
@@ -350,11 +349,11 @@ class TestStreamingExtraction:
     def test_tool_call_emitted_on_close(self, parser):
         """Tool call emitted when closing tag arrives."""
         full = (
-            '<minimax:tool_call>\n'
+            "<minimax:tool_call>\n"
             '<invoke name="get_weather">\n'
             '<parameter name="city">Tokyo</parameter>\n'
-            '</invoke>\n'
-            '</minimax:tool_call>'
+            "</invoke>\n"
+            "</minimax:tool_call>"
         )
         prev = full.replace("</minimax:tool_call>", "")
         r = parser.extract_tool_calls_streaming(
@@ -401,7 +400,7 @@ class TestStreamingExtraction:
         chunks = [
             '<invoke name="run_code">\n',
             '<parameter name="code">print(1)</parameter>\n',
-            '</invoke>',
+            "</invoke>",
         ]
 
         accumulated = ""

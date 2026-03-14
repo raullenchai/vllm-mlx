@@ -68,7 +68,7 @@ def download_mtp_shard(dest_path: Path, source_model: str) -> Path:
             print(f"Size: {size_gb:.2f} GB — OK")
             return shard_path
 
-    print(f"Downloading MTP shard (~3.3 GB)...")
+    print("Downloading MTP shard (~3.3 GB)...")
     print(f"URL: {shard_url}")
     result = subprocess.run(
         ["curl", "-L", "-C", "-", "-o", str(shard_path), shard_url],
@@ -332,9 +332,9 @@ def main():
     print("=" * 60)
     print(f"\nMTP weight file: {mtp_file}")
     print(f"Total MTP keys: {len(mtp_keys)}")
-    print(f"\nTo use MTP, start the server with --enable-mtp:")
-    print(f"  vllm-mlx serve mlx-community/Qwen3-Next-80B-A3B-Instruct-6bit \\")
-    print(f"      --enable-mtp --port 1239")
+    print("\nTo use MTP, start the server with --enable-mtp:")
+    print("  vllm-mlx serve mlx-community/Qwen3-Next-80B-A3B-Instruct-6bit \\")
+    print("      --enable-mtp --port 1239")
 
 
 if __name__ == "__main__":

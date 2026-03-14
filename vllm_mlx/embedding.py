@@ -95,9 +95,7 @@ class EmbeddingEngine:
         for text in texts:
             try:
                 tokens = self._tokenizer.encode(text)
-                if isinstance(tokens, list):
-                    total += len(tokens)
-                elif hasattr(tokens, "__len__"):
+                if isinstance(tokens, list) or hasattr(tokens, "__len__"):
                     total += len(tokens)
                 else:
                     total += tokens.size

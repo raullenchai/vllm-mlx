@@ -17,8 +17,8 @@ import pytest
 
 from vllm_mlx.tool_parsers import ToolParserManager
 
-
 # ─── Fixtures ────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def glm47_parser():
@@ -338,7 +338,9 @@ class TestGlm47UpstreamStreaming:
 <arg_key>city</arg_key><arg_value>Shanghai</arg_value>
 </tool_call>"""
         result = glm47_parser.extract_tool_calls_streaming(
-            previous_text=full.replace("</tool_call>", "", 1).rsplit("</tool_call>", 1)[0],
+            previous_text=full.replace("</tool_call>", "", 1).rsplit("</tool_call>", 1)[
+                0
+            ],
             current_text=full,
             delta_text="</tool_call>",
             request=glm47_request,
@@ -397,7 +399,9 @@ class TestMistralUpstreamNonStreaming:
             "argument_before_name_and_name_in_argument",
         ],
     )
-    def test_old_format_single(self, mistral_parser, model_output, expected_name, expected_args):
+    def test_old_format_single(
+        self, mistral_parser, model_output, expected_name, expected_args
+    ):
         """Old Mistral format: [TOOL_CALLS] [{"name": ..., "arguments": ...}]"""
         result = mistral_parser.extract_tool_calls(model_output, request=None)
         assert result.tools_called
@@ -438,7 +442,9 @@ class TestMistralUpstreamNonStreaming:
             "new_format_weather",
         ],
     )
-    def test_new_format_single(self, mistral_parser, model_output, expected_name, expected_args):
+    def test_new_format_single(
+        self, mistral_parser, model_output, expected_name, expected_args
+    ):
         """New Mistral format: [TOOL_CALLS]func_name{...}"""
         result = mistral_parser.extract_tool_calls(model_output, request=None)
         assert result.tools_called
@@ -482,6 +488,7 @@ class TestMistralUpstreamNonStreaming:
 
 
 # ─── Fixtures for new parsers ────────────────────────────────────────
+
 
 @pytest.fixture
 def seed_oss_parser():
@@ -708,10 +715,10 @@ class TestSeedOssUpstreamNonStreaming:
     def test_type_conversion_object(self, seed_oss_parser, seed_oss_request):
         """Object parameter type conversion."""
         output = (
-            '<seed:tool_call>\n<function=calculate>\n'
+            "<seed:tool_call>\n<function=calculate>\n"
             '<parameter=config>{"key": "value"}</parameter>\n'
-            '<parameter=op>test</parameter>\n'
-            '</function>\n</seed:tool_call>'
+            "<parameter=op>test</parameter>\n"
+            "</function>\n</seed:tool_call>"
         )
         result = seed_oss_parser.extract_tool_calls(output, seed_oss_request)
         assert result.tools_called
@@ -763,7 +770,9 @@ class TestSeedOssUpstreamStreaming:
         assert result is not None
         assert "content" in result
 
-    def test_streaming_full_tool_call_multistep(self, seed_oss_parser, seed_oss_request):
+    def test_streaming_full_tool_call_multistep(
+        self, seed_oss_parser, seed_oss_request
+    ):
         """Multi-step streaming: header → { → param → } across calls.
 
         Streaming parsers emit one piece per call; callers must invoke
@@ -783,22 +792,29 @@ class TestSeedOssUpstreamStreaming:
             prev = text
             text += d
             r = seed_oss_parser.extract_tool_calls_streaming(
-                previous_text=prev, current_text=text, delta_text=d,
+                previous_text=prev,
+                current_text=text,
+                delta_text=d,
                 request=seed_oss_request,
             )
             if r:
                 collected.append(r)
 
         # Should have: header (name), opening {, param fragment, closing }
-        names = [c["tool_calls"][0]["function"].get("name")
-                 for c in collected if "tool_calls" in c
-                 and "name" in c["tool_calls"][0].get("function", {})]
+        names = [
+            c["tool_calls"][0]["function"].get("name")
+            for c in collected
+            if "tool_calls" in c and "name" in c["tool_calls"][0].get("function", {})
+        ]
         assert "get_weather" in names
 
         # Concatenate all argument fragments
-        arg_parts = [c["tool_calls"][0]["function"]["arguments"]
-                     for c in collected if "tool_calls" in c
-                     and "arguments" in c["tool_calls"][0].get("function", {})]
+        arg_parts = [
+            c["tool_calls"][0]["function"]["arguments"]
+            for c in collected
+            if "tool_calls" in c
+            and "arguments" in c["tool_calls"][0].get("function", {})
+        ]
         full_args = "".join(arg_parts)
         assert full_args.startswith("{")
         assert full_args.endswith("}")
@@ -822,7 +838,9 @@ class TestSeedOssUpstreamStreaming:
             prev = text
             text += d
             r = seed_oss_parser.extract_tool_calls_streaming(
-                previous_text=prev, current_text=text, delta_text=d,
+                previous_text=prev,
+                current_text=text,
+                delta_text=d,
                 request=seed_oss_request,
             )
             if r:
@@ -911,7 +929,7 @@ class TestDeepSeekV31UpstreamNonStreaming:
         """Tool call with nested JSON arguments."""
         output = (
             "<｜tool▁calls▁begin｜>"
-            '<｜tool▁call▁begin｜>create_event<｜tool▁sep｜>'
+            "<｜tool▁call▁begin｜>create_event<｜tool▁sep｜>"
             '{"title":"Meeting","details":{"time":"3pm","room":"A1"}}'
             "<｜tool▁call▁end｜>"
             "<｜tool▁calls▁end｜>"
@@ -1159,20 +1177,27 @@ class TestQwen3CoderUpstreamStreaming:
             prev = text
             text += d
             r = qwen3coder_parser.extract_tool_calls_streaming(
-                previous_text=prev, current_text=text, delta_text=d,
+                previous_text=prev,
+                current_text=text,
+                delta_text=d,
                 request=qwen3coder_request,
             )
             if r:
                 collected.append(r)
 
-        names = [c["tool_calls"][0]["function"].get("name")
-                 for c in collected if "tool_calls" in c
-                 and "name" in c["tool_calls"][0].get("function", {})]
+        names = [
+            c["tool_calls"][0]["function"].get("name")
+            for c in collected
+            if "tool_calls" in c and "name" in c["tool_calls"][0].get("function", {})
+        ]
         assert "get_current_weather" in names
 
-        arg_parts = [c["tool_calls"][0]["function"]["arguments"]
-                     for c in collected if "tool_calls" in c
-                     and "arguments" in c["tool_calls"][0].get("function", {})]
+        arg_parts = [
+            c["tool_calls"][0]["function"]["arguments"]
+            for c in collected
+            if "tool_calls" in c
+            and "arguments" in c["tool_calls"][0].get("function", {})
+        ]
         full_args = "".join(arg_parts)
         assert full_args.startswith("{")
         assert full_args.endswith("}")
@@ -1194,7 +1219,9 @@ class TestQwen3CoderUpstreamStreaming:
             prev = text
             text += d
             r = qwen3coder_parser.extract_tool_calls_streaming(
-                previous_text=prev, current_text=text, delta_text=d,
+                previous_text=prev,
+                current_text=text,
+                delta_text=d,
                 request=qwen3coder_request,
             )
             if r:
@@ -1220,8 +1247,15 @@ class TestNewParserRegistration:
 
     @pytest.mark.parametrize(
         "name",
-        ["seed_oss", "seed", "gpt_oss", "deepseek_v31", "deepseek_r1_0528",
-         "qwen3_coder_xml", "qwen3_xml"],
+        [
+            "seed_oss",
+            "seed",
+            "gpt_oss",
+            "deepseek_v31",
+            "deepseek_r1_0528",
+            "qwen3_coder_xml",
+            "qwen3_xml",
+        ],
     )
     def test_parser_registered(self, name):
         """Parser name should be in the registry."""

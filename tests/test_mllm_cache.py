@@ -540,7 +540,7 @@ if __name__ == "__main__":
             [
                 ["Hits", stats["hits"]],
                 ["Misses", stats["misses"]],
-                ["Hit Rate", f"{stats['hit_rate']*100:.1f}%"],
+                ["Hit Rate", f"{stats['hit_rate'] * 100:.1f}%"],
                 ["Tokens Saved", stats["tokens_saved"]],
                 ["Image/Video Hits", stats["image_cache_hits"]],
                 ["Evictions", stats["evictions"]],
@@ -552,15 +552,15 @@ if __name__ == "__main__":
         Test MLLM cache with real model's KV cache and real images/videos.
         """
         from huggingface_hub import snapshot_download
-        from mlx_vlm.utils import load_model, load_config
         from mlx_vlm.models import cache as vlm_cache
+        from mlx_vlm.utils import load_config, load_model
 
         from vllm_mlx.benchmark import (
+            MLLM_TEST_IMAGE_URLS,
+            VLM_TEST_VIDEO_URLS,
             download_test_image,
             download_video,
             get_video_info,
-            MLLM_TEST_IMAGE_URLS,
-            VLM_TEST_VIDEO_URLS,
         )
 
         print_header("MLLM KV CACHE TEST")
@@ -605,6 +605,7 @@ if __name__ == "__main__":
         resized_image_entries = []
         base_image = None
         import tempfile
+
         from PIL import Image
 
         for idx, url in enumerate(MLLM_TEST_IMAGE_URLS, start=1):
@@ -1092,7 +1093,7 @@ if __name__ == "__main__":
             [
                 ["Total Hits", stats["hits"]],
                 ["Total Misses", stats["misses"]],
-                ["Hit Rate", f"{stats['hit_rate']*100:.1f}%"],
+                ["Hit Rate", f"{stats['hit_rate'] * 100:.1f}%"],
                 ["Tokens Saved", stats["tokens_saved"]],
                 ["Image/Video Hits", stats["image_cache_hits"]],
                 ["Evictions", stats["evictions"]],

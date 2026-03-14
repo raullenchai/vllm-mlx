@@ -2,11 +2,11 @@
 """Tests for streaming detokenizer optimization in scheduler."""
 
 import pytest
-from transformers import AutoTokenizer
 from mlx_lm.tokenizer_utils import (
-    NaiveStreamingDetokenizer,
     BPEStreamingDetokenizer,
+    NaiveStreamingDetokenizer,
 )
+from transformers import AutoTokenizer
 
 
 class TestStreamingDetokenizer:
@@ -34,7 +34,7 @@ class TestStreamingDetokenizer:
         batch_result = qwen_tokenizer.decode(tokens)
 
         assert streaming_result == batch_result, (
-            f"Streaming: {repr(streaming_result)}\n" f"Batch: {repr(batch_result)}"
+            f"Streaming: {repr(streaming_result)}\nBatch: {repr(batch_result)}"
         )
 
     def test_last_segment_incremental(self, qwen_tokenizer):

@@ -153,7 +153,8 @@ def test_ttft():
             "Long (2K tok)",
             "You are a senior software architect. "
             + "Review this code and explain every design pattern used:\n"
-            + '```python\nclass AbstractFactory:\n    def create(self): pass\n```\n' * 40
+            + "```python\nclass AbstractFactory:\n    def create(self): pass\n```\n"
+            * 40
             + "\nList all patterns found.",
         ),
     ]
@@ -161,13 +162,9 @@ def test_ttft():
     results = []
     for label, prompt in prompts:
         # Warm-up run (fills cache)
-        _ = stream_and_measure(
-            [{"role": "user", "content": prompt}], max_tokens=32
-        )
+        _ = stream_and_measure([{"role": "user", "content": prompt}], max_tokens=32)
         # Measured run
-        m = stream_and_measure(
-            [{"role": "user", "content": prompt}], max_tokens=32
-        )
+        m = stream_and_measure([{"role": "user", "content": prompt}], max_tokens=32)
         results.append({"label": label, **m})
         print(
             f"  {label:20s}  TTFT={m['ttft']:.3f}s  "
@@ -247,7 +244,7 @@ def test_prefix_cache():
 
         results.append({"turn": i + 1, "user_msg": user_msg[:60], **m})
         print(
-            f"  Turn {i+1}: TTFT={m['ttft']:.3f}s  "
+            f"  Turn {i + 1}: TTFT={m['ttft']:.3f}s  "
             f"prompt={m['prompt_tokens']} tok  "
             f"decode={m['decode_tps']:.1f} tok/s"
         )
@@ -335,7 +332,10 @@ def test_tool_call():
 
     test_prompts = [
         ("Simple tool call", "What's the weather in Tokyo?"),
-        ("Multi-arg tool call", "Search for 'vLLM MLX benchmarks' and show me 5 results"),
+        (
+            "Multi-arg tool call",
+            "Search for 'vLLM MLX benchmarks' and show me 5 results",
+        ),
         (
             "Code execution",
             "Calculate the fibonacci sequence up to n=20 using Python",
@@ -425,7 +425,10 @@ def test_reasoning():
 
     prompts = [
         ("Math", "What is 17 * 23? Think step by step."),
-        ("Logic", "If all roses are flowers and some flowers fade quickly, can we conclude all roses fade quickly? Explain your reasoning."),
+        (
+            "Logic",
+            "If all roses are flowers and some flowers fade quickly, can we conclude all roses fade quickly? Explain your reasoning.",
+        ),
         ("Code", "What's wrong with this code: `x = [1,2,3]; x[5]`? Think carefully."),
     ]
 
@@ -453,7 +456,11 @@ def test_reasoning():
             }
         )
 
-        status = "OK" if separated else ("PARTIAL" if has_reasoning or has_content else "FAIL")
+        status = (
+            "OK"
+            if separated
+            else ("PARTIAL" if has_reasoning or has_content else "FAIL")
+        )
         print(
             f"  [{status:7s}] {label:10s}  "
             f"reasoning={len(m['reasoning']):5d} chars  "
@@ -495,9 +502,7 @@ def test_long_gen():
 
     completed = m["finish_reason"] in ("stop", "length")
     print(f"  Completed: {completed}  finish_reason={m['finish_reason']}")
-    print(
-        f"  Generated: {m['completion_tokens']} tokens in {m['total_time']:.1f}s"
-    )
+    print(f"  Generated: {m['completion_tokens']} tokens in {m['total_time']:.1f}s")
     print(f"  Decode speed: {m['decode_tps']:.1f} tok/s")
     print(f"  Output length: {len(m['content'])} chars")
 
@@ -522,19 +527,27 @@ def print_summary(all_results):
 
         if test == "ttft":
             ttfts = [x["ttft"] for x in r["results"]]
-            print(f"  TTFT:           {' / '.join(f'{t:.3f}s' for t in ttfts)}  (short/med/long)")
+            print(
+                f"  TTFT:           {' / '.join(f'{t:.3f}s' for t in ttfts)}  (short/med/long)"
+            )
 
         elif test == "decode_throughput":
             tps_list = [x["decode_tps"] for x in r["results"]]
-            print(f"  Decode tok/s:   {' / '.join(f'{t:.1f}' for t in tps_list)}  (128/512/2048 tokens)")
+            print(
+                f"  Decode tok/s:   {' / '.join(f'{t:.1f}' for t in tps_list)}  (128/512/2048 tokens)"
+            )
 
         elif test == "prefix_cache":
             ttfts = [x["ttft"] for x in r["results"]]
             ratio = ttfts[-1] / ttfts[0] if ttfts[0] > 0 else 0
-            print(f"  Prefix cache:   Turn1={ttfts[0]:.3f}s → Turn4={ttfts[-1]:.3f}s  (ratio={ratio:.2f}x)")
+            print(
+                f"  Prefix cache:   Turn1={ttfts[0]:.3f}s → Turn4={ttfts[-1]:.3f}s  (ratio={ratio:.2f}x)"
+            )
 
         elif test == "tool_call":
-            print(f"  Tool calling:   {r['correct']}/{r['total']} correct ({r['accuracy_pct']:.0f}%)")
+            print(
+                f"  Tool calling:   {r['correct']}/{r['total']} correct ({r['accuracy_pct']:.0f}%)"
+            )
             avg_time = statistics.mean(x["total_time"] for x in r["results"])
             print(f"                  avg latency={avg_time:.2f}s")
 
@@ -555,7 +568,15 @@ def main():
     parser = argparse.ArgumentParser(description="vllm-mlx MiniMax benchmark")
     parser.add_argument(
         "--test",
-        choices=["ttft", "decode", "prefix_cache", "tool_call", "reasoning", "long_gen", "all"],
+        choices=[
+            "ttft",
+            "decode",
+            "prefix_cache",
+            "tool_call",
+            "reasoning",
+            "long_gen",
+            "all",
+        ],
         default="all",
         help="Which test to run (default: all)",
     )

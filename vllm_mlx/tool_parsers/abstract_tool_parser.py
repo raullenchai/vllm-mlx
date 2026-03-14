@@ -32,11 +32,9 @@ TEXT_TOOL_CALL_KV_PATTERN = re.compile(
 )
 TEXT_TOOL_CALL_KV_PARAM = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 # Variant 2: [Calling tool: name(json_args)]  or  [Calling tool: name({...})]
-TEXT_TOOL_CALL_FN_PATTERN = re.compile(
-    r'\[Calling\s+tool:\s*(\w+)\((\{.*?\})\)\s*\]'
-)
+TEXT_TOOL_CALL_FN_PATTERN = re.compile(r"\[Calling\s+tool:\s*(\w+)\((\{.*?\})\)\s*\]")
 # Combined check for either variant
-TEXT_TOOL_CALL_ANY = re.compile(r'\[Calling\s+tool[=:]')
+TEXT_TOOL_CALL_ANY = re.compile(r"\[Calling\s+tool[=:]")
 
 
 @dataclass
@@ -226,11 +224,13 @@ class ToolParser(ABC):
                 except (json.JSONDecodeError, ValueError):
                     arguments[key] = value
             if arguments:
-                tool_calls.append({
-                    "id": f"call_{uuid.uuid4().hex[:8]}",
-                    "name": func_name.strip(),
-                    "arguments": json.dumps(arguments, ensure_ascii=False),
-                })
+                tool_calls.append(
+                    {
+                        "id": f"call_{uuid.uuid4().hex[:8]}",
+                        "name": func_name.strip(),
+                        "arguments": json.dumps(arguments, ensure_ascii=False),
+                    }
+                )
 
         # Variant 2: name({json})
         for match in TEXT_TOOL_CALL_FN_PATTERN.finditer(text):
@@ -239,11 +239,13 @@ class ToolParser(ABC):
             try:
                 arguments = json.loads(json_str)
                 if isinstance(arguments, dict) and arguments:
-                    tool_calls.append({
-                        "id": f"call_{uuid.uuid4().hex[:8]}",
-                        "name": func_name.strip(),
-                        "arguments": json.dumps(arguments, ensure_ascii=False),
-                    })
+                    tool_calls.append(
+                        {
+                            "id": f"call_{uuid.uuid4().hex[:8]}",
+                            "name": func_name.strip(),
+                            "arguments": json.dumps(arguments, ensure_ascii=False),
+                        }
+                    )
             except (json.JSONDecodeError, ValueError):
                 pass
 

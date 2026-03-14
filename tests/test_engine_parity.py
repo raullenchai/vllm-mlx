@@ -17,10 +17,10 @@ import pytest
 from vllm_mlx.utils.chat_template import apply_chat_template
 from vllm_mlx.utils.decode import IncrementalDecoder
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_tokenizer():
@@ -47,15 +47,20 @@ def sample_tools():
 # Template Parity Tests
 # ---------------------------------------------------------------------------
 
+
 class TestApplyChatTemplate:
     """Tests for the shared apply_chat_template function."""
 
     @pytest.mark.parametrize("enable_thinking", [True, False])
-    def test_explicit_enable_thinking(self, mock_tokenizer, simple_messages, enable_thinking):
+    def test_explicit_enable_thinking(
+        self, mock_tokenizer, simple_messages, enable_thinking
+    ):
         """Explicit enable_thinking must reach the template."""
         apply_chat_template(
-            mock_tokenizer, simple_messages,
-            enable_thinking=enable_thinking, model_name="test-model",
+            mock_tokenizer,
+            simple_messages,
+            enable_thinking=enable_thinking,
+            model_name="test-model",
         )
         _, kwargs = mock_tokenizer.apply_chat_template.call_args
         assert kwargs["enable_thinking"] is enable_thinking
@@ -63,8 +68,10 @@ class TestApplyChatTemplate:
     def test_auto_enable_thinking_non_coder(self, mock_tokenizer, simple_messages):
         """enable_thinking=None auto-resolves to True for non-coder models."""
         apply_chat_template(
-            mock_tokenizer, simple_messages,
-            enable_thinking=None, model_name="Qwen3-8B",
+            mock_tokenizer,
+            simple_messages,
+            enable_thinking=None,
+            model_name="Qwen3-8B",
         )
         _, kwargs = mock_tokenizer.apply_chat_template.call_args
         assert kwargs["enable_thinking"] is True
@@ -72,17 +79,23 @@ class TestApplyChatTemplate:
     def test_auto_enable_thinking_coder(self, mock_tokenizer, simple_messages):
         """enable_thinking=None auto-resolves to False for coder models."""
         apply_chat_template(
-            mock_tokenizer, simple_messages,
-            enable_thinking=None, model_name="Qwen3-Coder-32B",
+            mock_tokenizer,
+            simple_messages,
+            enable_thinking=None,
+            model_name="Qwen3-Coder-32B",
         )
         _, kwargs = mock_tokenizer.apply_chat_template.call_args
         assert kwargs["enable_thinking"] is False
 
-    def test_tools_passed_to_template(self, mock_tokenizer, simple_messages, sample_tools):
+    def test_tools_passed_to_template(
+        self, mock_tokenizer, simple_messages, sample_tools
+    ):
         """tools must reach the template."""
         apply_chat_template(
-            mock_tokenizer, simple_messages,
-            tools=sample_tools, model_name="test-model",
+            mock_tokenizer,
+            simple_messages,
+            tools=sample_tools,
+            model_name="test-model",
         )
         _, kwargs = mock_tokenizer.apply_chat_template.call_args
         assert kwargs["tools"] == sample_tools
@@ -90,8 +103,10 @@ class TestApplyChatTemplate:
     def test_no_tools_when_none(self, mock_tokenizer, simple_messages):
         """tools key must not be in kwargs when tools=None."""
         apply_chat_template(
-            mock_tokenizer, simple_messages,
-            tools=None, model_name="test-model",
+            mock_tokenizer,
+            simple_messages,
+            tools=None,
+            model_name="test-model",
         )
         _, kwargs = mock_tokenizer.apply_chat_template.call_args
         assert "tools" not in kwargs
@@ -104,9 +119,11 @@ class TestApplyChatTemplate:
             "<fallback prompt>",
         ]
         result = apply_chat_template(
-            mock_tokenizer, simple_messages,
+            mock_tokenizer,
+            simple_messages,
             tools=[{"type": "function", "function": {"name": "f", "parameters": {}}}],
-            enable_thinking=True, model_name="test",
+            enable_thinking=True,
+            model_name="test",
         )
         assert result == "<fallback prompt>"
         # Second call should NOT have tools or enable_thinking
@@ -125,6 +142,7 @@ class TestApplyChatTemplate:
 # ---------------------------------------------------------------------------
 # IncrementalDecoder Tests
 # ---------------------------------------------------------------------------
+
 
 class TestIncrementalDecoder:
     """Tests for the shared IncrementalDecoder."""
@@ -229,6 +247,7 @@ class TestIncrementalDecoder:
 # Parameter Passthrough Tests
 # ---------------------------------------------------------------------------
 
+
 class TestParameterPassthrough:
     """Tests verifying that critical parameters aren't swallowed by **kwargs."""
 
@@ -239,8 +258,10 @@ class TestParameterPassthrough:
         enable_thinking = kwargs.pop("enable_thinking", None)
 
         apply_chat_template(
-            mock_tokenizer, simple_messages,
-            enable_thinking=enable_thinking, model_name="Qwen3-8B",
+            mock_tokenizer,
+            simple_messages,
+            enable_thinking=enable_thinking,
+            model_name="Qwen3-8B",
         )
         _, template_kwargs = mock_tokenizer.apply_chat_template.call_args
         assert template_kwargs["enable_thinking"] is False
@@ -251,8 +272,10 @@ class TestParameterPassthrough:
         enable_thinking = kwargs.pop("enable_thinking", None)
 
         apply_chat_template(
-            mock_tokenizer, simple_messages,
-            enable_thinking=enable_thinking, model_name="Qwen3-8B",
+            mock_tokenizer,
+            simple_messages,
+            enable_thinking=enable_thinking,
+            model_name="Qwen3-8B",
         )
         _, template_kwargs = mock_tokenizer.apply_chat_template.call_args
         # None → auto → True for non-coder
@@ -263,6 +286,7 @@ class TestParameterPassthrough:
 # Engine-specific integration tests (mock-based)
 # ---------------------------------------------------------------------------
 
+
 class TestBatchedEngineEnableThinking:
     """Verify BatchedEngine passes enable_thinking to _apply_chat_template."""
 
@@ -271,24 +295,27 @@ class TestBatchedEngineEnableThinking:
         # This is a structural test - we verify the code path exists
         # by checking the source code has the extraction
         import inspect
+
         from vllm_mlx.engine.batched import BatchedEngine
 
         chat_source = inspect.getsource(BatchedEngine.chat)
-        assert 'enable_thinking' in chat_source
+        assert "enable_thinking" in chat_source
         assert 'kwargs.pop("enable_thinking"' in chat_source
 
     def test_stream_chat_extracts_enable_thinking(self):
         """BatchedEngine.stream_chat() must extract enable_thinking from kwargs."""
         import inspect
+
         from vllm_mlx.engine.batched import BatchedEngine
 
         source = inspect.getsource(BatchedEngine.stream_chat)
-        assert 'enable_thinking' in source
+        assert "enable_thinking" in source
         assert 'kwargs.pop("enable_thinking"' in source
 
     def test_apply_chat_template_accepts_enable_thinking(self):
         """BatchedEngine._apply_chat_template() must accept enable_thinking."""
         import inspect
+
         from vllm_mlx.engine.batched import BatchedEngine
 
         sig = inspect.signature(BatchedEngine._apply_chat_template)
@@ -301,6 +328,7 @@ class TestSchedulerIncrementalDecoder:
     def test_scheduler_imports_decoder(self):
         """Scheduler module must import IncrementalDecoder."""
         import inspect
+
         import vllm_mlx.scheduler as sched_module
 
         source = inspect.getsource(sched_module)
@@ -309,6 +337,7 @@ class TestSchedulerIncrementalDecoder:
     def test_decoder_attached_on_schedule(self):
         """Scheduler must attach _decoder when request enters running state."""
         import inspect
+
         import vllm_mlx.scheduler as sched_module
 
         source = inspect.getsource(sched_module)

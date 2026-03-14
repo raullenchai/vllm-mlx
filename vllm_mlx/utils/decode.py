@@ -44,7 +44,7 @@ class IncrementalDecoder:
         full_text = self._tokenizer.decode(
             self._token_ids, skip_special_tokens=self._skip_special_tokens
         )
-        delta = full_text[len(self._prev_text):]
+        delta = full_text[len(self._prev_text) :]
         if "\ufffd" in delta:
             return ""  # hold back until character completes
         self._prev_text = full_text

@@ -14,10 +14,10 @@ Requirements:
 """
 
 import argparse
-import sys
 import os
-import tempfile
 import queue
+import sys
+import tempfile
 import threading
 import time
 
@@ -45,7 +45,9 @@ CHANNELS = 1
 class RealtimeTranscriber:
     """Real-time audio transcription using Whisper."""
 
-    def __init__(self, model_name: str, chunk_duration: float = 3.0, language: str = None):
+    def __init__(
+        self, model_name: str, chunk_duration: float = 3.0, language: str = None
+    ):
         self.model_name = model_name
         self.chunk_duration = chunk_duration
         self.language = language
@@ -62,6 +64,7 @@ class RealtimeTranscriber:
     def load_model(self):
         """Load the STT model."""
         from vllm_mlx.audio.stt import STTEngine
+
         print(f"Loading model: {self.model_name}")
         self.engine = STTEngine(self.model_name)
         self.engine.load()
@@ -148,7 +151,7 @@ class RealtimeTranscriber:
             channels=CHANNELS,
             dtype=np.float32,
             callback=self.audio_callback,
-            blocksize=int(self.sample_rate * 0.1)  # 100ms blocks
+            blocksize=int(self.sample_rate * 0.1),  # 100ms blocks
         )
 
         # Start processing thread
@@ -181,14 +184,25 @@ Examples:
     python examples/mic_realtime.py --chunk 2         # 2 second chunks (faster)
     python examples/mic_realtime.py --model parakeet  # Fast English model
     python examples/mic_realtime.py --language en     # Force English
-        """
+        """,
     )
-    parser.add_argument("--model", "-m", default="whisper-small",
-                        help="Model to use (default: whisper-small)")
-    parser.add_argument("--chunk", "-c", type=float, default=3.0,
-                        help="Chunk duration in seconds (default: 3.0)")
+    parser.add_argument(
+        "--model",
+        "-m",
+        default="whisper-small",
+        help="Model to use (default: whisper-small)",
+    )
+    parser.add_argument(
+        "--chunk",
+        "-c",
+        type=float,
+        default=3.0,
+        help="Chunk duration in seconds (default: 3.0)",
+    )
     parser.add_argument("--language", "-l", help="Language code (e.g., en, es)")
-    parser.add_argument("--list-models", action="store_true", help="List available models")
+    parser.add_argument(
+        "--list-models", action="store_true", help="List available models"
+    )
     args = parser.parse_args()
 
     print()
@@ -209,9 +223,7 @@ Examples:
 
     # Create transcriber
     transcriber = RealtimeTranscriber(
-        model_name=model_name,
-        chunk_duration=args.chunk,
-        language=args.language
+        model_name=model_name, chunk_duration=args.chunk, language=args.language
     )
 
     # Load model

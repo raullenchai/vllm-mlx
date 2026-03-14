@@ -19,8 +19,8 @@ Usage:
 """
 
 import argparse
-import sys
 import os
+import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,8 +35,19 @@ MODELS = {
         "path": "mlx-community/Kokoro-82M-bf16",
         "family": "kokoro",
         "languages": ["en", "es", "fr", "ja", "zh", "hi", "it", "pt"],
-        "voices": ["af_heart", "af_bella", "af_nicole", "af_sarah", "af_sky",
-                   "am_adam", "am_michael", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"],
+        "voices": [
+            "af_heart",
+            "af_bella",
+            "af_nicole",
+            "af_sarah",
+            "af_sky",
+            "am_adam",
+            "am_michael",
+            "bf_emma",
+            "bf_isabella",
+            "bm_george",
+            "bm_lewis",
+        ],
         "default_voice": "af_heart",
         "description": "Fast, lightweight (82M), 8 languages",
     },
@@ -44,8 +55,19 @@ MODELS = {
         "path": "mlx-community/Kokoro-82M-4bit",
         "family": "kokoro",
         "languages": ["en", "es", "fr", "ja", "zh", "hi", "it", "pt"],
-        "voices": ["af_heart", "af_bella", "af_nicole", "af_sarah", "af_sky",
-                   "am_adam", "am_michael", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"],
+        "voices": [
+            "af_heart",
+            "af_bella",
+            "af_nicole",
+            "af_sarah",
+            "af_sky",
+            "am_adam",
+            "am_michael",
+            "bf_emma",
+            "bf_isabella",
+            "bm_george",
+            "bm_lewis",
+        ],
         "default_voice": "af_heart",
         "description": "Quantized, lower memory",
     },
@@ -53,7 +75,23 @@ MODELS = {
     "chatterbox": {
         "path": "mlx-community/chatterbox-turbo-fp16",
         "family": "chatterbox",
-        "languages": ["en", "es", "fr", "de", "it", "pt", "ru", "ja", "zh", "ko", "ar", "hi", "nl", "pl", "tr"],
+        "languages": [
+            "en",
+            "es",
+            "fr",
+            "de",
+            "it",
+            "pt",
+            "ru",
+            "ja",
+            "zh",
+            "ko",
+            "ar",
+            "hi",
+            "nl",
+            "pl",
+            "tr",
+        ],
         "voices": ["default"],
         "default_voice": "default",
         "description": "Expressive, 15+ languages, voice cloning capable",
@@ -61,7 +99,23 @@ MODELS = {
     "chatterbox-4bit": {
         "path": "mlx-community/chatterbox-turbo-4bit",
         "family": "chatterbox",
-        "languages": ["en", "es", "fr", "de", "it", "pt", "ru", "ja", "zh", "ko", "ar", "hi", "nl", "pl", "tr"],
+        "languages": [
+            "en",
+            "es",
+            "fr",
+            "de",
+            "it",
+            "pt",
+            "ru",
+            "ja",
+            "zh",
+            "ko",
+            "ar",
+            "hi",
+            "nl",
+            "pl",
+            "tr",
+        ],
         "voices": ["default"],
         "default_voice": "default",
         "description": "Quantized chatterbox",
@@ -130,7 +184,7 @@ def list_models():
     for name, info in MODELS.items():
         langs = ", ".join(info["languages"][:5])
         if len(info["languages"]) > 5:
-            langs += f" (+{len(info['languages'])-5} more)"
+            langs += f" (+{len(info['languages']) - 5} more)"
         print(f"\n  {name}")
         print(f"    Path: {info['path']}")
         print(f"    Languages: {langs}")
@@ -152,11 +206,14 @@ def list_languages():
         print(f"{code:<6} {info['name']:<15} {best:<15} {', '.join(supporting)}")
 
 
-def generate_speech(text: str, model_name: str, lang: str, voice: str, speed: float, output: str):
+def generate_speech(
+    text: str, model_name: str, lang: str, voice: str, speed: float, output: str
+):
     """Generate speech using the specified model."""
-    from mlx_audio.tts.generate import load_model
-    import numpy as np
     import wave
+
+    import numpy as np
+    from mlx_audio.tts.generate import load_model
 
     model_info = MODELS[model_name]
     model_path = model_info["path"]
@@ -193,7 +250,7 @@ def generate_speech(text: str, model_name: str, lang: str, voice: str, speed: fl
             gen_kwargs["lang_code"] = "a"
 
     # Generate
-    print(f"\nGenerating: \"{text}\"")
+    print(f'\nGenerating: "{text}"')
     print()
 
     start_gen = time.time()
@@ -203,11 +260,11 @@ def generate_speech(text: str, model_name: str, lang: str, voice: str, speed: fl
     try:
         for result in model.generate(text, **gen_kwargs):
             audio_data = result.audio
-            if hasattr(result, 'sample_rate'):
+            if hasattr(result, "sample_rate"):
                 sample_rate = result.sample_rate
 
             # Convert to numpy
-            if hasattr(audio_data, 'tolist'):
+            if hasattr(audio_data, "tolist"):
                 audio_np = np.array(audio_data.tolist(), dtype=np.float32)
             else:
                 audio_np = np.array(audio_data, dtype=np.float32)
@@ -226,15 +283,17 @@ def generate_speech(text: str, model_name: str, lang: str, voice: str, speed: fl
         return None
 
     # Combine chunks
-    full_audio = np.concatenate(audio_chunks) if len(audio_chunks) > 1 else audio_chunks[0]
+    full_audio = (
+        np.concatenate(audio_chunks) if len(audio_chunks) > 1 else audio_chunks[0]
+    )
     duration = len(full_audio) / sample_rate
 
     print(f"Generated {duration:.2f}s audio in {gen_time:.2f}s")
-    print(f"RTF (real-time factor): {duration/gen_time:.2f}x")
+    print(f"RTF (real-time factor): {duration / gen_time:.2f}x")
 
     # Save
     audio_int16 = (full_audio * 32767).astype(np.int16)
-    with wave.open(output, 'w') as wf:
+    with wave.open(output, "w") as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
@@ -256,25 +315,32 @@ Examples:
   %(prog)s "Hello" --model chatterbox             # English with Chatterbox
   %(prog)s --list-models                          # Show all models
   %(prog)s --list-languages                       # Show all languages
-        """
+        """,
     )
     parser.add_argument("text", nargs="?", help="Text to synthesize")
-    parser.add_argument("--model", "-m", default="auto",
-                       help="Model: kokoro, chatterbox, vibevoice, voxcpm, or 'auto'")
-    parser.add_argument("--lang", "-l", default="en",
-                       help="Language code: en, es, fr, ja, zh, etc.")
-    parser.add_argument("--voice", "-v", default=None,
-                       help="Voice ID (model-specific)")
-    parser.add_argument("--speed", "-s", type=float, default=1.0,
-                       help="Speech speed 0.5-2.0")
-    parser.add_argument("--output", "-o", default="output.wav",
-                       help="Output file")
-    parser.add_argument("--play", "-p", action="store_true",
-                       help="Play audio after generation (macOS)")
-    parser.add_argument("--list-models", action="store_true",
-                       help="List available models")
-    parser.add_argument("--list-languages", action="store_true",
-                       help="List supported languages")
+    parser.add_argument(
+        "--model",
+        "-m",
+        default="auto",
+        help="Model: kokoro, chatterbox, vibevoice, voxcpm, or 'auto'",
+    )
+    parser.add_argument(
+        "--lang", "-l", default="en", help="Language code: en, es, fr, ja, zh, etc."
+    )
+    parser.add_argument("--voice", "-v", default=None, help="Voice ID (model-specific)")
+    parser.add_argument(
+        "--speed", "-s", type=float, default=1.0, help="Speech speed 0.5-2.0"
+    )
+    parser.add_argument("--output", "-o", default="output.wav", help="Output file")
+    parser.add_argument(
+        "--play", "-p", action="store_true", help="Play audio after generation (macOS)"
+    )
+    parser.add_argument(
+        "--list-models", action="store_true", help="List available models"
+    )
+    parser.add_argument(
+        "--list-languages", action="store_true", help="List supported languages"
+    )
 
     args = parser.parse_args()
 
@@ -309,7 +375,9 @@ Examples:
 
     # Validate language
     if args.lang not in model_info["languages"]:
-        print(f"Warning: Language '{args.lang}' not officially supported by {args.model}")
+        print(
+            f"Warning: Language '{args.lang}' not officially supported by {args.model}"
+        )
         print(f"Supported: {', '.join(model_info['languages'])}")
         # Try anyway or switch model
         best = get_best_model_for_language(args.lang)

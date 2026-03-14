@@ -20,9 +20,9 @@ import math
 import os
 import tempfile
 import threading
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator
 from urllib.parse import urlparse
 
 import numpy as np
@@ -1188,8 +1188,9 @@ class MLXMultimodalLM:
 
         # Prefix caching with vision embedding support
         # Following LMCache approach: cache vision embeddings to skip encoder on hit
-        from mlx_vlm.models import cache as vlm_cache
         import time
+
+        from mlx_vlm.models import cache as vlm_cache
 
         use_cache = kwargs.pop("use_cache", True)
         cache_entry = None
@@ -1308,6 +1309,7 @@ class MLXMultimodalLM:
         ):
             try:
                 import copy
+
                 import mlx.core as mx
 
                 # Get prompt token count (before generation)

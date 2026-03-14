@@ -8,9 +8,9 @@ Provides:
 - Audio Processing: SAM-Audio (voice separation)
 """
 
+from .processor import AudioProcessor, separate_voice
 from .stt import STTEngine, transcribe_audio
 from .tts import TTSEngine, generate_speech
-from .processor import AudioProcessor, separate_voice
 
 __all__ = [
     # STT

@@ -169,7 +169,7 @@ Always explain your reasoning and provide learning resources."""
 
     print(f"  Time: {time_no_paged:.2f}s")
     print(f"  Total completion tokens: {total_tokens_no_paged}")
-    print(f"  Throughput: {total_tokens_no_paged/time_no_paged:.1f} tok/s")
+    print(f"  Throughput: {total_tokens_no_paged / time_no_paged:.1f} tok/s")
     if "prefix_cache" in stats_no_paged:
         pc = stats_no_paged["prefix_cache"]
         print(f"  Cache hits: {pc.get('hits', 0)}")
@@ -228,7 +228,7 @@ Always explain your reasoning and provide learning resources."""
 
     print(f"  Time: {time_paged:.2f}s")
     print(f"  Total completion tokens: {total_tokens_paged}")
-    print(f"  Throughput: {total_tokens_paged/time_paged:.1f} tok/s")
+    print(f"  Throughput: {total_tokens_paged / time_paged:.1f} tok/s")
 
     if "paged_cache" in stats:
         pc = stats["paged_cache"]
@@ -246,10 +246,10 @@ Always explain your reasoning and provide learning resources."""
     print(f"  System prompt: ~{len(tokenizer.encode(system_prompt))} tokens (shared)")
     print("\n  Without paged cache:")
     print(f"    Time: {time_no_paged:.2f}s")
-    print(f"    Throughput: {total_tokens_no_paged/time_no_paged:.1f} tok/s")
+    print(f"    Throughput: {total_tokens_no_paged / time_no_paged:.1f} tok/s")
     print("\n  With paged cache:")
     print(f"    Time: {time_paged:.2f}s")
-    print(f"    Throughput: {total_tokens_paged/time_paged:.1f} tok/s")
+    print(f"    Throughput: {total_tokens_paged / time_paged:.1f} tok/s")
 
     speedup = time_no_paged / time_paged if time_paged > 0 else 0
     print(f"\n  Speedup: {speedup:.2f}x")
@@ -261,8 +261,8 @@ Always explain your reasoning and provide learning resources."""
     all_results = results1 + results2
     for i, r in enumerate(all_results[:3]):
         if r:
-            print(f"\nQ{i+1}: {user_questions[i][:50]}...")
-            print(f"A{i+1}: {r.output_text[:100]}...")
+            print(f"\nQ{i + 1}: {user_questions[i][:50]}...")
+            print(f"A{i + 1}: {r.output_text[:100]}...")
 
 
 if __name__ == "__main__":

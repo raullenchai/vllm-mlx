@@ -5,8 +5,8 @@ Tests for audio support (STT, TTS, audio processing).
 Note: Some tests require mlx-audio to be installed.
 """
 
-import pytest
 import numpy as np
+import pytest
 
 
 class TestSTTEngine:
@@ -30,7 +30,7 @@ class TestSTTEngine:
 
     def test_default_models(self):
         """Test default model constants."""
-        from vllm_mlx.audio.stt import DEFAULT_WHISPER_MODEL, DEFAULT_PARAKEET_MODEL
+        from vllm_mlx.audio.stt import DEFAULT_PARAKEET_MODEL, DEFAULT_WHISPER_MODEL
 
         assert "whisper" in DEFAULT_WHISPER_MODEL.lower()
         assert "parakeet" in DEFAULT_PARAKEET_MODEL.lower()
@@ -84,7 +84,7 @@ class TestTTSEngine:
 
     def test_available_voices(self):
         """Test voice lists."""
-        from vllm_mlx.audio.tts import KOKORO_VOICES, CHATTERBOX_VOICES
+        from vllm_mlx.audio.tts import CHATTERBOX_VOICES, KOKORO_VOICES
 
         assert "af_heart" in KOKORO_VOICES
         assert len(KOKORO_VOICES) > 5
@@ -212,9 +212,9 @@ class TestAudioImports:
     def test_import_audio_module(self):
         """Test importing main audio module."""
         from vllm_mlx.audio import (
+            AudioProcessor,
             STTEngine,
             TTSEngine,
-            AudioProcessor,
         )
 
         assert STTEngine is not None
@@ -224,8 +224,8 @@ class TestAudioImports:
     def test_import_api_models(self):
         """Test importing audio API models."""
         from vllm_mlx.api import (
-            AudioUrl,
             AudioTranscriptionRequest,
+            AudioUrl,
         )
 
         assert AudioUrl is not None

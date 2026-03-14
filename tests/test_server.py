@@ -194,7 +194,7 @@ class TestHelperFunctions:
 
     def test_extract_multimodal_content_text_only(self):
         """Test extracting content from text-only messages."""
-        from vllm_mlx.server import extract_multimodal_content, Message
+        from vllm_mlx.server import Message, extract_multimodal_content
 
         messages = [
             Message(role="user", content="Hello"),
@@ -210,7 +210,7 @@ class TestHelperFunctions:
 
     def test_extract_multimodal_content_with_image(self):
         """Test extracting content with images."""
-        from vllm_mlx.server import extract_multimodal_content, Message
+        from vllm_mlx.server import Message, extract_multimodal_content
 
         messages = [
             Message(
@@ -234,7 +234,7 @@ class TestHelperFunctions:
 
     def test_extract_multimodal_content_with_video(self):
         """Test extracting content with videos."""
-        from vllm_mlx.server import extract_multimodal_content, Message
+        from vllm_mlx.server import Message, extract_multimodal_content
 
         messages = [
             Message(
@@ -255,7 +255,7 @@ class TestHelperFunctions:
 
     def test_extract_multimodal_content_with_video_url(self):
         """Test extracting content with video_url format."""
-        from vllm_mlx.server import extract_multimodal_content, Message
+        from vllm_mlx.server import Message, extract_multimodal_content
 
         messages = [
             Message(
@@ -304,7 +304,7 @@ class TestRateLimiter:
         # First 3 requests should be allowed
         for i in range(3):
             allowed, retry_after = limiter.is_allowed("client1")
-            assert allowed is True, f"Request {i+1} should be allowed"
+            assert allowed is True, f"Request {i + 1} should be allowed"
             assert retry_after == 0
 
         # 4th request should be blocked
@@ -331,6 +331,7 @@ class TestRateLimiter:
     def test_rate_limiter_thread_safety(self):
         """Test that rate limiter is thread-safe."""
         import threading
+
         from vllm_mlx.server import RateLimiter
 
         limiter = RateLimiter(requests_per_minute=100, enabled=True)
@@ -362,8 +363,9 @@ class TestTempFileManager:
 
     def test_register_and_cleanup_single_file(self):
         """Test registering and cleaning up a single temp file."""
-        import tempfile
         import os
+        import tempfile
+
         from vllm_mlx.models.mllm import TempFileManager
 
         manager = TempFileManager()
@@ -385,8 +387,9 @@ class TestTempFileManager:
 
     def test_cleanup_all_files(self):
         """Test cleaning up all registered temp files."""
-        import tempfile
         import os
+        import tempfile
+
         from vllm_mlx.models.mllm import TempFileManager
 
         manager = TempFileManager()
@@ -424,8 +427,9 @@ class TestTempFileManager:
 
     def test_thread_safe_registration(self):
         """Test that TempFileManager is thread-safe."""
-        import threading
         import tempfile
+        import threading
+
         from vllm_mlx.models.mllm import TempFileManager
 
         manager = TempFileManager()
@@ -465,6 +469,7 @@ class TestRequestOutputCollectorThreadSafety:
     def test_waiting_consumers_thread_safe(self):
         """Test that _waiting_consumers counter is thread-safe."""
         import threading
+
         from vllm_mlx.output_collector import RequestOutputCollector
 
         # Reset the counter
@@ -574,6 +579,7 @@ class TestAPIKeyVerification:
     def test_verify_api_key_rejects_invalid(self):
         """Test that invalid API key is rejected with 401."""
         import asyncio
+
         from fastapi import HTTPException
         from fastapi.security import HTTPAuthorizationCredentials
 
@@ -605,6 +611,7 @@ class TestAPIKeyVerification:
     def test_verify_api_key_accepts_valid(self):
         """Test that valid API key is accepted."""
         import asyncio
+
         from fastapi.security import HTTPAuthorizationCredentials
 
         import vllm_mlx.server as server
@@ -653,8 +660,9 @@ class TestRateLimiterHTTPResponse:
 
     def test_rate_limiter_window_cleanup(self):
         """Test that rate limiter cleans up old requests from sliding window."""
-        from vllm_mlx.server import RateLimiter
         import time
+
+        from vllm_mlx.server import RateLimiter
 
         limiter = RateLimiter(requests_per_minute=2, enabled=True)
 
@@ -678,8 +686,9 @@ class TestRateLimiterHTTPResponse:
 
     def test_rate_limiter_stale_key_purge(self):
         """Stale client keys are purged when dict exceeds 100 entries (regression)."""
-        from vllm_mlx.server import RateLimiter
         import time
+
+        from vllm_mlx.server import RateLimiter
 
         limiter = RateLimiter(requests_per_minute=10, enabled=True)
 

@@ -15,11 +15,10 @@ Requirements:
 """
 
 import argparse
-import sys
 import os
+import sys
 import tempfile
 import threading
-from datetime import datetime
 
 # Add parent to path for local development
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -47,8 +46,8 @@ def record_audio(duration=None, sample_rate=16000):
     Returns:
         numpy array of audio data
     """
-    import sounddevice as sd
     import numpy as np
+    import sounddevice as sd
 
     print()
     if duration:
@@ -57,7 +56,7 @@ def record_audio(duration=None, sample_rate=16000):
             int(duration * sample_rate),
             samplerate=sample_rate,
             channels=1,
-            dtype=np.float32
+            dtype=np.float32,
         )
         sd.wait()
     else:
@@ -81,11 +80,17 @@ def record_audio(duration=None, sample_rate=16000):
         chunk_samples = int(chunk_duration * sample_rate)
 
         while not stop_recording.is_set():
-            chunk = sd.rec(chunk_samples, samplerate=sample_rate, channels=1, dtype=np.float32)
+            chunk = sd.rec(
+                chunk_samples, samplerate=sample_rate, channels=1, dtype=np.float32
+            )
             sd.wait()
             chunks.append(chunk)
             # Show recording indicator
-            print(f"\r  Recording: {len(chunks) * chunk_duration:.1f}s", end="", flush=True)
+            print(
+                f"\r  Recording: {len(chunks) * chunk_duration:.1f}s",
+                end="",
+                flush=True,
+            )
 
         print()  # New line after recording indicator
         audio = np.concatenate(chunks, axis=0) if chunks else np.array([])
@@ -96,6 +101,7 @@ def record_audio(duration=None, sample_rate=16000):
 def save_audio(audio, sample_rate, path):
     """Save audio to WAV file."""
     import soundfile as sf
+
     sf.write(path, audio, sample_rate)
 
 
@@ -110,17 +116,33 @@ Examples:
     python examples/mic_transcribe.py --model parakeet    # Fast English model
     python examples/mic_transcribe.py --continuous        # Keep transcribing
     python examples/mic_transcribe.py --save recording.wav  # Save audio
-        """
+        """,
     )
-    parser.add_argument("--duration", "-d", type=float, help="Recording duration in seconds")
-    parser.add_argument("--model", "-m", default="whisper-small",
-                        help="Model: whisper-small, whisper-medium, whisper-large-v3, parakeet")
-    parser.add_argument("--language", "-l", help="Language code (e.g., en, es). Auto-detect if not set")
-    parser.add_argument("--continuous", "-c", action="store_true",
-                        help="Continuous mode: keep recording and transcribing")
+    parser.add_argument(
+        "--duration", "-d", type=float, help="Recording duration in seconds"
+    )
+    parser.add_argument(
+        "--model",
+        "-m",
+        default="whisper-small",
+        help="Model: whisper-small, whisper-medium, whisper-large-v3, parakeet",
+    )
+    parser.add_argument(
+        "--language", "-l", help="Language code (e.g., en, es). Auto-detect if not set"
+    )
+    parser.add_argument(
+        "--continuous",
+        "-c",
+        action="store_true",
+        help="Continuous mode: keep recording and transcribing",
+    )
     parser.add_argument("--save", "-s", help="Save recorded audio to this file")
-    parser.add_argument("--list-models", action="store_true", help="List available models")
-    parser.add_argument("--list-devices", action="store_true", help="List audio input devices")
+    parser.add_argument(
+        "--list-models", action="store_true", help="List available models"
+    )
+    parser.add_argument(
+        "--list-devices", action="store_true", help="List audio input devices"
+    )
     args = parser.parse_args()
 
     print("=" * 60)
@@ -131,6 +153,7 @@ Examples:
     # List devices
     if args.list_devices:
         import sounddevice as sd
+
         print("Audio Input Devices:")
         print(sd.query_devices())
         return
@@ -151,6 +174,7 @@ Examples:
     # Load model first (so user doesn't wait after recording)
     print("Loading model...")
     from vllm_mlx.audio.stt import STTEngine
+
     engine = STTEngine(model_name)
     engine.load()
     print("Model ready!")

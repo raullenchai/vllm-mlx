@@ -11,8 +11,8 @@ Usage:
 """
 
 import argparse
-import sys
 import os
+import sys
 
 # Add parent to path for local development
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -31,29 +31,61 @@ LANGUAGES = {
 }
 
 LANG_ALIASES = {
-    "en": "a", "en-us": "a",
+    "en": "a",
+    "en-us": "a",
     "en-gb": "b",
-    "es": "e", "spanish": "e",
-    "fr": "f", "french": "f",
-    "it": "i", "italian": "i",
-    "pt": "p", "pt-br": "p", "portuguese": "p",
-    "ja": "j", "japanese": "j",
-    "zh": "z", "chinese": "z",
-    "hi": "h", "hindi": "h",
+    "es": "e",
+    "spanish": "e",
+    "fr": "f",
+    "french": "f",
+    "it": "i",
+    "italian": "i",
+    "pt": "p",
+    "pt-br": "p",
+    "portuguese": "p",
+    "ja": "j",
+    "japanese": "j",
+    "zh": "z",
+    "chinese": "z",
+    "hi": "h",
+    "hindi": "h",
 }
 
 
 def main():
     parser = argparse.ArgumentParser(description="Text-to-Speech Example")
     parser.add_argument("text", nargs="?", help="Text to synthesize")
-    parser.add_argument("--voice", "-v", default="af_heart", help="Voice ID (default: af_heart)")
-    parser.add_argument("--lang", "-l", default="a", help="Language code: a=English, e/es=Spanish, f=French, etc.")
-    parser.add_argument("--speed", "-s", type=float, default=1.0, help="Speech speed 0.5-2.0 (default: 1.0)")
-    parser.add_argument("--output", "-o", default="output.wav", help="Output file (default: output.wav)")
-    parser.add_argument("--model", "-m", default="mlx-community/Kokoro-82M-bf16", help="TTS model")
-    parser.add_argument("--list-voices", action="store_true", help="List available voices")
-    parser.add_argument("--list-languages", action="store_true", help="List available languages")
-    parser.add_argument("--play", "-p", action="store_true", help="Play audio after generation (macOS)")
+    parser.add_argument(
+        "--voice", "-v", default="af_heart", help="Voice ID (default: af_heart)"
+    )
+    parser.add_argument(
+        "--lang",
+        "-l",
+        default="a",
+        help="Language code: a=English, e/es=Spanish, f=French, etc.",
+    )
+    parser.add_argument(
+        "--speed",
+        "-s",
+        type=float,
+        default=1.0,
+        help="Speech speed 0.5-2.0 (default: 1.0)",
+    )
+    parser.add_argument(
+        "--output", "-o", default="output.wav", help="Output file (default: output.wav)"
+    )
+    parser.add_argument(
+        "--model", "-m", default="mlx-community/Kokoro-82M-bf16", help="TTS model"
+    )
+    parser.add_argument(
+        "--list-voices", action="store_true", help="List available voices"
+    )
+    parser.add_argument(
+        "--list-languages", action="store_true", help="List available languages"
+    )
+    parser.add_argument(
+        "--play", "-p", action="store_true", help="Play audio after generation (macOS)"
+    )
     args = parser.parse_args()
 
     print("=" * 60)
@@ -103,7 +135,7 @@ def main():
         return
 
     # Generate speech
-    print(f"Text: \"{args.text}\"")
+    print(f'Text: "{args.text}"')
     print(f"Voice: {args.voice}")
     print(f"Language: {lang_name}")
     print(f"Speed: {args.speed}x")
@@ -111,14 +143,18 @@ def main():
     print("Generating...")
 
     try:
-        output = engine.generate(args.text, voice=args.voice, speed=args.speed, lang_code=lang_code)
+        output = engine.generate(
+            args.text, voice=args.voice, speed=args.speed, lang_code=lang_code
+        )
     except Exception as e:
         print(f"Error: {e}")
-        print("\nNote: Technical terms or made-up words may fail. Try common words in the selected language.")
+        print(
+            "\nNote: Technical terms or made-up words may fail. Try common words in the selected language."
+        )
         return
 
     print()
-    print(f"Generated audio:")
+    print("Generated audio:")
     print(f"  Duration: {output.duration:.2f} seconds")
     print(f"  Sample rate: {output.sample_rate} Hz")
     print(f"  Samples: {len(output.audio):,}")

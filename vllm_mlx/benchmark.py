@@ -35,12 +35,11 @@ import argparse
 import base64
 import io
 import json
+import statistics
 import tempfile
 import time
-import statistics
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import cv2
 import numpy as np
@@ -331,7 +330,7 @@ def benchmark_single_prompt(
     prompt: str,
     max_tokens: int = 256,
     temperature: float = 0.7,
-) -> Optional[BenchmarkResult]:
+) -> BenchmarkResult | None:
     """
     Benchmark a single prompt with detailed timing.
 
@@ -400,7 +399,7 @@ def run_benchmark(
     max_tokens: int = 256,
     temperature: float = 0.7,
     warmup_runs: int = 1,
-) -> Optional[BenchmarkSummary]:
+) -> BenchmarkSummary | None:
     """
     Run the full benchmark suite.
 
@@ -414,8 +413,8 @@ def run_benchmark(
     Returns:
         BenchmarkSummary with aggregate statistics
     """
-    from vllm_mlx.utils.tokenizer import load_model_with_fallback
     from vllm_mlx.optimizations import detect_hardware
+    from vllm_mlx.utils.tokenizer import load_model_with_fallback
 
     # Detect hardware
     hw = detect_hardware()
@@ -468,9 +467,9 @@ def run_benchmark(
     # Use only the requested number of prompts
     test_prompts = (prompts * ((num_prompts // len(prompts)) + 1))[:num_prompts]
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("vllm-mlx Performance Benchmark")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Hardware info table
     hw_table = [
@@ -483,7 +482,7 @@ def run_benchmark(
         ["Temperature", temperature],
     ]
     print(tabulate(hw_table, tablefmt="plain"))
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Initialize resource monitor
     monitor = ResourceMonitor()
@@ -542,7 +541,7 @@ def run_benchmark(
                     i,
                     result.prompt_tokens,
                     result.generated_tokens,
-                    f"{result.ttft*1000:.1f}",
+                    f"{result.ttft * 1000:.1f}",
                     f"{result.generation_tps:.1f}",
                 ]
             )
@@ -820,6 +819,7 @@ def run_mllm_benchmark(
     """
     from mlx_vlm import load
     from mlx_vlm.utils import load_config
+
     from vllm_mlx.optimizations import detect_hardware
 
     # Detect hardware
@@ -847,9 +847,9 @@ def run_mllm_benchmark(
             (1920, 1080),
         ]
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("vllm-mlx MLLM Performance Benchmark")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     # Info table
     info_table = [
@@ -860,7 +860,7 @@ def run_mllm_benchmark(
         ["Max Tokens", max_tokens],
     ]
     print(tabulate(info_table, tablefmt="plain"))
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
     # Load model
     print(f"Loading MLLM model: {model_name}...")
@@ -919,9 +919,9 @@ def print_mllm_summary(results: list[MLLMBenchmarkResult], model_name: str):
         print("No results to display.")
         return
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("MLLM BENCHMARK RESULTS")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
     # Results table
     table_data = []
@@ -972,7 +972,7 @@ def print_mllm_summary(results: list[MLLMBenchmarkResult], model_name: str):
     print(f"\nFastest:  {fastest.resolution} ({fastest.time_seconds:.2f}s)")
     print(f"Slowest:  {slowest.resolution} ({slowest.time_seconds:.2f}s)")
     print(f"Slowdown: {slowest.time_seconds / fastest.time_seconds:.1f}x")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
 
 
 # =============================================================================
@@ -1213,9 +1213,9 @@ def run_video_benchmark(
             ("64 frames @ 8fps", 8.0, 64),
         ]
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("vllm-mlx Video Performance Benchmark")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     # Info table
     info_table = [
@@ -1225,7 +1225,7 @@ def run_video_benchmark(
         ["Max Tokens", max_tokens],
     ]
     print(tabulate(info_table, tablefmt="plain"))
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
     # Load model
     print(f"Loading MLLM model: {model_name}...")
@@ -1291,9 +1291,9 @@ def print_video_summary(results: list[VideoBenchmarkResult], model_name: str):
         print("No results to display.")
         return
 
-    print(f"\n{'='*85}")
+    print(f"\n{'=' * 85}")
     print("VIDEO BENCHMARK RESULTS")
-    print(f"{'='*85}\n")
+    print(f"{'=' * 85}\n")
 
     # Results table
     table_data = []
@@ -1338,7 +1338,7 @@ def print_video_summary(results: list[VideoBenchmarkResult], model_name: str):
     print(
         f"Most Frames: {most_frames.config_name} ({most_frames.frames_extracted} frames)"
     )
-    print(f"{'='*85}")
+    print(f"{'=' * 85}")
 
 
 # =============================================================================
@@ -1348,9 +1348,9 @@ def print_video_summary(results: list[VideoBenchmarkResult], model_name: str):
 
 def print_summary(summary: BenchmarkSummary):
     """Print a formatted summary of benchmark results using tabulate."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("BENCHMARK RESULTS")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Overview table
     overview_data = [
@@ -1368,13 +1368,13 @@ def print_summary(summary: BenchmarkSummary):
     metrics_data = [
         [
             "TTFT (Time to First Token)",
-            f"{summary.ttft_mean*1000:.1f} ms",
-            f"{summary.ttft_p95*1000:.1f} ms",
+            f"{summary.ttft_mean * 1000:.1f} ms",
+            f"{summary.ttft_p95 * 1000:.1f} ms",
         ],
         [
             "TPOT (Time Per Output Token)",
-            f"{summary.tpot_mean*1000:.2f} ms",
-            f"{summary.tpot_max*1000:.2f} ms",
+            f"{summary.tpot_mean * 1000:.2f} ms",
+            f"{summary.tpot_max * 1000:.2f} ms",
         ],
         [
             "Generation Speed",
@@ -1438,7 +1438,7 @@ def print_summary(summary: BenchmarkSummary):
         print(tabulate(resource_data, tablefmt="plain"))
         print()
 
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 def main():

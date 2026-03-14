@@ -29,9 +29,10 @@ def small_mllm_model():
 def test_image_path(tmp_path):
     """Download a real image from Wikimedia Commons for tests."""
     pytest.importorskip("PIL")
+    import io
+
     import requests
     from PIL import Image
-    import io
 
     # Use a small dog image from Wikimedia Commons (public domain)
     url = "https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/YellowLabradorLooking_new.jpg/320px-YellowLabradorLooking_new.jpg"

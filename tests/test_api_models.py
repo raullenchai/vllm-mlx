@@ -15,10 +15,11 @@ from vllm_mlx.api.models import (
     AudioSpeechRequest,
     AudioTranscriptionRequest,
     AudioTranscriptionResponse,
+    AudioUrl,
+    ChatCompletionChoice,
     ChatCompletionChunk,
     ChatCompletionChunkChoice,
     ChatCompletionChunkDelta,
-    ChatCompletionChoice,
     ChatCompletionRequest,
     ChatCompletionResponse,
     CompletionChoice,
@@ -46,7 +47,6 @@ from vllm_mlx.api.models import (
     ToolDefinition,
     Usage,
     VideoUrl,
-    AudioUrl,
 )
 
 

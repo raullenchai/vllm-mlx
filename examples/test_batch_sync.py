@@ -7,7 +7,8 @@ import time
 
 def main():
     from mlx_lm import load
-    from vllm_mlx import EngineCore, EngineConfig, SamplingParams, SchedulerConfig
+
+    from vllm_mlx import EngineConfig, EngineCore, SamplingParams, SchedulerConfig
 
     MODEL = "mlx-community/Qwen3-0.6B-8bit"
     print(f"Loading {MODEL}...")
@@ -33,7 +34,9 @@ def main():
     print("\n" + "=" * 70)
     print("BATCH SIZE SCALING TEST: generate_batch_sync()")
     print("=" * 70)
-    print(f"{'Batch':>6} | {'Time':>8} | {'Tokens':>7} | {'Tok/s':>8} | {'% README':>8}")
+    print(
+        f"{'Batch':>6} | {'Time':>8} | {'Tokens':>7} | {'Tok/s':>8} | {'% README':>8}"
+    )
     print("-" * 70)
 
     for multiplier in [1, 2, 4, 8, 16]:
@@ -58,10 +61,12 @@ def main():
         throughput = total_tokens / elapsed
         pct = throughput / 1003.7 * 100
 
-        print(f"{len(prompts):>6} | {elapsed:>7.2f}s | {total_tokens:>7} | {throughput:>7.1f} | {pct:>7.1f}%")
+        print(
+            f"{len(prompts):>6} | {elapsed:>7.2f}s | {total_tokens:>7} | {throughput:>7.1f} | {pct:>7.1f}%"
+        )
 
     print("-" * 70)
-    print(f"README benchmark: 1003.7 tok/s (5 prompts, 50 max_tokens)")
+    print("README benchmark: 1003.7 tok/s (5 prompts, 50 max_tokens)")
 
     # Async comparison
     print("\n" + "=" * 70)

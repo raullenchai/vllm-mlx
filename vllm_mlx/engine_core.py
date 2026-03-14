@@ -15,15 +15,16 @@ import asyncio
 import logging
 import time
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from typing import Any
 
 import mlx.core as mx
 
+from .model_registry import get_registry
+from .output_collector import RequestOutputCollector, RequestStreamState
 from .request import Request, RequestOutput, SamplingParams
 from .scheduler import Scheduler, SchedulerConfig
-from .output_collector import RequestOutputCollector, RequestStreamState
-from .model_registry import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +34,11 @@ class EngineConfig:
     """Configuration for the engine."""
 
     model_name: str = ""
-    scheduler_config: Optional[SchedulerConfig] = None
+    scheduler_config: SchedulerConfig | None = None
     step_interval: float = 0.001  # 1ms between steps
     stream_interval: int = 1  # Tokens to batch before streaming (1=every token)
     gpu_memory_utilization: float = 0.90  # Fraction of device memory for allocation
-    tool_logits_processor_factory: Optional[Any] = None  # Factory for tool logits bias
+    tool_logits_processor_factory: Any | None = None  # Factory for tool logits bias
 
 
 class EngineCore:
@@ -52,8 +53,8 @@ class EngineCore:
         self,
         model: Any,
         tokenizer: Any,
-        config: Optional[EngineConfig] = None,
-        engine_id: Optional[str] = None,
+        config: EngineConfig | None = None,
+        engine_id: str | None = None,
         force_model_ownership: bool = True,
     ):
         """
@@ -95,14 +96,14 @@ class EngineCore:
         )
 
         # Output collectors for low-latency streaming (vLLM pattern)
-        self._output_collectors: Dict[str, RequestOutputCollector] = {}
-        self._stream_states: Dict[str, RequestStreamState] = {}
-        self._finished_events: Dict[str, asyncio.Event] = {}
+        self._output_collectors: dict[str, RequestOutputCollector] = {}
+        self._stream_states: dict[str, RequestStreamState] = {}
+        self._finished_events: dict[str, asyncio.Event] = {}
 
         # Engine state
         self._running = False
-        self._task: Optional[asyncio.Task] = None
-        self._start_time: Optional[float] = None
+        self._task: asyncio.Task | None = None
+        self._start_time: float | None = None
         self._steps_executed = 0
 
         logger.debug(f"Engine {self._engine_id} initialized")
@@ -254,11 +255,11 @@ class EngineCore:
 
     async def add_request(
         self,
-        prompt: Union[str, List[int]],
-        sampling_params: Optional[SamplingParams] = None,
-        request_id: Optional[str] = None,
-        images: Optional[List[Any]] = None,
-        videos: Optional[List[Any]] = None,
+        prompt: str | list[int],
+        sampling_params: SamplingParams | None = None,
+        request_id: str | None = None,
+        images: list[Any] | None = None,
+        videos: list[Any] | None = None,
         prefix_boundary: int = 0,
     ) -> str:
         """
@@ -320,7 +321,7 @@ class EngineCore:
     async def stream_outputs(
         self,
         request_id: str,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> AsyncIterator[RequestOutput]:
         """
         Stream outputs for a request with low-latency non-blocking pattern.
@@ -407,9 +408,9 @@ class EngineCore:
 
     async def generate(
         self,
-        prompt: Union[str, List[int]],
-        sampling_params: Optional[SamplingParams] = None,
-        request_id: Optional[str] = None,
+        prompt: str | list[int],
+        sampling_params: SamplingParams | None = None,
+        request_id: str | None = None,
         **kwargs,
     ) -> RequestOutput:
         """
@@ -471,9 +472,9 @@ class EngineCore:
 
     def generate_batch_sync(
         self,
-        prompts: List[Union[str, List[int]]],
-        sampling_params: Optional[SamplingParams] = None,
-    ) -> List[RequestOutput]:
+        prompts: list[str | list[int]],
+        sampling_params: SamplingParams | None = None,
+    ) -> list[RequestOutput]:
         """
         Generate responses synchronously for maximum throughput.
 
@@ -488,8 +489,9 @@ class EngineCore:
         Returns:
             List of RequestOutput in same order as prompts
         """
-        from .request import Request
         import uuid as uuid_module
+
+        from .request import Request
 
         if sampling_params is None:
             sampling_params = SamplingParams()
@@ -507,7 +509,7 @@ class EngineCore:
             request_ids.append(request_id)
 
         # Process until all done - direct scheduler access, no async overhead
-        results: Dict[str, RequestOutput] = {}
+        results: dict[str, RequestOutput] = {}
         while self.scheduler.has_requests():
             output = self.scheduler.step()
             for req_output in output.outputs:
@@ -521,7 +523,7 @@ class EngineCore:
         # Return in original order
         return [results[rid] for rid in request_ids]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get engine statistics."""
         scheduler_stats = self.scheduler.get_stats()
         uptime = time.time() - self._start_time if self._start_time else 0
@@ -536,7 +538,7 @@ class EngineCore:
             **scheduler_stats,
         }
 
-    def get_cache_stats(self) -> Optional[Dict[str, Any]]:
+    def get_cache_stats(self) -> dict[str, Any] | None:
         """Get prefix cache statistics."""
         return self.scheduler.get_cache_stats()
 
@@ -617,7 +619,7 @@ class AsyncEngineCore:
         self,
         model: Any,
         tokenizer: Any,
-        config: Optional[EngineConfig] = None,
+        config: EngineConfig | None = None,
     ):
         self.engine = EngineCore(model, tokenizer, config)
 
@@ -638,9 +640,9 @@ class AsyncEngineCore:
 
     async def add_request(
         self,
-        prompt: Union[str, List[int]],
-        sampling_params: Optional[SamplingParams] = None,
-        request_id: Optional[str] = None,
+        prompt: str | list[int],
+        sampling_params: SamplingParams | None = None,
+        request_id: str | None = None,
         **kwargs,
     ) -> str:
         """Add a request."""
@@ -658,7 +660,7 @@ class AsyncEngineCore:
     async def stream_outputs(
         self,
         request_id: str,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> AsyncIterator[RequestOutput]:
         """Stream outputs."""
         async for output in self.engine.stream_outputs(request_id, timeout):
@@ -666,8 +668,8 @@ class AsyncEngineCore:
 
     async def generate(
         self,
-        prompt: Union[str, List[int]],
-        sampling_params: Optional[SamplingParams] = None,
+        prompt: str | list[int],
+        sampling_params: SamplingParams | None = None,
         **kwargs,
     ) -> RequestOutput:
         """Generate complete response."""
@@ -677,11 +679,11 @@ class AsyncEngineCore:
             **kwargs,
         )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get engine stats."""
         return self.engine.get_stats()
 
-    def get_cache_stats(self) -> Optional[Dict[str, Any]]:
+    def get_cache_stats(self) -> dict[str, Any] | None:
         """Get prefix cache statistics."""
         return self.engine.get_cache_stats()
 

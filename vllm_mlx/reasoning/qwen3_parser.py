@@ -64,9 +64,7 @@ class Qwen3ReasoningParser(BaseThinkingReasoningParser):
         # Use base class implementation (handles both explicit and implicit)
         return super().extract_reasoning(model_output)
 
-    def finalize_streaming(
-        self, accumulated_text: str
-    ) -> DeltaMessage | None:
+    def finalize_streaming(self, accumulated_text: str) -> DeltaMessage | None:
         """
         Finalize streaming output.
 

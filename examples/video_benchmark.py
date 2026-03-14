@@ -79,6 +79,7 @@ SAMPLE_VIDEOS = {
 @dataclass
 class VideoBenchmarkResult:
     """Result from a single video benchmark run."""
+
     config_name: str
     fps: float
     max_frames: int
@@ -112,18 +113,18 @@ def create_test_video(
     temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     temp_file.close()
 
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(temp_file.name, fourcc, fps, (width, height))
 
     total_frames = int(duration * fps)
 
     # Different scenes with colors
     scenes = [
-        ((255, 0, 0), "Blue Scene"),      # Blue (BGR)
-        ((0, 255, 0), "Green Scene"),     # Green
-        ((0, 0, 255), "Red Scene"),       # Red
-        ((255, 255, 0), "Cyan Scene"),    # Cyan
-        ((255, 0, 255), "Magenta Scene"), # Magenta
+        ((255, 0, 0), "Blue Scene"),  # Blue (BGR)
+        ((0, 255, 0), "Green Scene"),  # Green
+        ((0, 0, 255), "Red Scene"),  # Red
+        ((255, 255, 0), "Cyan Scene"),  # Cyan
+        ((255, 0, 255), "Magenta Scene"),  # Magenta
         ((0, 255, 255), "Yellow Scene"),  # Yellow
     ]
 
@@ -143,7 +144,7 @@ def create_test_video(
             cv2.FONT_HERSHEY_SIMPLEX,
             1.5,
             (255, 255, 255),
-            3
+            3,
         )
 
         # Add frame counter
@@ -154,7 +155,7 @@ def create_test_video(
             cv2.FONT_HERSHEY_SIMPLEX,
             1.0,
             (255, 255, 255),
-            2
+            2,
         )
 
         # Add timestamp
@@ -166,7 +167,7 @@ def create_test_video(
             cv2.FONT_HERSHEY_SIMPLEX,
             0.8,
             (200, 200, 200),
-            2
+            2,
         )
 
         out.write(frame)
@@ -179,9 +180,7 @@ def download_video(url: str, timeout: int = 120) -> str:
     """Download video from URL."""
     import requests
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
-    }
+    headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
 
     logger.info(f"Downloading video from: {url}")
     response = requests.get(url, timeout=timeout, headers=headers, stream=True)
@@ -230,7 +229,11 @@ def run_video_benchmark(
     video_info = get_video_info(video_path)
 
     if not warmup:
-        print(f"  {config_name:>20} | fps={fps:<4} max_frames={max_frames:<3} |", end=" ", flush=True)
+        print(
+            f"  {config_name:>20} | fps={fps:<4} max_frames={max_frames:<3} |",
+            end=" ",
+            flush=True,
+        )
 
     start_time = time.perf_counter()
 
@@ -255,7 +258,9 @@ def run_video_benchmark(
     frames_extracted = min(frames_from_fps, max_frames, video_info["total_frames"])
 
     if not warmup:
-        print(f"{elapsed:>5.2f}s | {frames_extracted:>2} frames | {completion_tokens:>3} tok | {tps:>5.1f} tok/s")
+        print(
+            f"{elapsed:>5.2f}s | {frames_extracted:>2} frames | {completion_tokens:>3} tok | {tps:>5.1f} tok/s"
+        )
 
     return VideoBenchmarkResult(
         config_name=config_name,
@@ -267,7 +272,9 @@ def run_video_benchmark(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         tokens_per_second=tps,
-        response_preview=output.text[:100] + "..." if len(output.text) > 100 else output.text,
+        response_preview=output.text[:100] + "..."
+        if len(output.text) > 100
+        else output.text,
     )
 
 
@@ -313,9 +320,11 @@ def run_benchmark(
         video_path = create_test_video(duration=video_duration)
 
     video_info = get_video_info(video_path)
-    print(f"Video: {video_info['width']}x{video_info['height']}, "
-          f"{video_info['duration']:.1f}s, {video_info['fps']:.1f} fps, "
-          f"{video_info['total_frames']} frames")
+    print(
+        f"Video: {video_info['width']}x{video_info['height']}, "
+        f"{video_info['duration']:.1f}s, {video_info['fps']:.1f} fps, "
+        f"{video_info['total_frames']} frames"
+    )
 
     # Define benchmark configurations
     if quick:
@@ -332,14 +341,12 @@ def run_benchmark(
             ("8 frames @ 2fps", 2.0, 8),
             ("16 frames @ 4fps", 4.0, 16),
             ("32 frames @ 4fps", 4.0, 32),
-
             # Varying max_frames with same FPS
             ("4 frames @ 2fps", 2.0, 4),
             ("8 frames @ 2fps", 2.0, 8),
             ("12 frames @ 2fps", 2.0, 12),
             ("16 frames @ 2fps", 2.0, 16),
             ("24 frames @ 2fps", 2.0, 24),
-
             # High density
             ("32 frames @ 8fps", 8.0, 32),
             ("48 frames @ 8fps", 8.0, 48),
@@ -360,13 +367,17 @@ def run_benchmark(
     print(f"Video Duration: {video_info['duration']:.1f}s")
     print(f"Video Size:     {video_info['width']}x{video_info['height']}")
     print("-" * 80)
-    print(f"  {'Configuration':>20} | {'Params':<22} | {'Time':>6} | {'Frames':>6} | {'Tokens':>4} | {'Speed':>9}")
+    print(
+        f"  {'Configuration':>20} | {'Params':<22} | {'Time':>6} | {'Frames':>6} | {'Tokens':>4} | {'Speed':>9}"
+    )
     print("-" * 80)
 
     results = []
     for config_name, fps, max_frames in configs:
         try:
-            result = run_video_benchmark(model, video_path, fps, max_frames, config_name)
+            result = run_video_benchmark(
+                model, video_path, fps, max_frames, config_name
+            )
             results.append(result)
         except Exception as e:
             print(f"  Error with {config_name}: {e}")
@@ -390,14 +401,16 @@ def print_results(results: list[VideoBenchmarkResult]):
     print("\n### By Frame Count ###")
     table_data = []
     for r in sorted(results, key=lambda x: x.frames_extracted):
-        table_data.append([
-            r.config_name,
-            r.frames_extracted,
-            f"{r.fps}",
-            f"{r.time_seconds:.2f}s",
-            r.completion_tokens,
-            f"{r.tokens_per_second:.1f}",
-        ])
+        table_data.append(
+            [
+                r.config_name,
+                r.frames_extracted,
+                f"{r.fps}",
+                f"{r.time_seconds:.2f}s",
+                r.completion_tokens,
+                f"{r.tokens_per_second:.1f}",
+            ]
+        )
 
     headers = ["Config", "Frames", "FPS", "Time", "Tokens", "Tok/s"]
     print(tabulate(table_data, headers=headers, tablefmt="simple"))
@@ -419,7 +432,9 @@ def print_results(results: list[VideoBenchmarkResult]):
 
     print(f"\nFastest:     {fastest.config_name} ({fastest.time_seconds:.2f}s)")
     print(f"Slowest:     {slowest.config_name} ({slowest.time_seconds:.2f}s)")
-    print(f"Most Frames: {most_frames.config_name} ({most_frames.frames_extracted} frames)")
+    print(
+        f"Most Frames: {most_frames.config_name} ({most_frames.frames_extracted} frames)"
+    )
 
     # Frames vs Speed analysis
     print("\n### Frames vs Speed Analysis ###")
@@ -437,15 +452,23 @@ def print_results(results: list[VideoBenchmarkResult]):
         avg_tps = sum(r.tokens_per_second for r in group) / len(group)
         analysis_data.append([frames, f"{avg_time:.2f}s", f"{avg_tps:.1f}"])
 
-    print(tabulate(analysis_data, headers=["Frames", "Avg Time", "Avg Tok/s"], tablefmt="simple"))
+    print(
+        tabulate(
+            analysis_data,
+            headers=["Frames", "Avg Time", "Avg Tok/s"],
+            tablefmt="simple",
+        )
+    )
 
     # Sample response
     print("\n" + "-" * 80)
     print("Sample Response (first config):")
-    print(f"  \"{results[0].response_preview}\"")
+    print(f'  "{results[0].response_preview}"')
 
 
-def save_results(results: list[VideoBenchmarkResult], output_path: str, model_name: str):
+def save_results(
+    results: list[VideoBenchmarkResult], output_path: str, model_name: str
+):
     """Save benchmark results to JSON file."""
     data = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -465,7 +488,7 @@ def save_results(results: list[VideoBenchmarkResult], output_path: str, model_na
                 "response_preview": r.response_preview,
             }
             for r in results
-        ]
+        ],
     }
 
     with open(output_path, "w") as f:

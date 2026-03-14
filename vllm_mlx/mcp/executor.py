@@ -6,15 +6,15 @@ Tool executor for handling tool calls from model responses.
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import jsonschema
 from jsonschema import ValidationError
 
 from .manager import MCPClientManager
-from .security import get_sandbox, MCPSecurityError, ToolSandbox
+from .security import MCPSecurityError, ToolSandbox, get_sandbox
 from .tools import extract_tool_calls, format_tool_result
-from .types import MCPToolResult, MCPTool
+from .types import MCPTool, MCPToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class ToolArgumentValidationError(Exception):
 
 def validate_tool_arguments(
     tool: MCPTool,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     strict: bool = True,
 ) -> None:
     """
@@ -76,9 +76,9 @@ class ToolExecutor:
         self,
         manager: MCPClientManager,
         max_parallel: int = 5,
-        default_timeout: Optional[float] = None,
+        default_timeout: float | None = None,
         validate_arguments: bool = True,
-        sandbox: Optional[ToolSandbox] = None,
+        sandbox: ToolSandbox | None = None,
     ):
         """
         Initialize tool executor.
@@ -98,9 +98,9 @@ class ToolExecutor:
 
     async def execute_tool_calls(
         self,
-        tool_calls: List[Dict[str, Any]],
+        tool_calls: list[dict[str, Any]],
         parallel: bool = True,
-    ) -> List[Tuple[MCPToolResult, str]]:
+    ) -> list[tuple[MCPToolResult, str]]:
         """
         Execute multiple tool calls.
 
@@ -119,7 +119,7 @@ class ToolExecutor:
         else:
             return await self._execute_sequential(tool_calls)
 
-    def _get_tool_by_name(self, full_name: str) -> Optional[MCPTool]:
+    def _get_tool_by_name(self, full_name: str) -> MCPTool | None:
         """Get a tool by its full name (server__tool or just tool)."""
         for tool in self.manager.get_all_tools():
             if tool.full_name == full_name:
@@ -131,7 +131,7 @@ class ToolExecutor:
                     return tool
         return None
 
-    def _validate_tool_call(self, tool_call: Dict[str, Any]) -> Optional[str]:
+    def _validate_tool_call(self, tool_call: dict[str, Any]) -> str | None:
         """
         Validate a tool call's arguments against the tool's schema.
 
@@ -168,8 +168,8 @@ class ToolExecutor:
         self,
         tool_name: str,
         server_name: str,
-        arguments: Dict[str, Any],
-    ) -> Optional[str]:
+        arguments: dict[str, Any],
+    ) -> str | None:
         """
         Validate tool execution against sandbox policy.
 
@@ -194,12 +194,12 @@ class ToolExecutor:
 
     async def _execute_parallel(
         self,
-        tool_calls: List[Dict[str, Any]],
-    ) -> List[Tuple[MCPToolResult, str]]:
+        tool_calls: list[dict[str, Any]],
+    ) -> list[tuple[MCPToolResult, str]]:
         """Execute tool calls in parallel with concurrency limit."""
         semaphore = asyncio.Semaphore(self.max_parallel)
 
-        async def execute_with_semaphore(tool_call: Dict[str, Any]):
+        async def execute_with_semaphore(tool_call: dict[str, Any]):
             async with semaphore:
                 func = tool_call.get("function", {})
                 name = func.get("name", "")
@@ -306,8 +306,8 @@ class ToolExecutor:
 
     async def _execute_sequential(
         self,
-        tool_calls: List[Dict[str, Any]],
-    ) -> List[Tuple[MCPToolResult, str]]:
+        tool_calls: list[dict[str, Any]],
+    ) -> list[tuple[MCPToolResult, str]]:
         """Execute tool calls sequentially."""
         results = []
         for tool_call in tool_calls:
@@ -416,9 +416,9 @@ class ToolExecutor:
 
     async def execute_and_format(
         self,
-        tool_calls: List[Dict[str, Any]],
+        tool_calls: list[dict[str, Any]],
         parallel: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Execute tool calls and format results as messages.
 
@@ -434,8 +434,8 @@ class ToolExecutor:
 
     def extract_and_validate(
         self,
-        response: Dict[str, Any],
-    ) -> Tuple[List[Dict[str, Any]], bool]:
+        response: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], bool]:
         """
         Extract tool calls from response and validate them.
 
@@ -482,8 +482,8 @@ class ToolExecutor:
 async def execute_single_tool(
     manager: MCPClientManager,
     tool_name: str,
-    arguments: Dict[str, Any],
-    timeout: Optional[float] = None,
+    arguments: dict[str, Any],
+    timeout: float | None = None,
 ) -> MCPToolResult:
     """
     Convenience function to execute a single tool.

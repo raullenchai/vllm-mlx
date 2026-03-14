@@ -205,8 +205,9 @@ class TestStreamingJSONEncoder:
 
     def test_created_timestamp_is_present(self):
         """Test that created timestamp is included."""
-        from vllm_mlx.api.streaming import StreamingJSONEncoder
         import time
+
+        from vllm_mlx.api.streaming import StreamingJSONEncoder
 
         before = int(time.time())
 
@@ -266,8 +267,9 @@ class TestStreamingJSONEncoderPerformance:
 
     def test_encoder_produces_same_output_as_json_dumps(self):
         """Verify encoder output matches what json.dumps would produce."""
-        from vllm_mlx.api.streaming import StreamingJSONEncoder
         import time
+
+        from vllm_mlx.api.streaming import StreamingJSONEncoder
 
         response_id = "cmpl-perf123"
         model = "test-model"
@@ -319,8 +321,9 @@ class TestStreamingJSONEncoderBenchmark:
 
         This test simulates streaming 100 tokens and compares performance.
         """
-        from vllm_mlx.api.streaming import StreamingJSONEncoder
         import time
+
+        from vllm_mlx.api.streaming import StreamingJSONEncoder
 
         num_tokens = 100
         response_id = "chatcmpl-bench123"
@@ -359,9 +362,9 @@ class TestStreamingJSONEncoderBenchmark:
         naive_time = time.perf_counter() - start
 
         # Log times for visibility
-        print(f"\nOptimized: {optimized_time*1000:.2f}ms")
-        print(f"Naive: {naive_time*1000:.2f}ms")
-        print(f"Ratio: {naive_time/optimized_time:.2f}x")
+        print(f"\nOptimized: {optimized_time * 1000:.2f}ms")
+        print(f"Naive: {naive_time * 1000:.2f}ms")
+        print(f"Ratio: {naive_time / optimized_time:.2f}x")
 
         # The optimized version should be at least as fast
         # (exact speedup depends on implementation)

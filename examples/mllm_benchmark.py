@@ -22,12 +22,10 @@ import io
 import json
 import time
 from dataclasses import dataclass
-from pathlib import Path
 
 import requests
 from PIL import Image
 from tabulate import tabulate
-
 
 # Test images from Wikimedia Commons - Dogs!
 # Using different dog images at various original resolutions
@@ -64,6 +62,7 @@ PRIMARY_DOG_IMAGE = "https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Y
 @dataclass
 class BenchmarkResult:
     """Result from a single benchmark run."""
+
     resolution: str
     width: int
     height: int
@@ -126,8 +125,8 @@ def run_mllm_request(
                 "role": "user",
                 "content": [
                     {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": image_b64}}
-                ]
+                    {"type": "image_url", "image_url": {"url": image_b64}},
+                ],
             }
         ],
         "max_tokens": max_tokens,
@@ -171,7 +170,11 @@ def benchmark_resolution(
     pixels = width * height
 
     if not warmup:
-        print(f"  Testing {resolution_name:>10} ({pixels:>10,} pixels)...", end=" ", flush=True)
+        print(
+            f"  Testing {resolution_name:>10} ({pixels:>10,} pixels)...",
+            end=" ",
+            flush=True,
+        )
 
     # Run request
     text, elapsed, tokens = run_mllm_request(
@@ -220,16 +223,16 @@ def run_benchmark(
     # Default resolutions to test (common MLLM input sizes)
     if resolutions is None:
         resolutions = [
-            (224, 224),     # Tiny - common MLLM input size
-            (336, 336),     # Small - LLaVA default
-            (448, 448),     # Medium - Qwen-VL default
-            (512, 512),     # Standard
-            (672, 672),     # Large
-            (768, 768),     # HD-ish
-            (896, 896),     # Higher
-            (1024, 1024),   # Full HD square
-            (1280, 720),    # 720p landscape
-            (1920, 1080),   # 1080p landscape
+            (224, 224),  # Tiny - common MLLM input size
+            (336, 336),  # Small - LLaVA default
+            (448, 448),  # Medium - Qwen-VL default
+            (512, 512),  # Standard
+            (672, 672),  # Large
+            (768, 768),  # HD-ish
+            (896, 896),  # Higher
+            (1024, 1024),  # Full HD square
+            (1280, 720),  # 720p landscape
+            (1920, 1080),  # 1080p landscape
         ]
 
     # Check server health
@@ -244,7 +247,9 @@ def run_benchmark(
     except Exception as e:
         print(f"Error connecting to server: {e}")
         print("\nMake sure the MLLM server is running:")
-        print("  python -m vllm_mlx.server --model mlx-community/Qwen3-VL-4B-Instruct-3bit --port 8000")
+        print(
+            "  python -m vllm_mlx.server --model mlx-community/Qwen3-VL-4B-Instruct-3bit --port 8000"
+        )
         return []
 
     if model_type not in ("mllm", "vlm"):
@@ -254,7 +259,7 @@ def run_benchmark(
 
     # Download base image
     image_url = image_url or PRIMARY_DOG_IMAGE
-    print(f"\nDownloading test image (dog)...")
+    print("\nDownloading test image (dog)...")
     print(f"  URL: {image_url}")
 
     try:
@@ -268,7 +273,9 @@ def run_benchmark(
     if warmup_runs > 0:
         print(f"\nRunning {warmup_runs} warmup run(s)...")
         for i in range(warmup_runs):
-            benchmark_resolution(server_url, base_image, 224, 224, model_name, warmup=True)
+            benchmark_resolution(
+                server_url, base_image, 224, 224, model_name, warmup=True
+            )
         print("Warmup complete.")
 
     # Run benchmarks
@@ -276,16 +283,20 @@ def run_benchmark(
     print("MLLM BENCHMARK - Image Resolution Performance")
     print("=" * 70)
     print(f"Model:       {model_name}")
-    print(f"Test Image:  Dog (Yellow Labrador)")
+    print("Test Image:  Dog (Yellow Labrador)")
     print(f"Resolutions: {len(resolutions)}")
     print("-" * 70)
-    print(f"  {'Resolution':>10} | {'Pixels':>12} | {'Time':>7} | {'Tokens':>6} | {'Speed':>10}")
+    print(
+        f"  {'Resolution':>10} | {'Pixels':>12} | {'Time':>7} | {'Tokens':>6} | {'Speed':>10}"
+    )
     print("-" * 70)
 
     results = []
     for width, height in resolutions:
         try:
-            result = benchmark_resolution(server_url, base_image, width, height, model_name)
+            result = benchmark_resolution(
+                server_url, base_image, width, height, model_name
+            )
             results.append(result)
         except Exception as e:
             print(f"  Error at {width}x{height}: {e}")
@@ -307,14 +318,18 @@ def print_results(results: list[BenchmarkResult]):
     # Prepare table data
     table_data = []
     for r in results:
-        table_data.append([
-            r.resolution,
-            f"{r.pixels:,}",
-            f"{r.time_seconds:.2f}s",
-            r.tokens_generated,
-            f"{r.tokens_per_second:.1f}",
-            f"{r.pixels / r.time_seconds / 1000:.1f}K" if r.time_seconds > 0 else "N/A",
-        ])
+        table_data.append(
+            [
+                r.resolution,
+                f"{r.pixels:,}",
+                f"{r.time_seconds:.2f}s",
+                r.tokens_generated,
+                f"{r.tokens_per_second:.1f}",
+                f"{r.pixels / r.time_seconds / 1000:.1f}K"
+                if r.time_seconds > 0
+                else "N/A",
+            ]
+        )
 
     headers = ["Resolution", "Pixels", "Time", "Tokens", "Tok/s", "Pixels/s"]
     print(tabulate(table_data, headers=headers, tablefmt="simple"))
@@ -335,7 +350,9 @@ def print_results(results: list[BenchmarkResult]):
 
     print(f"\nFastest:  {fastest.resolution} ({fastest.time_seconds:.2f}s)")
     print(f"Slowest:  {slowest.resolution} ({slowest.time_seconds:.2f}s)")
-    print(f"Slowdown: {slowest.time_seconds / fastest.time_seconds:.1f}x from smallest to largest")
+    print(
+        f"Slowdown: {slowest.time_seconds / fastest.time_seconds:.1f}x from smallest to largest"
+    )
 
 
 def save_results(results: list[BenchmarkResult], output_path: str):
@@ -355,7 +372,7 @@ def save_results(results: list[BenchmarkResult], output_path: str):
                 "response_preview": r.response_preview,
             }
             for r in results
-        ]
+        ],
     }
 
     with open(output_path, "w") as f:

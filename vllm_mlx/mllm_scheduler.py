@@ -22,21 +22,21 @@ import asyncio
 import logging
 import time
 import uuid
+from collections import deque
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
+from typing import Any
 
 import mlx.core as mx
-from collections import deque
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List, Optional, Set, Tuple
-
 
 from .mllm_batch_generator import (
     MLLMBatchGenerator,
     MLLMBatchRequest,
     MLLMBatchResponse,
 )
+from .mllm_cache import MLLMCacheManager
 from .multimodal_processor import MultimodalProcessor
 from .request import RequestOutput, RequestStatus, SamplingParams
-from .mllm_cache import MLLMCacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -75,19 +75,19 @@ class MLLMRequest:
 
     request_id: str
     prompt: str
-    images: Optional[List[str]] = None
-    videos: Optional[List[str]] = None
+    images: list[str] | None = None
+    videos: list[str] | None = None
     sampling_params: SamplingParams = field(default_factory=SamplingParams)
     arrival_time: float = field(default_factory=time.time)
 
     # Batch generator UID (assigned when scheduled)
-    batch_uid: Optional[int] = None
+    batch_uid: int | None = None
 
     # Status tracking
     status: RequestStatus = RequestStatus.WAITING
     output_text: str = ""
-    output_tokens: List[int] = field(default_factory=list)
-    finish_reason: Optional[str] = None
+    output_tokens: list[int] = field(default_factory=list)
+    finish_reason: str | None = None
 
     # Token counts
     num_prompt_tokens: int = 0
@@ -103,13 +103,13 @@ class MLLMSchedulerOutput:
     """
 
     # Requests scheduled in this step
-    scheduled_request_ids: List[str] = field(default_factory=list)
+    scheduled_request_ids: list[str] = field(default_factory=list)
     # Total tokens scheduled
     num_scheduled_tokens: int = 0
     # Requests that finished in this step
-    finished_request_ids: Set[str] = field(default_factory=set)
+    finished_request_ids: set[str] = field(default_factory=set)
     # Request outputs (tokens generated)
-    outputs: List[RequestOutput] = field(default_factory=list)
+    outputs: list[RequestOutput] = field(default_factory=list)
     # Whether any work was done
     has_work: bool = False
 
@@ -151,7 +151,7 @@ class MLLMScheduler:
         self,
         model: Any,
         processor: Any,
-        config: Optional[MLLMSchedulerConfig] = None,
+        config: MLLMSchedulerConfig | None = None,
     ):
         """
         Initialize MLLM scheduler.
@@ -176,7 +176,7 @@ class MLLMScheduler:
         )
 
         # Vision cache for repeated images
-        self.vision_cache: Optional[MLLMCacheManager] = None
+        self.vision_cache: MLLMCacheManager | None = None
         if self.config.enable_vision_cache:
             self.vision_cache = MLLMCacheManager(
                 max_entries=self.config.vision_cache_size
@@ -186,31 +186,31 @@ class MLLMScheduler:
         self.stop_tokens = self._get_stop_tokens()
 
         # Batch generator (created lazily)
-        self.batch_generator: Optional[MLLMBatchGenerator] = None
+        self.batch_generator: MLLMBatchGenerator | None = None
 
         # Request management - following vLLM's design
         self.waiting: deque[MLLMRequest] = deque()  # Waiting queue (FCFS)
-        self.running: Dict[str, MLLMRequest] = {}  # Running requests by ID
-        self.requests: Dict[str, MLLMRequest] = {}  # All requests by ID
-        self.finished_req_ids: Set[str] = set()  # Recently finished
+        self.running: dict[str, MLLMRequest] = {}  # Running requests by ID
+        self.requests: dict[str, MLLMRequest] = {}  # All requests by ID
+        self.finished_req_ids: set[str] = set()  # Recently finished
 
         # Mapping between our request IDs and BatchGenerator UIDs
-        self.request_id_to_uid: Dict[str, int] = {}
-        self.uid_to_request_id: Dict[int, str] = {}
+        self.request_id_to_uid: dict[str, int] = {}
+        self.uid_to_request_id: dict[int, str] = {}
 
         # Output queues for async streaming
-        self.output_queues: Dict[str, asyncio.Queue] = {}
+        self.output_queues: dict[str, asyncio.Queue] = {}
 
         # Async processing control
         self._running = False
-        self._processing_task: Optional[asyncio.Task] = None
+        self._processing_task: asyncio.Task | None = None
 
         # Statistics
         self.num_requests_processed = 0
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
 
-    def _get_stop_tokens(self) -> Set[int]:
+    def _get_stop_tokens(self) -> set[int]:
         """Get stop token IDs from tokenizer."""
         stop_tokens = set()
         tokenizer = (
@@ -258,12 +258,12 @@ class MLLMScheduler:
     def add_request(
         self,
         prompt: str,
-        images: Optional[List[str]] = None,
-        videos: Optional[List[str]] = None,
+        images: list[str] | None = None,
+        videos: list[str] | None = None,
         max_tokens: int = 256,
         temperature: float = 0.7,
         top_p: float = 0.9,
-        request_id: Optional[str] = None,
+        request_id: str | None = None,
         **kwargs,
     ) -> str:
         """
@@ -368,7 +368,7 @@ class MLLMScheduler:
         """Get number of running requests."""
         return len(self.running)
 
-    def _schedule_waiting(self) -> List[MLLMRequest]:
+    def _schedule_waiting(self) -> list[MLLMRequest]:
         """
         Move requests from waiting queue to running.
 
@@ -414,8 +414,8 @@ class MLLMScheduler:
         return scheduled
 
     def _process_batch_responses(
-        self, responses: List[MLLMBatchResponse]
-    ) -> Tuple[List[RequestOutput], Set[str]]:
+        self, responses: list[MLLMBatchResponse]
+    ) -> tuple[list[RequestOutput], set[str]]:
         """
         Process responses from batch generator.
 
@@ -488,7 +488,7 @@ class MLLMScheduler:
 
         return outputs, finished_ids
 
-    def _cleanup_finished(self, finished_ids: Set[str]) -> None:
+    def _cleanup_finished(self, finished_ids: set[str]) -> None:
         """Clean up finished requests."""
         for request_id in finished_ids:
             # Remove from running
@@ -555,11 +555,11 @@ class MLLMScheduler:
 
         return output
 
-    def get_request(self, request_id: str) -> Optional[MLLMRequest]:
+    def get_request(self, request_id: str) -> MLLMRequest | None:
         """Get a request by ID."""
         return self.requests.get(request_id)
 
-    def remove_finished_request(self, request_id: str) -> Optional[MLLMRequest]:
+    def remove_finished_request(self, request_id: str) -> MLLMRequest | None:
         """Remove a finished request from tracking."""
         return self.requests.pop(request_id, None)
 
@@ -614,8 +614,8 @@ class MLLMScheduler:
     async def add_request_async(
         self,
         prompt: str,
-        images: Optional[List[str]] = None,
-        videos: Optional[List[str]] = None,
+        images: list[str] | None = None,
+        videos: list[str] | None = None,
         max_tokens: int = 256,
         temperature: float = 0.7,
         top_p: float = 0.9,
@@ -690,8 +690,8 @@ class MLLMScheduler:
     async def generate(
         self,
         prompt: str,
-        images: Optional[List[str]] = None,
-        videos: Optional[List[str]] = None,
+        images: list[str] | None = None,
+        videos: list[str] | None = None,
         **kwargs,
     ) -> RequestOutput:
         """
@@ -737,7 +737,7 @@ class MLLMScheduler:
 
     # ========== Stats and utilities ==========
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get scheduler statistics."""
         stats = {
             "num_waiting": len(self.waiting),

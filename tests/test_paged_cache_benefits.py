@@ -13,7 +13,6 @@ Usage:
 
 import platform
 import sys
-from typing import List
 
 # Skip if not on Apple Silicon
 if sys.platform != "darwin" or platform.machine() != "arm64":
@@ -29,7 +28,7 @@ def print_header(title: str) -> None:
 
 
 def print_table(
-    headers: List[str], rows: List[List[str]], col_widths: List[int] = None
+    headers: list[str], rows: list[list[str]], col_widths: list[int] = None
 ) -> None:
     """Print a formatted table."""
     if col_widths is None:
@@ -112,7 +111,7 @@ def test_benefit_1_shared_system_prompts():
 
         results.append(
             [
-                f"User {i+1}",
+                f"User {i + 1}",
                 str(len(full_tokens)),
                 str(shared_tokens),
                 str(shared_blocks),
@@ -232,7 +231,7 @@ def test_benefit_2_memory_efficiency():
 
     savings = (1 - paged_total / standard_total) * 100
     print(f"\nMemory saved: {savings:.1f}%")
-    print(f"Cache hit rate: {usage['cache_hit_rate']*100:.1f}%")
+    print(f"Cache hit rate: {usage['cache_hit_rate'] * 100:.1f}%")
 
     # Show reference counting in action
     print("\nReference Counting Demo:")
@@ -304,7 +303,7 @@ def test_benefit_3_prefix_sharing():
         block_table, remaining = cache.fetch_cache(f"python-followup-{i}", tokens)
         shared = len(tokens) - len(remaining) if block_table else 0
         print(
-            f"    Follow-up {i+1}: {len(tokens)} tokens, {shared} shared ({shared*100//len(tokens)}%)"
+            f"    Follow-up {i + 1}: {len(tokens)} tokens, {shared} shared ({shared * 100 // len(tokens)}%)"
         )
         cache.store_cache(f"python-followup-{i}", tokens, [f"followup_{i}"])
 
@@ -329,7 +328,7 @@ def test_benefit_3_prefix_sharing():
         block_table, remaining = cache.fetch_cache(f"rust-followup-{i}", tokens)
         shared = len(tokens) - len(remaining) if block_table else 0
         print(
-            f"    Follow-up {i+1}: {len(tokens)} tokens, {shared} shared ({shared*100//len(tokens)}%)"
+            f"    Follow-up {i + 1}: {len(tokens)} tokens, {shared} shared ({shared * 100 // len(tokens)}%)"
         )
         cache.store_cache(f"rust-followup-{i}", tokens, [f"rust_followup_{i}"])
 

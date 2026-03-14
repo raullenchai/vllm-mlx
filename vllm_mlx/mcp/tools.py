@@ -4,12 +4,12 @@ Tool schema conversion utilities for MCP <-> OpenAI formats.
 """
 
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from .types import MCPTool, MCPToolResult
 
 
-def mcp_tool_to_openai(tool: MCPTool) -> Dict[str, Any]:
+def mcp_tool_to_openai(tool: MCPTool) -> dict[str, Any]:
     """
     Convert MCP tool schema to OpenAI function calling format.
 
@@ -33,7 +33,7 @@ def mcp_tool_to_openai(tool: MCPTool) -> Dict[str, Any]:
     }
 
 
-def mcp_tools_to_openai(tools: List[MCPTool]) -> List[Dict[str, Any]]:
+def mcp_tools_to_openai(tools: list[MCPTool]) -> list[dict[str, Any]]:
     """
     Convert list of MCP tools to OpenAI format.
 
@@ -46,7 +46,7 @@ def mcp_tools_to_openai(tools: List[MCPTool]) -> List[Dict[str, Any]]:
     return [mcp_tool_to_openai(tool) for tool in tools]
 
 
-def openai_call_to_mcp(tool_call: Dict[str, Any]) -> Tuple[str, str, Dict[str, Any]]:
+def openai_call_to_mcp(tool_call: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
     """
     Parse OpenAI tool call back to MCP format.
 
@@ -84,7 +84,7 @@ def openai_call_to_mcp(tool_call: Dict[str, Any]) -> Tuple[str, str, Dict[str, A
     return server_name, tool_name, arguments
 
 
-def format_tool_result(result: MCPToolResult, tool_call_id: str) -> Dict[str, Any]:
+def format_tool_result(result: MCPToolResult, tool_call_id: str) -> dict[str, Any]:
     """
     Format tool result for inclusion in conversation messages.
 
@@ -99,8 +99,8 @@ def format_tool_result(result: MCPToolResult, tool_call_id: str) -> Dict[str, An
 
 
 def format_tool_results(
-    results: List[Tuple[MCPToolResult, str]],
-) -> List[Dict[str, Any]]:
+    results: list[tuple[MCPToolResult, str]],
+) -> list[dict[str, Any]]:
     """
     Format multiple tool results as messages.
 
@@ -114,9 +114,9 @@ def format_tool_results(
 
 
 def merge_tools(
-    mcp_tools: List[MCPTool],
-    user_tools: Optional[List[Dict[str, Any]]] = None,
-) -> List[Dict[str, Any]]:
+    mcp_tools: list[MCPTool],
+    user_tools: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """
     Merge MCP tools with user-provided tools.
 
@@ -143,7 +143,7 @@ def merge_tools(
     return list(all_tools.values())
 
 
-def extract_tool_calls(response: Dict[str, Any]) -> List[Dict[str, Any]]:
+def extract_tool_calls(response: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Extract tool calls from model response.
 
@@ -161,7 +161,7 @@ def extract_tool_calls(response: Dict[str, Any]) -> List[Dict[str, Any]]:
     return message.get("tool_calls", [])
 
 
-def has_tool_calls(response: Dict[str, Any]) -> bool:
+def has_tool_calls(response: dict[str, Any]) -> bool:
     """
     Check if response contains tool calls.
 

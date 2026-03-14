@@ -69,9 +69,7 @@ def main():
     print("\n3. Chat completion (tools available to model):")
     print("-" * 60)
 
-    messages = [
-        {"role": "user", "content": "List the files in the /tmp directory"}
-    ]
+    messages = [{"role": "user", "content": "List the files in the /tmp directory"}]
 
     # Get tools in OpenAI format for the request
     tools = [
@@ -81,7 +79,7 @@ def main():
                 "name": tool["name"],
                 "description": tool["description"],
                 "parameters": tool["parameters"],
-            }
+            },
         }
         for tool in tools_response.get("tools", [])
     ]
@@ -110,7 +108,7 @@ def main():
                 json={
                     "tool_name": tool_call.function.name,
                     "arguments": json.loads(tool_call.function.arguments),
-                }
+                },
             ).json()
 
             if result.get("is_error"):
@@ -123,25 +121,29 @@ def main():
                     print(f"   Result: {content}")
 
             # Add tool result to conversation
-            messages.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [
-                    {
-                        "id": tool_call.id,
-                        "type": "function",
-                        "function": {
-                            "name": tool_call.function.name,
-                            "arguments": tool_call.function.arguments,
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": tool_call.id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_call.function.name,
+                                "arguments": tool_call.function.arguments,
+                            },
                         }
-                    }
-                ]
-            })
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": str(result.get("content", "")),
-            })
+                    ],
+                }
+            )
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": str(result.get("content", "")),
+                }
+            )
 
         # Get final response with tool results
         print("\n4. Final response after tool execution:")

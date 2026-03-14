@@ -914,8 +914,7 @@ class TestGptOssParser:
     def test_constrain_tokens_stripped(self, parser):
         """<|constrain|> should not leak into output."""
         output = (
-            "<|channel|>final <|constrain|>JSON<|message|>"
-            '{"hello":"world"}<|return|>'
+            '<|channel|>final <|constrain|>JSON<|message|>{"hello":"world"}<|return|>'
         )
         reasoning, content = parser.extract_reasoning(output)
         assert "<|constrain|>" not in (content or "")

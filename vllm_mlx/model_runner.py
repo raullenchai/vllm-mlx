@@ -14,7 +14,7 @@ Includes low-level optimizations:
 import logging
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import mlx.core as mx
 
@@ -317,7 +317,7 @@ class MLXModelRunner:
     def _prefill_with_chunking(
         self,
         input_ids: mx.array,
-        cache: Optional[Any] = None,
+        cache: Any | None = None,
     ) -> tuple[mx.array, Any]:
         """
         Process prompt with optimal chunking for L2 cache efficiency.

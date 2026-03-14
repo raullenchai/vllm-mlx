@@ -58,8 +58,12 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
             logger.warning(f"Standard tokenizer loading failed, using fallback: {e}")
             return _load_with_tokenizer_fallback(model_name)
         # Fallback for multimodal models loaded as text-only (skip vision weights)
-        elif "parameters not in model" in str(e) or ("Missing" in str(e) and "parameters" in str(e)):
-            logger.warning(f"Model has extra/missing parameters (likely VLM weights), retrying with strict=False: {e}")
+        elif "parameters not in model" in str(e) or (
+            "Missing" in str(e) and "parameters" in str(e)
+        ):
+            logger.warning(
+                f"Model has extra/missing parameters (likely VLM weights), retrying with strict=False: {e}"
+            )
             return _load_non_strict(model_name, tokenizer_config)
         else:
             raise
@@ -74,6 +78,7 @@ def _load_non_strict(model_name: str, tokenizer_config: dict = None):
         model_path = local_path
     else:
         from huggingface_hub import snapshot_download
+
         model_path = Path(snapshot_download(model_name))
 
     model, _ = load_model(model_path, strict=False)

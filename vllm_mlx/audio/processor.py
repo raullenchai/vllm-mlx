@@ -10,7 +10,6 @@ Supports:
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, Union
 
 import numpy as np
 
@@ -89,9 +88,9 @@ class AudioProcessor:
 
     def separate(
         self,
-        audio_path: Union[str, Path],
+        audio_path: str | Path,
         description: str = "speech",
-        chunk_seconds: Optional[float] = None,
+        chunk_seconds: float | None = None,
     ) -> SeparationResult:
         """
         Separate audio based on text description.
@@ -159,8 +158,8 @@ class AudioProcessor:
     def save(
         self,
         audio: np.ndarray,
-        path: Union[str, Path],
-        sample_rate: Optional[int] = None,
+        path: str | Path,
+        sample_rate: int | None = None,
     ) -> None:
         """
         Save audio to file.
@@ -193,10 +192,10 @@ class AudioProcessor:
 
 
 def separate_voice(
-    audio_path: Union[str, Path],
+    audio_path: str | Path,
     model_name: str = DEFAULT_SAM_MODEL,
     description: str = "speech",
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Convenience function to separate voice from audio.
 

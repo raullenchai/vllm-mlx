@@ -153,9 +153,7 @@ async def test_mllm_stream_chat_serializes_with_chat():
     async def run_chat():
         # Replace model's chat method for the non-streaming call
         engine._model.chat = fake_chat
-        await engine.chat(
-            messages=messages, max_tokens=10, temperature=0.0, top_p=1.0
-        )
+        await engine.chat(messages=messages, max_tokens=10, temperature=0.0, top_p=1.0)
 
     task_stream = asyncio.create_task(run_stream())
     await asyncio.sleep(0.001)
@@ -167,8 +165,7 @@ async def test_mllm_stream_chat_serializes_with_chat():
     stream_end = execution_log.index("STREAM-end")
     chat_start = execution_log.index("CHAT-start")
     assert stream_end < chat_start, (
-        f"stream_chat and chat() ran concurrently!\n"
-        f"Execution order: {execution_log}"
+        f"stream_chat and chat() ran concurrently!\nExecution order: {execution_log}"
     )
 
 

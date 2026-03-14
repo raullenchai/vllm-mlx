@@ -7,8 +7,9 @@ for the vLLM-style continuous batching implementation.
 """
 
 import asyncio
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from vllm_mlx.request import (
     Request,

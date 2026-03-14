@@ -48,20 +48,198 @@ Location: Palo Alto, CA
 
 # 14 tools — same as OpenClaw's real tool set
 TOOLS = [
-    {"type": "function", "function": {"name": "web_search", "description": "Search the web", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
-    {"type": "function", "function": {"name": "exec", "description": "Execute shell command", "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}}},
-    {"type": "function", "function": {"name": "read", "description": "Read a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
-    {"type": "function", "function": {"name": "write", "description": "Write to a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}},
-    {"type": "function", "function": {"name": "process", "description": "Process management: list/poll/log/write/kill/clear/remove", "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["list", "poll", "log", "write", "kill", "clear", "remove"]}, "sessionId": {"type": "string"}, "timeout": {"type": "integer"}}, "required": ["action"]}}},
-    {"type": "function", "function": {"name": "memory_store", "description": "Store key-value pair", "parameters": {"type": "object", "properties": {"key": {"type": "string"}, "value": {"type": "string"}}, "required": ["key", "value"]}}},
-    {"type": "function", "function": {"name": "memory_get", "description": "Get value by key", "parameters": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}}},
-    {"type": "function", "function": {"name": "send_message", "description": "Send a message", "parameters": {"type": "object", "properties": {"to": {"type": "string"}, "text": {"type": "string"}}, "required": ["to", "text"]}}},
-    {"type": "function", "function": {"name": "create_reminder", "description": "Create a reminder", "parameters": {"type": "object", "properties": {"text": {"type": "string"}, "time": {"type": "string"}}, "required": ["text", "time"]}}},
-    {"type": "function", "function": {"name": "calendar_create", "description": "Create calendar event", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "start": {"type": "string"}}, "required": ["title", "start"]}}},
-    {"type": "function", "function": {"name": "browse", "description": "Browse a URL", "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}}},
-    {"type": "function", "function": {"name": "code_run", "description": "Run code snippet", "parameters": {"type": "object", "properties": {"language": {"type": "string"}, "code": {"type": "string"}}, "required": ["language", "code"]}}},
-    {"type": "function", "function": {"name": "image_gen", "description": "Generate an image", "parameters": {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"]}}},
-    {"type": "function", "function": {"name": "translate", "description": "Translate text", "parameters": {"type": "object", "properties": {"text": {"type": "string"}, "to": {"type": "string"}}, "required": ["text", "to"]}}},
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "exec",
+            "description": "Execute shell command",
+            "parameters": {
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+                "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read",
+            "description": "Read a file",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write",
+            "description": "Write to a file",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "process",
+            "description": "Process management: list/poll/log/write/kill/clear/remove",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "list",
+                            "poll",
+                            "log",
+                            "write",
+                            "kill",
+                            "clear",
+                            "remove",
+                        ],
+                    },
+                    "sessionId": {"type": "string"},
+                    "timeout": {"type": "integer"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_store",
+            "description": "Store key-value pair",
+            "parameters": {
+                "type": "object",
+                "properties": {"key": {"type": "string"}, "value": {"type": "string"}},
+                "required": ["key", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_get",
+            "description": "Get value by key",
+            "parameters": {
+                "type": "object",
+                "properties": {"key": {"type": "string"}},
+                "required": ["key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_message",
+            "description": "Send a message",
+            "parameters": {
+                "type": "object",
+                "properties": {"to": {"type": "string"}, "text": {"type": "string"}},
+                "required": ["to", "text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_reminder",
+            "description": "Create a reminder",
+            "parameters": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}, "time": {"type": "string"}},
+                "required": ["text", "time"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_create",
+            "description": "Create calendar event",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "start": {"type": "string"},
+                },
+                "required": ["title", "start"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browse",
+            "description": "Browse a URL",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string"}},
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "code_run",
+            "description": "Run code snippet",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "language": {"type": "string"},
+                    "code": {"type": "string"},
+                },
+                "required": ["language", "code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "image_gen",
+            "description": "Generate an image",
+            "parameters": {
+                "type": "object",
+                "properties": {"prompt": {"type": "string"}},
+                "required": ["prompt"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "translate",
+            "description": "Translate text",
+            "parameters": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}, "to": {"type": "string"}},
+                "required": ["text", "to"],
+            },
+        },
+    },
 ]
 
 MAX_ROUNDS = 8
@@ -85,12 +263,17 @@ def stream_request(messages):
     raw_chunks = []
     start = time.time()
 
-    with httpx.stream("POST", BASE_URL, json={
-        "model": "default",
-        "stream": True,
-        "messages": messages,
-        "tools": TOOLS,
-    }, timeout=120.0) as resp:
+    with httpx.stream(
+        "POST",
+        BASE_URL,
+        json={
+            "model": "default",
+            "stream": True,
+            "messages": messages,
+            "tools": TOOLS,
+        },
+        timeout=120.0,
+    ) as resp:
         for line in resp.iter_lines():
             if not line.startswith("data: "):
                 continue
@@ -188,16 +371,22 @@ def run_agent_loop(user_msg, max_rounds=MAX_ROUNDS):
 
             result = execute_tool(fn["name"], fn["arguments"])
 
-            messages.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [{"id": tc["id"], "type": "function", "function": fn}],
-            })
-            messages.append({
-                "role": "tool",
-                "content": result,
-                "tool_call_id": tc["id"],
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {"id": tc["id"], "type": "function", "function": fn}
+                    ],
+                }
+            )
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": result,
+                    "tool_call_id": tc["id"],
+                }
+            )
             continue
 
         if content:
@@ -236,21 +425,17 @@ class TestToolCallE2E:
 
     def test_weather_with_fallback(self):
         """Model may call exec (curl), get 'still running', then web_search."""
-        rounds, content, tools = run_agent_loop(
-            "今晚出去跑步合适吗"
-        )
+        rounds, content, tools = run_agent_loop("今晚出去跑步合适吗")
         assert content is not None, "Expected text response"
         assert rounds <= 6, f"Should complete in <=6 rounds, got {rounds}"
         tool_names = [t[0] for t in tools]
-        assert any(
-            n in tool_names for n in ("exec", "web_search")
-        ), f"Should use exec or web_search, got {tool_names}"
+        assert any(n in tool_names for n in ("exec", "web_search")), (
+            f"Should use exec or web_search, got {tool_names}"
+        )
 
     def test_no_tool_needed(self):
         """Pure reasoning should return text without tool calls."""
-        rounds, content, tools = run_agent_loop(
-            "解释一下什么是MoE模型"
-        )
+        rounds, content, tools = run_agent_loop("解释一下什么是MoE模型")
         assert content is not None, "Expected text response"
         # Model may or may not use tools — but should produce content
         assert len(content) > 20, "Response too short"
@@ -289,14 +474,19 @@ class TestToolCallE2E:
         """Tool call chunks should have a call ID starting with 'call_'."""
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": "[Thu 2026-02-26 20:40 PST] list files in /tmp"},
+            {
+                "role": "user",
+                "content": "[Thu 2026-02-26 20:40 PST] list files in /tmp",
+            },
         ]
         content, tool_calls, raw_chunks, elapsed = stream_request(messages)
 
         if tool_calls:
             tc = tool_calls[0]
             assert "id" in tc, "Tool call should have id"
-            assert tc["id"].startswith("call_"), f"ID should start with call_, got {tc['id']}"
+            assert tc["id"].startswith("call_"), (
+                f"ID should start with call_, got {tc['id']}"
+            )
             assert "function" in tc, "Tool call should have function"
             assert "name" in tc["function"], "Function should have name"
             assert "arguments" in tc["function"], "Function should have arguments"
@@ -309,8 +499,11 @@ class TestToolCallE2E:
 # CLI mode for interactive debugging
 # ---------------------------------------------------------------------------
 
+
 def main():
-    user_msg = sys.argv[1] if len(sys.argv) > 1 else "你帮我看下 我今晚出去跑步是不是合适"
+    user_msg = (
+        sys.argv[1] if len(sys.argv) > 1 else "你帮我看下 我今晚出去跑步是不是合适"
+    )
 
     print("=" * 70)
     print(f"OpenClaw Simulation: '{user_msg}'")
@@ -351,8 +544,7 @@ def main():
                 chunk_types.append("?")
 
         print(
-            f"  {len(raw_chunks)} chunks "
-            f"[{', '.join(chunk_types[:15])}] {elapsed:.1f}s"
+            f"  {len(raw_chunks)} chunks [{', '.join(chunk_types[:15])}] {elapsed:.1f}s"
         )
 
         if tool_calls:
@@ -363,18 +555,22 @@ def main():
             result = execute_tool(fn["name"], fn["arguments"])
             print(f"  RESULT: {result[:150]}")
 
-            messages.append({
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [
-                    {"id": tc["id"], "type": "function", "function": fn}
-                ],
-            })
-            messages.append({
-                "role": "tool",
-                "content": result,
-                "tool_call_id": tc["id"],
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {"id": tc["id"], "type": "function", "function": fn}
+                    ],
+                }
+            )
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": result,
+                    "tool_call_id": tc["id"],
+                }
+            )
             continue
 
         if content:

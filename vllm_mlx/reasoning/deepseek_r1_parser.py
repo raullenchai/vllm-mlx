@@ -93,9 +93,7 @@ class DeepSeekR1ReasoningParser(BaseThinkingReasoningParser):
             DeltaMessage with reasoning/content, or None to skip.
         """
         # Check if any tags are in the current text
-        has_tags = (
-            self.start_token in current_text or self.end_token in current_text
-        )
+        has_tags = self.start_token in current_text or self.end_token in current_text
 
         # No tags seen yet and past threshold → treat as content
         if not has_tags and not self._saw_any_tag:
@@ -128,9 +126,7 @@ class DeepSeekR1ReasoningParser(BaseThinkingReasoningParser):
 
         return result
 
-    def finalize_streaming(
-        self, accumulated_text: str
-    ) -> DeltaMessage | None:
+    def finalize_streaming(self, accumulated_text: str) -> DeltaMessage | None:
         """
         Finalize streaming output.
 

@@ -14,10 +14,10 @@ Requirements:
 """
 
 import argparse
-import sys
 import os
-import tempfile
 import queue
+import sys
+import tempfile
 import threading
 import time
 
@@ -56,6 +56,7 @@ class ClosedCaptions:
 
     def load_model(self):
         from vllm_mlx.audio.stt import STTEngine
+
         self.engine = STTEngine(self.model_name)
         self.engine.load()
 
@@ -65,6 +66,7 @@ class ClosedCaptions:
 
     def transcribe(self, audio):
         import soundfile as sf
+
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             path = f.name
         try:
@@ -94,11 +96,11 @@ class ClosedCaptions:
 
                 # Process when buffer is full
                 if len(buffer) >= self.chunk_samples:
-                    audio = buffer[:self.chunk_samples]
-                    buffer = buffer[self.chunk_samples // 2:]  # 50% overlap
+                    audio = buffer[: self.chunk_samples]
+                    buffer = buffer[self.chunk_samples // 2 :]  # 50% overlap
 
                     # Skip if too quiet
-                    level = np.sqrt(np.mean(audio ** 2))
+                    level = np.sqrt(np.mean(audio**2))
                     if level < silence_threshold:
                         continue
 
@@ -133,7 +135,7 @@ class ClosedCaptions:
             channels=1,
             dtype=np.float32,
             callback=self.audio_callback,
-            blocksize=int(SAMPLE_RATE * 0.1)
+            blocksize=int(SAMPLE_RATE * 0.1),
         )
 
         try:
@@ -146,10 +148,14 @@ class ClosedCaptions:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Closed Captions - Real-time Subtitles")
+    parser = argparse.ArgumentParser(
+        description="Closed Captions - Real-time Subtitles"
+    )
     parser.add_argument("--model", "-m", default="whisper-large-v3")
     parser.add_argument("--language", "-l", default=None, help="es, en, etc.")
-    parser.add_argument("--chunk", "-c", type=float, default=3.0, help="Chunk size (default: 3.0s)")
+    parser.add_argument(
+        "--chunk", "-c", type=float, default=3.0, help="Chunk size (default: 3.0s)"
+    )
     args = parser.parse_args()
 
     model = MODEL_ALIASES.get(args.model, args.model)

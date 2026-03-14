@@ -447,7 +447,7 @@ if __name__ == "__main__":
         rows = [
             ["Hits", hits],
             ["Misses", misses],
-            ["Hit Rate", f"{hit_rate*100:.1f}%"],
+            ["Hit Rate", f"{hit_rate * 100:.1f}%"],
             ["Tokens Saved", stats.get("tokens_saved", 0)],
             ["Total Queries", total_queries],
         ]
@@ -537,7 +537,7 @@ if __name__ == "__main__":
                     "First request",
                     "MISS",
                     "MISS" if stats1["hits"] == 0 else "HIT",
-                    f"{t1*1000:.1f}ms",
+                    f"{t1 * 1000:.1f}ms",
                     "PASS" if test1_pass else "FAIL",
                 ]
             )
@@ -570,7 +570,7 @@ if __name__ == "__main__":
                     "Same prompt (cached)",
                     "HIT",
                     "HIT" if stats2["hits"] > stats1["hits"] else "MISS",
-                    f"{t2*1000:.1f}ms",
+                    f"{t2 * 1000:.1f}ms",
                     "PASS" if test2_pass else "FAIL",
                 ]
             )
@@ -628,7 +628,7 @@ if __name__ == "__main__":
                     "Different prompt",
                     "MISS or PREFIX_HIT",
                     actual3,
-                    f"{t3*1000:.1f}ms",
+                    f"{t3 * 1000:.1f}ms",
                     "PASS" if test3_pass else "FAIL",
                 ]
             )
@@ -657,7 +657,7 @@ if __name__ == "__main__":
                     ["Total Requests", 3],
                     ["Cache Hits", final_stats["hits"]],
                     ["Cache Misses", final_stats["misses"]],
-                    ["Hit Rate", f"{final_stats['hit_rate']*100:.1f}%"],
+                    ["Hit Rate", f"{final_stats['hit_rate'] * 100:.1f}%"],
                     ["Tokens Saved", final_stats["tokens_saved"]],
                     ["Speedup (cached)", f"{speedup:.2f}x"],
                 ],

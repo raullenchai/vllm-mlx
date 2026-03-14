@@ -10,17 +10,15 @@ Run:
     python examples/benchmark_detokenizer.py
 """
 
-import time
 import statistics
+import time
 from pathlib import Path
-from transformers import AutoTokenizer
+
+from huggingface_hub import snapshot_download
 from mlx_lm.tokenizer_utils import (
-    NaiveStreamingDetokenizer,
-    BPEStreamingDetokenizer,
-    SPMStreamingDetokenizer,
     load as load_tokenizer,
 )
-from huggingface_hub import snapshot_download
+from transformers import AutoTokenizer
 
 
 def benchmark_naive_decode(tokenizer, tokens, iterations=10):
@@ -48,7 +46,9 @@ def benchmark_naive_decode(tokenizer, tokens, iterations=10):
     }
 
 
-def benchmark_streaming_detokenizer(tokenizer, tokens, detokenizer_class, iterations=10):
+def benchmark_streaming_detokenizer(
+    tokenizer, tokens, detokenizer_class, iterations=10
+):
     """Benchmark streaming detokenizer approach (new method)."""
     times = []
 
@@ -86,11 +86,11 @@ def main():
 
     # Load tokenizer using mlx-lm's optimized loader
     print("Loading tokenizer with mlx-lm...")
-    model_path = Path(snapshot_download('mlx-community/Qwen3-0.6B-8bit'))
+    model_path = Path(snapshot_download("mlx-community/Qwen3-0.6B-8bit"))
     tokenizer_wrapper = load_tokenizer(model_path)
 
     # Also get raw tokenizer for naive decode
-    raw_tokenizer = AutoTokenizer.from_pretrained('mlx-community/Qwen3-0.6B-8bit')
+    raw_tokenizer = AutoTokenizer.from_pretrained("mlx-community/Qwen3-0.6B-8bit")
 
     print(f"Tokenizer type: {type(tokenizer_wrapper._detokenizer_class).__name__}")
     print()
@@ -122,34 +122,44 @@ def main():
             tokenizer_wrapper,
             tokens,
             tokenizer_wrapper._detokenizer_class,
-            iterations=20
+            iterations=20,
         )
 
         # Calculate speedup
-        speedup = naive_result["mean_ms"] / optimized_result["mean_ms"] if optimized_result["mean_ms"] > 0 else float('inf')
+        speedup = (
+            naive_result["mean_ms"] / optimized_result["mean_ms"]
+            if optimized_result["mean_ms"] > 0
+            else float("inf")
+        )
 
         print(f"  Naive decode():      {naive_result['mean_ms']:8.3f}ms")
         print(f"  {optimized_result['method']}: {optimized_result['mean_ms']:8.3f}ms")
         print(f"  Speedup:             {speedup:8.2f}x")
         print()
 
-        results.append({
-            "name": name,
-            "tokens": actual_tokens,
-            "naive_ms": naive_result["mean_ms"],
-            "optimized_ms": optimized_result["mean_ms"],
-            "optimized_name": optimized_result["method"],
-            "speedup": speedup,
-        })
+        results.append(
+            {
+                "name": name,
+                "tokens": actual_tokens,
+                "naive_ms": naive_result["mean_ms"],
+                "optimized_ms": optimized_result["mean_ms"],
+                "optimized_name": optimized_result["method"],
+                "speedup": speedup,
+            }
+        )
 
     # Summary table
     print("=" * 70)
     print(" Summary")
     print("=" * 70)
-    print(f"{'Sequence':<12} {'Tokens':>8} {'decode()':>12} {'Streaming':>12} {'Speedup':>10}")
+    print(
+        f"{'Sequence':<12} {'Tokens':>8} {'decode()':>12} {'Streaming':>12} {'Speedup':>10}"
+    )
     print("-" * 70)
     for r in results:
-        print(f"{r['name']:<12} {r['tokens']:>8} {r['naive_ms']:>11.3f}ms {r['optimized_ms']:>11.3f}ms {r['speedup']:>9.2f}x")
+        print(
+            f"{r['name']:<12} {r['tokens']:>8} {r['naive_ms']:>11.3f}ms {r['optimized_ms']:>11.3f}ms {r['speedup']:>9.2f}x"
+        )
 
     # Average speedup
     avg_speedup = statistics.mean([r["speedup"] for r in results])

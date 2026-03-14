@@ -173,7 +173,7 @@ class HarmonyToolParser(ToolParser):
             final_start = current_text.rfind("<|channel|>final")
             msg_start = current_text.find("<|message|>", final_start)
             if msg_start >= 0:
-                raw = current_text[msg_start + len("<|message|>"):]
+                raw = current_text[msg_start + len("<|message|>") :]
                 # Strip control tokens from the extracted content
                 clean = _strip_control_tokens(raw).strip()
                 # Calculate what's new since previous extraction
@@ -182,9 +182,9 @@ class HarmonyToolParser(ToolParser):
                 if prev_final >= 0:
                     prev_msg = previous_text.find("<|message|>", prev_final)
                     if prev_msg >= 0:
-                        prev_raw = previous_text[prev_msg + len("<|message|>"):]
+                        prev_raw = previous_text[prev_msg + len("<|message|>") :]
                         prev_clean = _strip_control_tokens(prev_raw).strip()
-                new_content = clean[len(prev_clean):]
+                new_content = clean[len(prev_clean) :]
                 if new_content:
                     return {"content": new_content}
             # In final channel but no new content yet (control token)

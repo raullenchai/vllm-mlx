@@ -15,8 +15,8 @@ Models:
 """
 
 import argparse
-import sys
 import os
+import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -32,21 +32,43 @@ Examples:
   %(prog)s song.mp3 --description music   # Extract music instead
   %(prog)s podcast.mp3 -o clean.wav       # Custom output filename
   %(prog)s long_audio.mp3 --chunk 30      # Process in 30s chunks (memory efficient)
-        """
+        """,
     )
     parser.add_argument("audio", help="Input audio file (mp3, wav, etc.)")
-    parser.add_argument("--description", "-d", default="speech",
-                       help="What to isolate: speech, music, singing, etc. (default: speech)")
-    parser.add_argument("--output", "-o", default=None,
-                       help="Output file for isolated audio (default: input_voice.wav)")
-    parser.add_argument("--background", "-b", default=None,
-                       help="Output file for background audio (optional)")
-    parser.add_argument("--model", "-m", default="mlx-community/sam-audio-large-fp16",
-                       help="SAM-Audio model to use")
-    parser.add_argument("--chunk", "-c", type=float, default=None,
-                       help="Process in chunks of N seconds (for long audio)")
-    parser.add_argument("--play", "-p", action="store_true",
-                       help="Play result after processing (macOS)")
+    parser.add_argument(
+        "--description",
+        "-d",
+        default="speech",
+        help="What to isolate: speech, music, singing, etc. (default: speech)",
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        help="Output file for isolated audio (default: input_voice.wav)",
+    )
+    parser.add_argument(
+        "--background",
+        "-b",
+        default=None,
+        help="Output file for background audio (optional)",
+    )
+    parser.add_argument(
+        "--model",
+        "-m",
+        default="mlx-community/sam-audio-large-fp16",
+        help="SAM-Audio model to use",
+    )
+    parser.add_argument(
+        "--chunk",
+        "-c",
+        type=float,
+        default=None,
+        help="Process in chunks of N seconds (for long audio)",
+    )
+    parser.add_argument(
+        "--play", "-p", action="store_true", help="Play result after processing (macOS)"
+    )
 
     args = parser.parse_args()
 

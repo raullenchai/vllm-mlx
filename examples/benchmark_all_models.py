@@ -7,7 +7,8 @@ import time
 def benchmark_model(model_name: str):
     """Benchmark a single model and return results."""
     from mlx_lm import load
-    from vllm_mlx import EngineCore, EngineConfig, SamplingParams, SchedulerConfig
+
+    from vllm_mlx import EngineConfig, EngineCore, SamplingParams, SchedulerConfig
 
     base_prompts = [
         "What is 2+2?",
@@ -19,9 +20,9 @@ def benchmark_model(model_name: str):
 
     params = SamplingParams(max_tokens=50, temperature=0.7)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Benchmarking: {model_name}")
-    print("="*60)
+    print("=" * 60)
 
     print("Loading model...")
     model, tokenizer = load(model_name)
@@ -85,10 +86,16 @@ def benchmark_model(model_name: str):
         engine.scheduler.reset()
 
         start = time.perf_counter()
-        result = engine.generate_batch_sync([formatted[0]], SamplingParams(max_tokens=30, temperature=0.0))[0]
+        result = engine.generate_batch_sync(
+            [formatted[0]], SamplingParams(max_tokens=30, temperature=0.0)
+        )[0]
         elapsed = time.perf_counter() - start
 
-        ttft_ms = elapsed / result.completion_tokens * 1000 if result.completion_tokens > 0 else 0
+        ttft_ms = (
+            elapsed / result.completion_tokens * 1000
+            if result.completion_tokens > 0
+            else 0
+        )
         gen_tps = result.completion_tokens / elapsed if elapsed > 0 else 0
 
         print(f"   TTFT:   ~{ttft_ms:.1f}ms (estimated)")
@@ -124,18 +131,21 @@ def main():
         except Exception as e:
             print(f"Error benchmarking {model_name}: {e}")
             import traceback
+
             traceback.print_exc()
 
     # Print summary
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("BENCHMARK RESULTS SUMMARY")
-    print("="*80)
+    print("=" * 80)
 
     print("\n### Continuous Batching Results\n")
     print("| Model | Single | Batch (5 req) | Speedup |")
     print("|-------|--------|---------------|---------|")
     for r in results:
-        print(f"| {r['model']} | {r['single_tps']:.1f} tok/s | {r['batch_tps']:.1f} tok/s | **{r['speedup']:.2f}x** |")
+        print(
+            f"| {r['model']} | {r['single_tps']:.1f} tok/s | {r['batch_tps']:.1f} tok/s | **{r['speedup']:.2f}x** |"
+        )
 
     print("\n### Generation Speed\n")
     print("| Model | TTFT | Speed |")

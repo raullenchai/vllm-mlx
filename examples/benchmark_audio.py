@@ -67,11 +67,11 @@ def benchmark_tts(
     """Benchmark TTS model."""
     from vllm_mlx.audio.tts import TTSEngine
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"TTS Benchmark: {alias}")
     print(f"Model: {model_name}")
     print(f"Voice: {voice}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Load model
     print("Loading model...")
@@ -83,7 +83,7 @@ def benchmark_tts(
 
     results = []
     for i, text in enumerate(texts):
-        print(f"\nTest {i+1}: {len(text)} characters")
+        print(f"\nTest {i + 1}: {len(text)} characters")
 
         # Generate
         gen_start = time.time()
@@ -163,11 +163,11 @@ def benchmark_stt(model_name: str, alias: str, audio_path: str):
     """Benchmark STT model."""
     from vllm_mlx.audio.stt import STTEngine
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"STT Benchmark: {alias}")
     print(f"Model: {model_name}")
     print(f"Audio: {audio_path}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Get audio duration first
     audio_duration = get_audio_duration(audio_path)

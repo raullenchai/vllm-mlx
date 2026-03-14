@@ -9,8 +9,8 @@ from vllm_mlx.memory_cache import (
     CacheStats,
     MemoryAwarePrefixCache,
     MemoryCacheConfig,
-    _CacheEntry,
     _array_memory,
+    _CacheEntry,
     _get_available_memory,
     estimate_kv_cache_memory,
 )

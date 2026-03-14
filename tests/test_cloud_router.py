@@ -10,10 +10,10 @@ Tests cover:
 """
 
 import json
-import pytest
-from unittest.mock import Mock, MagicMock, patch, AsyncMock
 from dataclasses import dataclass
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # CloudRouter tests
@@ -118,7 +118,7 @@ class TestCloudRouterBuildCallKwargs:
                     "name": "get_weather",
                     "description": "Get weather",
                     "parameters": {},
-                }
+                },
             }
         ]
 
@@ -176,7 +176,10 @@ class TestCloudRouterBuildCallKwargs:
 
         router = CloudRouter(cloud_model="test-model", threshold=1000)
         messages = [{"role": "user", "content": "Hello"}]
-        rf = {"type": "json_schema", "json_schema": {"name": "out", "schema": {"type": "object"}}}
+        rf = {
+            "type": "json_schema",
+            "json_schema": {"name": "out", "schema": {"type": "object"}},
+        }
 
         kwargs = router._build_call_kwargs(
             messages=messages,
@@ -381,7 +384,9 @@ class TestCloudRouterStreamCompletion:
 
         messages = [{"role": "user", "content": "Hi"}]
         result_chunks = []
-        async for chunk in router.stream_completion(messages, model_name="custom-model"):
+        async for chunk in router.stream_completion(
+            messages, model_name="custom-model"
+        ):
             if chunk != "data: [DONE]\n\n":
                 result_chunks.append(chunk)
 
@@ -456,7 +461,9 @@ class TestMLXLanguageModelEstimateNewTokens:
         # Mock tokenizer
         mock_tokenizer = MagicMock()
         mock_tokenizer.bos_token = "<s>"
-        mock_tokenizer.encode = MagicMock(side_effect=lambda text, **kwargs: [1, 2, 3, 4, 5])
+        mock_tokenizer.encode = MagicMock(
+            side_effect=lambda text, **kwargs: [1, 2, 3, 4, 5]
+        )
         model.tokenizer = mock_tokenizer
 
         return model
@@ -583,9 +590,7 @@ class TestSimpleEngineBuildPrompt:
         # Mock loaded state
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
-        mock_tokenizer.apply_chat_template = MagicMock(
-            return_value="formatted prompt"
-        )
+        mock_tokenizer.apply_chat_template = MagicMock(return_value="formatted prompt")
         mock_model.tokenizer = mock_tokenizer
         engine._model = mock_model
         engine._loaded = True
@@ -734,7 +739,9 @@ class TestCloudRoutingIntegration:
         new_tokens = 25000
 
         # Should not route to cloud when router is None
-        should_route = cloud_router is not None and cloud_router.should_route_to_cloud(new_tokens)
+        should_route = cloud_router is not None and cloud_router.should_route_to_cloud(
+            new_tokens
+        )
         assert should_route is False
 
     def test_below_threshold_uses_local(self):

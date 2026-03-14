@@ -18,8 +18,9 @@ Architecture:
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -42,27 +43,27 @@ class MLLMBatchRequest:
     uid: int  # Unique identifier within the batch generator
     request_id: str  # External request ID
     prompt: str  # Text prompt
-    images: Optional[List[str]] = None  # Image paths/URLs/base64
-    videos: Optional[List[str]] = None  # Video inputs
+    images: list[str] | None = None  # Image paths/URLs/base64
+    videos: list[str] | None = None  # Video inputs
     max_tokens: int = 256
     temperature: float = 0.7
     top_p: float = 0.9
 
     # Processed inputs (set after vision preprocessing)
-    input_ids: Optional[mx.array] = None
-    pixel_values: Optional[mx.array] = None
-    attention_mask: Optional[mx.array] = None
-    image_grid_thw: Optional[mx.array] = None
-    extra_kwargs: Dict[str, Any] = field(default_factory=dict)
+    input_ids: mx.array | None = None
+    pixel_values: mx.array | None = None
+    attention_mask: mx.array | None = None
+    image_grid_thw: mx.array | None = None
+    extra_kwargs: dict[str, Any] = field(default_factory=dict)
 
     # Generation state
     num_tokens: int = 0  # Tokens generated so far
-    output_tokens: List[int] = field(default_factory=list)
+    output_tokens: list[int] = field(default_factory=list)
 
     # Vision state (populated after initial VLM forward pass)
     vision_encoded: bool = False
-    cross_attention_states: Optional[Any] = None  # For models that use cross-attention
-    encoder_outputs: Optional[Any] = None  # For encoder-decoder models
+    cross_attention_states: Any | None = None  # For models that use cross-attention
+    encoder_outputs: Any | None = None  # For encoder-decoder models
 
 
 @dataclass
@@ -77,8 +78,8 @@ class MLLMBatchResponse:
     request_id: str  # External request ID
     token: int  # Generated token
     logprobs: mx.array  # Log probabilities
-    finish_reason: Optional[str] = None  # "stop", "length", or None
-    prompt_cache: Optional[Callable[[], List[Any]]] = None  # Cache extraction function
+    finish_reason: str | None = None  # "stop", "length", or None
+    prompt_cache: Callable[[], list[Any]] | None = None  # Cache extraction function
 
 
 @dataclass
@@ -90,19 +91,19 @@ class MLLMBatch:
     for all requests being processed together.
     """
 
-    uids: List[int]
-    request_ids: List[str]
+    uids: list[int]
+    request_ids: list[str]
     y: mx.array  # Current token(s) for each request [batch_size]
-    logprobs: List[mx.array]  # Log probs for each request
-    max_tokens: List[int]  # Max tokens per request
-    num_tokens: List[int]  # Tokens generated per request
-    cache: List[Any]  # BatchKVCache for language model
-    requests: List[MLLMBatchRequest]  # Full request data
+    logprobs: list[mx.array]  # Log probs for each request
+    max_tokens: list[int]  # Max tokens per request
+    num_tokens: list[int]  # Tokens generated per request
+    cache: list[Any]  # BatchKVCache for language model
+    requests: list[MLLMBatchRequest]  # Full request data
 
     def __len__(self) -> int:
         return len(self.uids)
 
-    def filter(self, keep_idx: List[int]) -> None:
+    def filter(self, keep_idx: list[int]) -> None:
         """
         Filter batch to keep only requests at specified indices.
 
@@ -154,7 +155,7 @@ class MLLMBatch:
                 except Exception as e:
                     logger.warning(f"Failed to extend cache: {e}")
 
-    def extract_cache(self, idx: int) -> List[Any]:
+    def extract_cache(self, idx: int) -> list[Any]:
         """
         Extract cache for a single request (for caching).
 
@@ -191,7 +192,7 @@ class MLLMBatchStats:
             return 0
         return self.generation_tokens / self.generation_time
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "prompt_tokens": self.prompt_tokens,
             "prompt_time": self.prompt_time,
@@ -205,7 +206,7 @@ class MLLMBatchStats:
         }
 
 
-def _make_batch_cache(model: nn.Module, left_padding: List[int]) -> List[Any]:
+def _make_batch_cache(model: nn.Module, left_padding: list[int]) -> list[Any]:
     """
     Create batch-aware KV cache for the language model.
 
@@ -232,7 +233,7 @@ def _make_batch_cache(model: nn.Module, left_padding: List[int]) -> List[Any]:
 
 
 def _left_pad_prompts(
-    prompts: List[List[int]], max_length: Optional[int] = None
+    prompts: list[list[int]], max_length: int | None = None
 ) -> mx.array:
     """
     Left-pad prompts to uniform length.
@@ -280,10 +281,10 @@ class MLLMBatchGenerator:
         self,
         model: nn.Module,
         processor: Any,
-        mm_processor: Optional[MultimodalProcessor] = None,
+        mm_processor: MultimodalProcessor | None = None,
         max_tokens: int = 256,
-        stop_tokens: Optional[set] = None,
-        sampler: Optional[Callable[[mx.array], mx.array]] = None,
+        stop_tokens: set | None = None,
+        sampler: Callable[[mx.array], mx.array] | None = None,
         prefill_batch_size: int = 4,  # Smaller for MLLM due to vision overhead
         completion_batch_size: int = 16,  # Can be larger for text generation
         prefill_step_size: int = 1024,
@@ -333,8 +334,8 @@ class MLLMBatchGenerator:
         self.prefill_step_size = prefill_step_size
 
         # Request management
-        self.unprocessed_requests: List[MLLMBatchRequest] = []
-        self.active_batch: Optional[MLLMBatch] = None
+        self.unprocessed_requests: list[MLLMBatchRequest] = []
+        self.active_batch: MLLMBatch | None = None
         self.uid_counter = 0
 
         # Statistics
@@ -377,8 +378,8 @@ class MLLMBatchGenerator:
 
     def insert(
         self,
-        requests: List[MLLMBatchRequest],
-    ) -> List[int]:
+        requests: list[MLLMBatchRequest],
+    ) -> list[int]:
         """
         Insert requests for batch processing.
 
@@ -407,7 +408,7 @@ class MLLMBatchGenerator:
         logger.debug(f"Inserted {len(requests)} requests, UIDs: {uids}")
         return uids
 
-    def remove(self, uids: List[int]) -> None:
+    def remove(self, uids: list[int]) -> None:
         """
         Remove requests from processing.
 
@@ -464,11 +465,11 @@ class MLLMBatchGenerator:
 
         if request.videos:
             from .models.mllm import (
-                process_video_input,
-                extract_video_frames_smart,
-                save_frames_to_temp,
                 DEFAULT_FPS,
                 MAX_FRAMES,
+                extract_video_frames_smart,
+                process_video_input,
+                save_frames_to_temp,
             )
 
             for video in request.videos:
@@ -552,7 +553,7 @@ class MLLMBatchGenerator:
         )
 
     def _run_vision_encoding(
-        self, request: MLLMBatchRequest, cache: Optional[List[Any]] = None
+        self, request: MLLMBatchRequest, cache: list[Any] | None = None
     ) -> mx.array:
         """
         Run the initial VLM forward pass to encode vision and get first logits.
@@ -594,7 +595,7 @@ class MLLMBatchGenerator:
             return output.logits
         return output
 
-    def _process_prompts(self, requests: List[MLLMBatchRequest]) -> MLLMBatch:
+    def _process_prompts(self, requests: list[MLLMBatchRequest]) -> MLLMBatch:
         """
         Process a batch of requests through vision encoding and initial prefill.
 
@@ -706,8 +707,8 @@ class MLLMBatchGenerator:
         )
 
     def _step(
-        self, input_tokens: mx.array, cache: List[Any]
-    ) -> Tuple[mx.array, List[mx.array]]:
+        self, input_tokens: mx.array, cache: list[Any]
+    ) -> tuple[mx.array, list[mx.array]]:
         """
         Run one generation step through the language model.
 
@@ -739,7 +740,7 @@ class MLLMBatchGenerator:
 
         return sampled, list(logprobs)
 
-    def _next(self) -> List[MLLMBatchResponse]:
+    def _next(self) -> list[MLLMBatchResponse]:
         """
         Internal next() implementation.
 
@@ -843,7 +844,7 @@ class MLLMBatchGenerator:
         self._stats.generation_tokens += len(responses)
         return responses
 
-    def next(self) -> List[MLLMBatchResponse]:
+    def next(self) -> list[MLLMBatchResponse]:
         """
         Generate next token for all requests in the batch.
 
@@ -863,7 +864,7 @@ class MLLMBatchGenerator:
         self._stats.peak_memory = mx.get_peak_memory() / 1e9
         return self._stats
 
-    def get_vision_cache_stats(self) -> Dict[str, Any]:
+    def get_vision_cache_stats(self) -> dict[str, Any]:
         """Get vision cache statistics."""
         return self.vision_cache.get_stats()
 

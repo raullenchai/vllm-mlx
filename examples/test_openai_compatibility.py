@@ -22,7 +22,6 @@ Usage:
 import argparse
 import base64
 import sys
-import time
 from pathlib import Path
 
 # Color codes for terminal output
@@ -57,8 +56,9 @@ def print_warning(text: str):
 def create_test_image() -> tuple[str, bytes]:
     """Create a simple test image and return (path, bytes)."""
     try:
-        from PIL import Image
         import io
+
+        from PIL import Image
 
         # Create a simple 100x100 red square image
         img = Image.new("RGB", (100, 100), color="red")
@@ -70,6 +70,7 @@ def create_test_image() -> tuple[str, bytes]:
 
         # Save to temp file
         import tempfile
+
         temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         temp_file.write(img_bytes)
         temp_file.close()
@@ -79,18 +80,81 @@ def create_test_image() -> tuple[str, bytes]:
     except ImportError:
         print_warning("Pillow not installed. Using a minimal PNG.")
         # Minimal 1x1 red PNG
-        minimal_png = bytes([
-            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,  # PNG signature
-            0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  # 1x1 dimensions
-            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,  # bit depth, color type
-            0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41,  # IDAT chunk
-            0x54, 0x08, 0xd7, 0x63, 0xf8, 0xff, 0xff, 0x3f,  # compressed data
-            0x00, 0x05, 0xfe, 0x02, 0xfe, 0xdc, 0xcc, 0x59,  #
-            0xe7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,  # IEND chunk
-            0x44, 0xae, 0x42, 0x60, 0x82
-        ])
+        minimal_png = bytes(
+            [
+                0x89,
+                0x50,
+                0x4E,
+                0x47,
+                0x0D,
+                0x0A,
+                0x1A,
+                0x0A,  # PNG signature
+                0x00,
+                0x00,
+                0x00,
+                0x0D,
+                0x49,
+                0x48,
+                0x44,
+                0x52,  # IHDR chunk
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0x01,  # 1x1 dimensions
+                0x08,
+                0x02,
+                0x00,
+                0x00,
+                0x00,
+                0x90,
+                0x77,
+                0x53,  # bit depth, color type
+                0xDE,
+                0x00,
+                0x00,
+                0x00,
+                0x0C,
+                0x49,
+                0x44,
+                0x41,  # IDAT chunk
+                0x54,
+                0x08,
+                0xD7,
+                0x63,
+                0xF8,
+                0xFF,
+                0xFF,
+                0x3F,  # compressed data
+                0x00,
+                0x05,
+                0xFE,
+                0x02,
+                0xFE,
+                0xDC,
+                0xCC,
+                0x59,  #
+                0xE7,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x49,
+                0x45,
+                0x4E,  # IEND chunk
+                0x44,
+                0xAE,
+                0x42,
+                0x60,
+                0x82,
+            ]
+        )
         import tempfile
+
         temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         temp_file.write(minimal_png)
         temp_file.close()
@@ -185,9 +249,7 @@ def test_chat_completions_openai(server_url: str) -> tuple[bool, str]:
 
         response = client.chat.completions.create(
             model="default",
-            messages=[
-                {"role": "user", "content": "Say 'World' and nothing else."}
-            ],
+            messages=[{"role": "user", "content": "Say 'World' and nothing else."}],
             max_tokens=50,
             temperature=0.1,
         )
@@ -250,12 +312,17 @@ def test_image_chat_http(server_url: str) -> tuple[bool, str]:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "What color is this image? Answer in one word."},
+                            {
+                                "type": "text",
+                                "text": "What color is this image? Answer in one word.",
+                            },
                             {
                                 "type": "image_url",
-                                "image_url": {"url": f"data:image/png;base64,{image_base64}"}
-                            }
-                        ]
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{image_base64}"
+                                },
+                            },
+                        ],
                     }
                 ],
                 "max_tokens": 50,
@@ -265,7 +332,10 @@ def test_image_chat_http(server_url: str) -> tuple[bool, str]:
         )
 
         if response.status_code != 200:
-            return False, f"Status code: {response.status_code}, Body: {response.text[:100]}"
+            return (
+                False,
+                f"Status code: {response.status_code}, Body: {response.text[:100]}",
+            )
 
         data = response.json()
         content = data["choices"][0]["message"]["content"]
@@ -301,12 +371,17 @@ def test_image_chat_openai(server_url: str) -> tuple[bool, str]:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "What color is this image? Answer briefly."},
+                        {
+                            "type": "text",
+                            "text": "What color is this image? Answer briefly.",
+                        },
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{image_base64}"}
-                        }
-                    ]
+                            "image_url": {
+                                "url": f"data:image/png;base64,{image_base64}"
+                            },
+                        },
+                    ],
                 }
             ],
             max_tokens=50,
@@ -339,11 +414,8 @@ def test_image_url_http(server_url: str) -> tuple[bool, str]:
                         "role": "user",
                         "content": [
                             {"type": "text", "text": "Describe this image briefly."},
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": test_image_url}
-                            }
-                        ]
+                            {"type": "image_url", "image_url": {"url": test_image_url}},
+                        ],
                     }
                 ],
                 "max_tokens": 100,
@@ -372,9 +444,7 @@ def test_streaming_chat(server_url: str) -> tuple[bool, str]:
             f"{server_url}/v1/chat/completions",
             json={
                 "model": "default",
-                "messages": [
-                    {"role": "user", "content": "Count from 1 to 5."}
-                ],
+                "messages": [{"role": "user", "content": "Count from 1 to 5."}],
                 "max_tokens": 50,
                 "temperature": 0.1,
                 "stream": True,
@@ -412,15 +482,16 @@ def create_test_video() -> tuple[str, bytes]:
     Returns (path, bytes) of a minimal MP4 video.
     """
     try:
+        import tempfile
+
         import cv2
         import numpy as np
-        import tempfile
 
         # Create a simple video with 3 colored frames (red, green, blue)
         colors = [
-            (0, 0, 255),    # Red (BGR)
-            (0, 255, 0),    # Green (BGR)
-            (255, 0, 0),    # Blue (BGR)
+            (0, 0, 255),  # Red (BGR)
+            (0, 255, 0),  # Green (BGR)
+            (255, 0, 0),  # Blue (BGR)
         ]
 
         temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
@@ -428,7 +499,7 @@ def create_test_video() -> tuple[str, bytes]:
         temp_file.close()
 
         # Create video writer
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         out = cv2.VideoWriter(temp_path, fourcc, 1.0, (100, 100))
 
         for color in colors:
@@ -469,12 +540,17 @@ def test_video_chat_http(server_url: str) -> tuple[bool, str]:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "What colors appear in this video? List them briefly."},
+                            {
+                                "type": "text",
+                                "text": "What colors appear in this video? List them briefly.",
+                            },
                             {
                                 "type": "video_url",
-                                "video_url": {"url": f"data:video/mp4;base64,{video_base64}"}
-                            }
-                        ]
+                                "video_url": {
+                                    "url": f"data:video/mp4;base64,{video_base64}"
+                                },
+                            },
+                        ],
                     }
                 ],
                 "max_tokens": 100,
@@ -484,7 +560,10 @@ def test_video_chat_http(server_url: str) -> tuple[bool, str]:
         )
 
         if response.status_code != 200:
-            return False, f"Status code: {response.status_code}, Body: {response.text[:100]}"
+            return (
+                False,
+                f"Status code: {response.status_code}, Body: {response.text[:100]}",
+            )
 
         data = response.json()
         content = data["choices"][0]["message"]["content"]
@@ -524,12 +603,17 @@ def test_video_chat_openai(server_url: str) -> tuple[bool, str]:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Describe what you see in this video briefly."},
+                        {
+                            "type": "text",
+                            "text": "Describe what you see in this video briefly.",
+                        },
                         {
                             "type": "video_url",
-                            "video_url": {"url": f"data:video/mp4;base64,{video_base64}"}
-                        }
-                    ]
+                            "video_url": {
+                                "url": f"data:video/mp4;base64,{video_base64}"
+                            },
+                        },
+                    ],
                 }
             ],
             max_tokens=100,
@@ -562,12 +646,12 @@ def test_video_url_http(server_url: str) -> tuple[bool, str]:
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Describe what happens in this video briefly."},
                             {
-                                "type": "video_url",
-                                "video_url": {"url": test_video_url}
-                            }
-                        ]
+                                "type": "text",
+                                "text": "Describe what happens in this video briefly.",
+                            },
+                            {"type": "video_url", "video_url": {"url": test_video_url}},
+                        ],
                     }
                 ],
                 "max_tokens": 150,

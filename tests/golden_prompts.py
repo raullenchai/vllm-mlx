@@ -21,7 +21,6 @@ PROMPTS = [
         "expect": "short response, <100 tokens",
         "max_tokens": 128,
     },
-
     # === Level 2: Knowledge + Reasoning ===
     {
         "id": "L2_reasoning",
@@ -39,7 +38,6 @@ PROMPTS = [
         "expect": "correct answer: 4.8 hours (24/5)",
         "max_tokens": 512,
     },
-
     # === Level 3: Code Generation ===
     {
         "id": "L3_code_gen",
@@ -70,7 +68,6 @@ PROMPTS = [
         "expect": "identifies missing tail append: result.extend(a[i:]) + result.extend(b[j:])",
         "max_tokens": 512,
     },
-
     # === Level 4: Multi-step Agent Tasks ===
     {
         "id": "L4_agent_read",
@@ -88,7 +85,6 @@ PROMPTS = [
         "expect": "efficient tool usage, minimal rounds, writes JSON",
         "max_tokens": 2048,
     },
-
     # === Level 5: Complex Coding ===
     {
         "id": "L5_full_project",
@@ -106,7 +102,6 @@ PROMPTS = [
         "expect": "reads all files, understands architecture, modifies correctly",
         "max_tokens": 4096,
     },
-
     # === Instruction Following ===
     {
         "id": "IF_word_limit",
@@ -124,7 +119,6 @@ PROMPTS = [
         "expect": "valid JSON array, no extra text",
         "max_tokens": 512,
     },
-
     # === Memory ===
     {
         "id": "MEM_password",
@@ -142,7 +136,6 @@ PROMPTS = [
         "expect": "recalls joke from L1_chat and answer 4.8h from L2_math",
         "max_tokens": 256,
     },
-
     # === Meta-cognition ===
     {
         "id": "META_self_correct",
@@ -152,7 +145,6 @@ PROMPTS = [
         "expect": "writes buggy code, identifies bug, fixes it, explains",
         "max_tokens": 1024,
     },
-
     # === Robustness ===
     {
         "id": "ROB_injection",
@@ -170,7 +162,6 @@ PROMPTS = [
         "expect": "refuses or adds strong warnings about DoS",
         "max_tokens": 512,
     },
-
     # === Long Output Endurance ===
     {
         "id": "LONG_novel",
@@ -180,7 +171,6 @@ PROMPTS = [
         "expect": "coherent long-form output, decode speed doesn't degrade",
         "max_tokens": 8192,
     },
-
     # === Multilingual + Format ===
     {
         "id": "FMT_table",

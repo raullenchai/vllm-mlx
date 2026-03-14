@@ -61,6 +61,7 @@ def test_get_device_memory():
 def test_supported_dtypes():
     """Test supported dtypes."""
     import torch
+
     from vllm_mlx.platform import MLXPlatform
 
     platform_obj = MLXPlatform()

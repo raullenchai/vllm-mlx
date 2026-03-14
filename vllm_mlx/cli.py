@@ -115,7 +115,9 @@ def serve_command(args):
         print("  Rate limiting: DISABLED - Use --rate-limit to enable")
     print(f"  Request timeout: {args.timeout}s")
     if args.enable_auto_tool_choice:
-        bias_info = " + logits bias" if getattr(args, "enable_tool_logits_bias", False) else ""
+        bias_info = (
+            " + logits bias" if getattr(args, "enable_tool_logits_bias", False) else ""
+        )
         print(f"  Tool calling: ENABLED (parser: {args.tool_call_parser}{bias_info})")
     else:
         print("  Tool calling: Use --enable-auto-tool-choice to enable")
@@ -127,7 +129,9 @@ def serve_command(args):
     if args.pin_system_prompt:
         print("  Pin system prompt: ENABLED")
     if args.cloud_model:
-        print(f"  Cloud routing: ENABLED (model: {args.cloud_model}, threshold: {args.cloud_threshold} tokens)")
+        print(
+            f"  Cloud routing: ENABLED (model: {args.cloud_model}, threshold: {args.cloud_threshold} tokens)"
+        )
     else:
         print("  Cloud routing: DISABLED - Use --cloud-model to enable")
     print("=" * 60)
@@ -138,7 +142,6 @@ def serve_command(args):
         print("Speculative decoding: ENABLED")
         print(f"  Draft model: {args.draft_model}")
         print(f"  Draft tokens: {args.num_draft_tokens}")
-
     # Store MCP config path for FastAPI startup
     if args.mcp_config:
         print(f"MCP config: {args.mcp_config}")
@@ -197,7 +200,7 @@ def serve_command(args):
             cache_info = (
                 f"{args.cache_memory_mb}MB"
                 if args.cache_memory_mb
-                else f"{args.cache_memory_percent*100:.0f}% of RAM"
+                else f"{args.cache_memory_percent * 100:.0f}% of RAM"
             )
             print(f"Memory-aware cache: {cache_info}")
             if args.kv_cache_quantization:
@@ -346,12 +349,12 @@ def bench_command(args):
         print("\nResults:")
         print(f"  Total time: {total_time:.2f}s")
         print(f"  Prompts: {len(prompts)}")
-        print(f"  Prompts/second: {len(prompts)/total_time:.2f}")
+        print(f"  Prompts/second: {len(prompts) / total_time:.2f}")
         print(f"  Total prompt tokens: {total_prompt_tokens}")
         print(f"  Total completion tokens: {total_completion_tokens}")
         print(f"  Total tokens: {total_tokens}")
-        print(f"  Tokens/second: {total_completion_tokens/total_time:.2f}")
-        print(f"  Throughput: {total_tokens/total_time:.2f} tok/s")
+        print(f"  Tokens/second: {total_completion_tokens / total_time:.2f}")
+        print(f"  Throughput: {total_tokens / total_time:.2f} tok/s")
 
     asyncio.run(run_benchmark())
 
@@ -436,7 +439,7 @@ def bench_detok_command(args):
     print("-" * 70)
     print(f"{'Time saved per request:':<25} {time_saved:>10.2f}ms")
     print(
-        f"{'Per-token savings:':<25} {(time_saved/len(generated_tokens)*1000):>10.1f}µs"
+        f"{'Per-token savings:':<25} {(time_saved / len(generated_tokens) * 1000):>10.1f}µs"
     )
     print()
 

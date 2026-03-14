@@ -290,9 +290,9 @@ class TestMinQuantizeTokensThreshold:
 
         stored_entry = list(pc._entries.values())[0]
         for layer in stored_entry.cache:
-            assert isinstance(
-                layer, KVCache
-            ), "Short sequences should remain as KVCache (not quantized)"
+            assert isinstance(layer, KVCache), (
+                "Short sequences should remain as KVCache (not quantized)"
+            )
 
     def test_store_quantizes_above_threshold(self):
         """Sequences >= min_quantize_tokens should be quantized."""
@@ -311,9 +311,9 @@ class TestMinQuantizeTokensThreshold:
 
         stored_entry = list(pc._entries.values())[0]
         for layer in stored_entry.cache:
-            assert isinstance(
-                layer, QuantizedKVCache
-            ), "Long sequences should be quantized"
+            assert isinstance(layer, QuantizedKVCache), (
+                "Long sequences should be quantized"
+            )
 
     def test_trim_applied_without_quantization(self):
         """Oversized arrays should be trimmed even without quantization."""
@@ -336,7 +336,7 @@ class TestMinQuantizeTokensThreshold:
 
         stored_entry = list(pc._entries.values())[0]
         for layer in stored_entry.cache:
-            assert (
-                layer.keys.shape[2] == 100
-            ), f"Expected trimmed to 100, got {layer.keys.shape[2]}"
+            assert layer.keys.shape[2] == 100, (
+                f"Expected trimmed to 100, got {layer.keys.shape[2]}"
+            )
             assert layer.values.shape[2] == 100

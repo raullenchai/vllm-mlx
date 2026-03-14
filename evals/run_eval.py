@@ -55,20 +55,198 @@ RESULTS_DIR = EVALS_DIR / "results"
 
 # Reuse tool definitions from test_tool_call_e2e
 TOOLS = [
-    {"type": "function", "function": {"name": "web_search", "description": "Search the web", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
-    {"type": "function", "function": {"name": "exec", "description": "Execute shell command", "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}}},
-    {"type": "function", "function": {"name": "read", "description": "Read a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
-    {"type": "function", "function": {"name": "write", "description": "Write to a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}},
-    {"type": "function", "function": {"name": "process", "description": "Process management", "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["list", "poll", "log", "write", "kill", "clear", "remove"]}, "sessionId": {"type": "string"}, "timeout": {"type": "integer"}}, "required": ["action"]}}},
-    {"type": "function", "function": {"name": "memory_store", "description": "Store key-value pair", "parameters": {"type": "object", "properties": {"key": {"type": "string"}, "value": {"type": "string"}}, "required": ["key", "value"]}}},
-    {"type": "function", "function": {"name": "memory_get", "description": "Get value by key", "parameters": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}}},
-    {"type": "function", "function": {"name": "send_message", "description": "Send a message", "parameters": {"type": "object", "properties": {"to": {"type": "string"}, "text": {"type": "string"}}, "required": ["to", "text"]}}},
-    {"type": "function", "function": {"name": "create_reminder", "description": "Create a reminder", "parameters": {"type": "object", "properties": {"text": {"type": "string"}, "time": {"type": "string"}}, "required": ["text", "time"]}}},
-    {"type": "function", "function": {"name": "calendar_create", "description": "Create calendar event", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "start": {"type": "string"}}, "required": ["title", "start"]}}},
-    {"type": "function", "function": {"name": "browse", "description": "Browse a URL", "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}}},
-    {"type": "function", "function": {"name": "code_run", "description": "Run code snippet", "parameters": {"type": "object", "properties": {"language": {"type": "string"}, "code": {"type": "string"}}, "required": ["language", "code"]}}},
-    {"type": "function", "function": {"name": "image_gen", "description": "Generate an image", "parameters": {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"]}}},
-    {"type": "function", "function": {"name": "translate", "description": "Translate text", "parameters": {"type": "object", "properties": {"text": {"type": "string"}, "to": {"type": "string"}}, "required": ["text", "to"]}}},
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "exec",
+            "description": "Execute shell command",
+            "parameters": {
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+                "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read",
+            "description": "Read a file",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write",
+            "description": "Write to a file",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "process",
+            "description": "Process management",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "list",
+                            "poll",
+                            "log",
+                            "write",
+                            "kill",
+                            "clear",
+                            "remove",
+                        ],
+                    },
+                    "sessionId": {"type": "string"},
+                    "timeout": {"type": "integer"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_store",
+            "description": "Store key-value pair",
+            "parameters": {
+                "type": "object",
+                "properties": {"key": {"type": "string"}, "value": {"type": "string"}},
+                "required": ["key", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_get",
+            "description": "Get value by key",
+            "parameters": {
+                "type": "object",
+                "properties": {"key": {"type": "string"}},
+                "required": ["key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_message",
+            "description": "Send a message",
+            "parameters": {
+                "type": "object",
+                "properties": {"to": {"type": "string"}, "text": {"type": "string"}},
+                "required": ["to", "text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_reminder",
+            "description": "Create a reminder",
+            "parameters": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}, "time": {"type": "string"}},
+                "required": ["text", "time"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_create",
+            "description": "Create calendar event",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "start": {"type": "string"},
+                },
+                "required": ["title", "start"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browse",
+            "description": "Browse a URL",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string"}},
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "code_run",
+            "description": "Run code snippet",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "language": {"type": "string"},
+                    "code": {"type": "string"},
+                },
+                "required": ["language", "code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "image_gen",
+            "description": "Generate an image",
+            "parameters": {
+                "type": "object",
+                "properties": {"prompt": {"type": "string"}},
+                "required": ["prompt"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "translate",
+            "description": "Translate text",
+            "parameters": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}, "to": {"type": "string"}},
+                "required": ["text", "to"],
+            },
+        },
+    },
 ]
 
 
@@ -94,7 +272,9 @@ def detect_hardware() -> dict:
     try:
         sp = subprocess.run(
             ["sysctl", "-n", "machdep.cpu.brand_string"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         hw["chip"] = sp.stdout.strip()
     except Exception:
@@ -102,7 +282,9 @@ def detect_hardware() -> dict:
     try:
         sp = subprocess.run(
             ["sysctl", "-n", "hw.memsize"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         hw["memory_gb"] = round(int(sp.stdout.strip()) / (1024**3))
     except Exception:
@@ -110,10 +292,18 @@ def detect_hardware() -> dict:
     return hw
 
 
-def chat_request(host: str, port: int, messages: list, *, tools=None,
-                 max_tokens: int = 512, temperature: float = 0.0,
-                 stream: bool = False, timeout: float = 120.0,
-                 enable_thinking: bool = False) -> dict:
+def chat_request(
+    host: str,
+    port: int,
+    messages: list,
+    *,
+    tools=None,
+    max_tokens: int = 512,
+    temperature: float = 0.0,
+    stream: bool = False,
+    timeout: float = 120.0,
+    enable_thinking: bool = False,
+) -> dict:
     """Send a chat completion request (non-streaming by default)."""
     body = {
         "model": "default",
@@ -135,10 +325,17 @@ def chat_request(host: str, port: int, messages: list, *, tools=None,
     return resp.json()
 
 
-def stream_chat(host: str, port: int, messages: list, *, tools=None,
-                max_tokens: int = 512, temperature: float = 0.0,
-                timeout: float = 120.0,
-                enable_thinking: bool = False):
+def stream_chat(
+    host: str,
+    port: int,
+    messages: list,
+    *,
+    tools=None,
+    max_tokens: int = 512,
+    temperature: float = 0.0,
+    timeout: float = 120.0,
+    enable_thinking: bool = False,
+):
     """Stream a chat completion. Returns (content, tool_calls, ttft, elapsed)."""
     body = {
         "model": "default",
@@ -221,19 +418,24 @@ def run_speed_suite(host: str, port: int, verbose: bool = False) -> dict:
     cold_msgs = [{"role": "user", "content": "Hello, how are you?"}]
     _, _, ttft_cold, _ = stream_chat(host, port, cold_msgs, max_tokens=20)
     results["ttft_cold_s"] = round(ttft_cold, 3)
-    print(f"{ttft_cold*1000:.0f} ms")
+    print(f"{ttft_cold * 1000:.0f} ms")
 
     # -- TTFT warm (repeat same prefix) --
     print("  TTFT warm (cached prefix)...", end=" ", flush=True)
     _, _, ttft_warm, _ = stream_chat(host, port, cold_msgs, max_tokens=20)
     results["ttft_warm_s"] = round(ttft_warm, 3)
-    print(f"{ttft_warm*1000:.0f} ms")
+    print(f"{ttft_warm * 1000:.0f} ms")
 
     # -- Decode tok/s --
     # Use end-to-end non-streaming request for accurate token counts from usage,
     # then compute effective tok/s (includes TTFT overhead, which is what users experience).
     print("  Decode short (<100 tok)...", end=" ", flush=True)
-    short_msg = [{"role": "user", "content": "Write a brief greeting in 2 sentences. Be concise, no thinking."}]
+    short_msg = [
+        {
+            "role": "user",
+            "content": "Write a brief greeting in 2 sentences. Be concise, no thinking.",
+        }
+    ]
     short_start = time.perf_counter()
     short_resp = chat_request(host, port, short_msg, max_tokens=100, temperature=0.0)
     short_elapsed = time.perf_counter() - short_start
@@ -243,7 +445,12 @@ def run_speed_suite(host: str, port: int, verbose: bool = False) -> dict:
     print(f"{short_tps:.1f} tok/s ({short_tokens} tok in {short_elapsed:.2f}s)")
 
     print("  Decode long (300+ tok)...", end=" ", flush=True)
-    long_msg = [{"role": "user", "content": "Write a detailed explanation of how transformers work in deep learning. Cover attention mechanisms, positional encoding, and the encoder-decoder architecture. Be thorough. No thinking, just answer directly."}]
+    long_msg = [
+        {
+            "role": "user",
+            "content": "Write a detailed explanation of how transformers work in deep learning. Cover attention mechanisms, positional encoding, and the encoder-decoder architecture. Be thorough. No thinking, just answer directly.",
+        }
+    ]
     long_start = time.perf_counter()
     long_resp = chat_request(host, port, long_msg, max_tokens=500, temperature=0.0)
     long_elapsed = time.perf_counter() - long_start
@@ -268,7 +475,9 @@ def run_speed_suite(host: str, port: int, verbose: bool = False) -> dict:
     except Exception:
         pass
 
-    results["_summary"] = f"TTFT cold={results['ttft_cold_s']}s warm={results['ttft_warm_s']}s | Decode {results['decode_short_tps']}/{results['decode_long_tps']} tok/s"
+    results["_summary"] = (
+        f"TTFT cold={results['ttft_cold_s']}s warm={results['ttft_warm_s']}s | Decode {results['decode_short_tps']}/{results['decode_long_tps']} tok/s"
+    )
     print(f"  Summary: {results['_summary']}")
     return results
 
@@ -294,8 +503,8 @@ def fuzzy_match_args(expected: dict, actual: dict) -> float:
                 matches += 1
             else:
                 # Word-overlap: check if key words from expected appear in actual
-                exp_words = set(re.findall(r'\w+', exp_lower))
-                act_words = set(re.findall(r'\w+', act_lower))
+                exp_words = set(re.findall(r"\w+", exp_lower))
+                act_words = set(re.findall(r"\w+", act_lower))
                 if exp_words and act_words:
                     overlap = len(exp_words & act_words) / len(exp_words)
                     matches += overlap  # partial credit
@@ -347,7 +556,12 @@ def _check_parallel_calls(tool_calls, scenario) -> dict:
     """Check parallel tool calls against expected_tools list. Returns grading dict."""
     expected = scenario.get("expected_tools", [])
     if not expected:
-        return {"tool_detected": False, "correct_name": False, "valid_json_args": False, "arg_score": 0.0}
+        return {
+            "tool_detected": False,
+            "correct_name": False,
+            "valid_json_args": False,
+            "arg_score": 0.0,
+        }
 
     # Build list of actual calls
     actual_calls = []
@@ -375,9 +589,14 @@ def _check_parallel_calls(tool_calls, scenario) -> dict:
             if match_mode == "exact":
                 score = 1.0 if act["args"] == exp_args else 0.0
             elif match_mode == "contains":
-                score = 1.0 if all(
-                    str(v) in str(act["args"].get(k, "")) for k, v in exp_args.items()
-                ) else 0.0
+                score = (
+                    1.0
+                    if all(
+                        str(v) in str(act["args"].get(k, ""))
+                        for k, v in exp_args.items()
+                    )
+                    else 0.0
+                )
             else:
                 score = fuzzy_match_args(exp_args, act["args"])
             if score > best_score:
@@ -389,7 +608,9 @@ def _check_parallel_calls(tool_calls, scenario) -> dict:
 
     total_expected = len(expected)
     fraction = matched / total_expected if total_expected > 0 else 0.0
-    all_json_valid = all(a["valid_json"] for a in actual_calls) if actual_calls else False
+    all_json_valid = (
+        all(a["valid_json"] for a in actual_calls) if actual_calls else False
+    )
 
     return {
         "tool_detected": len(actual_calls) > 0,
@@ -429,10 +650,17 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
     for sc in scenarios:
         sc_id = sc["id"]
         sc_type = sc.get("type", "standard")
-        print(f"  {sc_id} (L{sc['level']}): {sc['description']}...", end=" ", flush=True)
+        print(
+            f"  {sc_id} (L{sc['level']}): {sc['description']}...", end=" ", flush=True
+        )
 
         messages = [system_msg] + sc["messages"]
-        result = {"id": sc_id, "level": sc["level"], "description": sc["description"], "category": sc.get("category", "")}
+        result = {
+            "id": sc_id,
+            "level": sc["level"],
+            "description": sc["description"],
+            "category": sc.get("category", ""),
+        }
 
         try:
             # ── Irrelevance / Missing Params: expect NO tool call ──
@@ -443,12 +671,14 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
                 no_tool = not tool_calls
                 has_content = bool(content and content.strip())
                 ok = no_tool and has_content
-                result.update({
-                    "fully_correct": ok,
-                    "no_tool_called": no_tool,
-                    "has_content": has_content,
-                    "elapsed_s": round(elapsed, 2),
-                })
+                result.update(
+                    {
+                        "fully_correct": ok,
+                        "no_tool_called": no_tool,
+                        "has_content": has_content,
+                        "elapsed_s": round(elapsed, 2),
+                    }
+                )
                 if ok:
                     passed += 1
                     print("PASS (no tool, text response)")
@@ -467,7 +697,11 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
                     host, port, messages, tools=TOOLS, max_tokens=512, temperature=0.0
                 )
                 grade = _check_parallel_calls(tool_calls, sc)
-                ok = grade["correct_name"] and grade["valid_json_args"] and grade["arg_score"] >= 0.5
+                ok = (
+                    grade["correct_name"]
+                    and grade["valid_json_args"]
+                    and grade["arg_score"] >= 0.5
+                )
                 result.update(grade)
                 result["fully_correct"] = ok
                 result["elapsed_s"] = round(elapsed, 2)
@@ -475,7 +709,9 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
                     passed += 1
                     print(f"PASS ({grade['matched']}/{grade['expected_count']} tools)")
                 else:
-                    print(f"FAIL ({grade['matched']}/{grade['expected_count']} matched, {grade['actual_count']} called)")
+                    print(
+                        f"FAIL ({grade['matched']}/{grade['expected_count']} matched, {grade['actual_count']} called)"
+                    )
                 details.append(result)
                 continue
 
@@ -493,26 +729,46 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
                     # Feed error result back
                     tc = tool_calls[0]
                     fn = tc.get("function", {})
-                    error_text = sc.get("error_result", "Error: Unknown error occurred.")
-                    messages.append({
-                        "role": "assistant", "content": None,
-                        "tool_calls": [{"id": tc.get("id", "call_eval"), "type": "function", "function": fn}],
-                    })
-                    messages.append({
-                        "role": "tool", "content": error_text,
-                        "tool_call_id": tc.get("id", "call_eval"),
-                    })
+                    error_text = sc.get(
+                        "error_result", "Error: Unknown error occurred."
+                    )
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": tc.get("id", "call_eval"),
+                                    "type": "function",
+                                    "function": fn,
+                                }
+                            ],
+                        }
+                    )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "content": error_text,
+                            "tool_call_id": tc.get("id", "call_eval"),
+                        }
+                    )
 
                     # Check recovery: model should either call recovery tool or explain
                     content2, tc2, _, elapsed2 = stream_chat(
-                        host, port, messages, tools=TOOLS, max_tokens=512, temperature=0.0
+                        host,
+                        port,
+                        messages,
+                        tools=TOOLS,
+                        max_tokens=512,
+                        temperature=0.0,
                     )
 
                     recovery_tool = sc.get("recovery_expected_tool")
                     if recovery_tool:
                         # Check if model called the recovery tool
                         recovery_ok = any(
-                            t.get("function", {}).get("name") == recovery_tool for t in tc2
+                            t.get("function", {}).get("name") == recovery_tool
+                            for t in tc2
                         )
                         text_recovery = bool(content2 and content2.strip())
                         ok = recovery_ok or text_recovery
@@ -543,8 +799,10 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
 
             grade = _check_tool_call(tool_calls, sc)
             first_ok = (
-                grade["tool_detected"] and grade["correct_name"]
-                and grade["valid_json_args"] and grade["arg_score"] >= 0.5
+                grade["tool_detected"]
+                and grade["correct_name"]
+                and grade["valid_json_args"]
+                and grade["arg_score"] >= 0.5
             )
 
             result.update(grade)
@@ -557,15 +815,29 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
                 # Feed fake_result back for the first tool call
                 tc = tool_calls[0]
                 fn = tc.get("function", {})
-                fake_result = sc.get("fake_result", f"Tool {fn.get('name', '?')} executed successfully.")
-                messages.append({
-                    "role": "assistant", "content": None,
-                    "tool_calls": [{"id": tc.get("id", "call_eval"), "type": "function", "function": fn}],
-                })
-                messages.append({
-                    "role": "tool", "content": fake_result,
-                    "tool_call_id": tc.get("id", "call_eval"),
-                })
+                fake_result = sc.get(
+                    "fake_result", f"Tool {fn.get('name', '?')} executed successfully."
+                )
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": tc.get("id", "call_eval"),
+                                "type": "function",
+                                "function": fn,
+                            }
+                        ],
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "content": fake_result,
+                        "tool_call_id": tc.get("id", "call_eval"),
+                    }
+                )
 
                 # Check each followup step
                 for prefix in followup_prefixes:
@@ -574,7 +846,12 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
                         break
 
                     content2, tc2, _, elapsed2 = stream_chat(
-                        host, port, messages, tools=TOOLS, max_tokens=512, temperature=0.0
+                        host,
+                        port,
+                        messages,
+                        tools=TOOLS,
+                        max_tokens=512,
+                        temperature=0.0,
                     )
 
                     fgrade = _check_tool_call(tc2, sc, step_prefix=prefix)
@@ -594,7 +871,12 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
                                     for k, v in sc[f"{prefix}expected_args"].items()
                                 )
                             else:
-                                arg_ok = fuzzy_match_args(sc[f"{prefix}expected_args"], actual_args) >= 0.5
+                                arg_ok = (
+                                    fuzzy_match_args(
+                                        sc[f"{prefix}expected_args"], actual_args
+                                    )
+                                    >= 0.5
+                                )
                             step_ok = step_ok and arg_ok
                         except (json.JSONDecodeError, TypeError):
                             step_ok = False
@@ -606,15 +888,30 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
                         tc_f = tc2[0]
                         fn_f = tc_f.get("function", {})
                         fake_key = f"{prefix}fake_result"
-                        fake_r = sc.get(fake_key, f"Tool {fn_f.get('name', '?')} executed successfully.")
-                        messages.append({
-                            "role": "assistant", "content": None,
-                            "tool_calls": [{"id": tc_f.get("id", "call_eval"), "type": "function", "function": fn_f}],
-                        })
-                        messages.append({
-                            "role": "tool", "content": fake_r,
-                            "tool_call_id": tc_f.get("id", "call_eval"),
-                        })
+                        fake_r = sc.get(
+                            fake_key,
+                            f"Tool {fn_f.get('name', '?')} executed successfully.",
+                        )
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "content": None,
+                                "tool_calls": [
+                                    {
+                                        "id": tc_f.get("id", "call_eval"),
+                                        "type": "function",
+                                        "function": fn_f,
+                                    }
+                                ],
+                            }
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "content": fake_r,
+                                "tool_call_id": tc_f.get("id", "call_eval"),
+                            }
+                        )
                     else:
                         break  # stop if a followup step fails
 
@@ -632,7 +929,11 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
                 if not grade["tool_detected"]:
                     reasons.append("no tool call")
                 elif not grade["correct_name"]:
-                    tc_name = tool_calls[0].get("function", {}).get("name", "?") if tool_calls else "?"
+                    tc_name = (
+                        tool_calls[0].get("function", {}).get("name", "?")
+                        if tool_calls
+                        else "?"
+                    )
                     reasons.append(f"wrong tool ({tc_name})")
                 elif not grade["valid_json_args"]:
                     reasons.append("invalid JSON args")
@@ -644,18 +945,28 @@ def run_tool_calling_suite(host: str, port: int, verbose: bool = False) -> dict:
                 print(f"FAIL ({', '.join(reasons)})")
 
         except Exception as e:
-            result.update({
-                "tool_detected": False, "correct_name": False,
-                "valid_json_args": False, "arg_score": 0.0,
-                "fully_correct": False, "error": str(e),
-            })
+            result.update(
+                {
+                    "tool_detected": False,
+                    "correct_name": False,
+                    "valid_json_args": False,
+                    "arg_score": 0.0,
+                    "fully_correct": False,
+                    "error": str(e),
+                }
+            )
             print(f"ERROR ({e})")
 
         details.append(result)
 
     score = passed / len(scenarios)
     print(f"  Score: {passed}/{len(scenarios)} = {score:.0%}")
-    return {"score": round(score, 2), "passed": passed, "total": len(scenarios), "details": details}
+    return {
+        "score": round(score, 2),
+        "passed": passed,
+        "total": len(scenarios),
+        "details": details,
+    }
 
 
 # =============================================================================
@@ -705,9 +1016,11 @@ def run_coding_suite(host: str, port: int, verbose: bool = False) -> dict:
 
         try:
             resp = chat_request(
-                host, port,
+                host,
+                port,
                 [{"role": "user", "content": task["prompt"]}],
-                max_tokens=1200, temperature=0.0,
+                max_tokens=4096,
+                temperature=0.0,
                 enable_thinking=False,
             )
             output = _strip_thinking(resp["choices"][0]["message"]["content"])
@@ -715,16 +1028,16 @@ def run_coding_suite(host: str, port: int, verbose: bool = False) -> dict:
 
             # Write code + test to temp file and run
             full_code = code + "\n\n" + task["test_code"]
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".py", delete=False
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
                 f.write(full_code)
                 tmp_path = f.name
 
             try:
                 proc = subprocess.run(
                     [sys.executable, tmp_path],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 runs_ok = proc.returncode == 0
                 correct = "PASS" in proc.stdout
@@ -736,11 +1049,13 @@ def run_coding_suite(host: str, port: int, verbose: bool = False) -> dict:
             finally:
                 os.unlink(tmp_path)
 
-            result.update({
-                "runs_without_error": runs_ok,
-                "correct_output": correct,
-                "fully_correct": runs_ok and correct,
-            })
+            result.update(
+                {
+                    "runs_without_error": runs_ok,
+                    "correct_output": correct,
+                    "fully_correct": runs_ok and correct,
+                }
+            )
             if error_msg and verbose:
                 result["error"] = error_msg[:200]
 
@@ -750,24 +1065,31 @@ def run_coding_suite(host: str, port: int, verbose: bool = False) -> dict:
             elif runs_ok:
                 print("FAIL (wrong output)")
             else:
-                print(f"FAIL (runtime error)")
+                print("FAIL (runtime error)")
                 if verbose and error_msg:
                     print(f"        {error_msg[:120]}")
 
         except Exception as e:
-            result.update({
-                "runs_without_error": False,
-                "correct_output": False,
-                "fully_correct": False,
-                "error": str(e),
-            })
+            result.update(
+                {
+                    "runs_without_error": False,
+                    "correct_output": False,
+                    "fully_correct": False,
+                    "error": str(e),
+                }
+            )
             print(f"ERROR ({e})")
 
         details.append(result)
 
     score = passed / len(tasks)
     print(f"  Score: {passed}/{len(tasks)} = {score:.0%}")
-    return {"score": round(score, 2), "passed": passed, "total": len(tasks), "details": details}
+    return {
+        "score": round(score, 2),
+        "passed": passed,
+        "total": len(tasks),
+        "details": details,
+    }
 
 
 # =============================================================================
@@ -789,7 +1111,9 @@ def extract_answer(text: str):
     m = re.search(r"answer is[:\s]+\\frac\{(\d+)\}\{(\d+)\}", text, re.IGNORECASE)
     if m:
         return f"{m.group(1)}/{m.group(2)}"
-    m = re.search(r"answer is[:\s]+\$?(\d+(?:/\d+)?(?:,\d+)*(?:\.\d+)?)", text, re.IGNORECASE)
+    m = re.search(
+        r"answer is[:\s]+\$?(\d+(?:/\d+)?(?:,\d+)*(?:\.\d+)?)", text, re.IGNORECASE
+    )
     if m:
         return m.group(1).replace(",", "")
 
@@ -860,19 +1184,24 @@ def run_reasoning_suite(host: str, port: int, verbose: bool = False) -> dict:
 
         prompt = (
             "Solve this math problem step by step. "
-            "At the end, write your final answer after \"####\". "
+            'At the end, write your final answer after "####". '
             "If the answer is a fraction, write it as a/b.\n\n"
             f"Problem: {prob['question']}\n\nSolution:"
         )
 
         try:
             resp = chat_request(
-                host, port,
+                host,
+                port,
                 [
-                    {"role": "system", "content": "You are a math tutor. Solve problems step by step, then give the final answer after ####. Use fractions when appropriate."},
+                    {
+                        "role": "system",
+                        "content": "You are a math tutor. Solve problems step by step, then give the final answer after ####. Use fractions when appropriate.",
+                    },
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=1024, temperature=0.0,
+                max_tokens=1024,
+                temperature=0.0,
                 enable_thinking=False,
             )
             output = _strip_thinking(resp["choices"][0]["message"]["content"])
@@ -895,15 +1224,25 @@ def run_reasoning_suite(host: str, port: int, verbose: bool = False) -> dict:
                 print(f"FAIL (expected={expected}, got={got})")
 
         except Exception as e:
-            result = {"id": pid, "expected": prob["answer"], "got": None,
-                      "correct": False, "error": str(e)}
+            result = {
+                "id": pid,
+                "expected": prob["answer"],
+                "got": None,
+                "correct": False,
+                "error": str(e),
+            }
             print(f"ERROR ({e})")
 
         details.append(result)
 
     score = passed / len(problems)
     print(f"  Score: {passed}/{len(problems)} = {score:.0%}")
-    return {"score": round(score, 2), "passed": passed, "total": len(problems), "details": details}
+    return {
+        "score": round(score, 2),
+        "passed": passed,
+        "total": len(problems),
+        "details": details,
+    }
 
 
 # =============================================================================
@@ -922,35 +1261,47 @@ def _strip_thinking(text: str) -> str:
     actual answer. If not, return as-is.
     """
     # Strip <think> tags
-    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
     # If the output doesn't start with thinking patterns, return as-is
-    if not re.match(r'^(?:Thinking Process|##?\s*Thinking|Let me think|The user\b|\d+\.\s+\*\*Analy)', text, re.IGNORECASE):
+    if not re.match(
+        r"^(?:Thinking Process|##?\s*Thinking|Let me think|The user\b|\d+\.\s+\*\*Analy)",
+        text,
+        re.IGNORECASE,
+    ):
         return text
 
     # Look for explicit answer delimiters (last match wins)
     answer_patterns = [
-        r'\n---\n', r'\n\*\*Answer:?\*\*:?\s*\n', r'\n\*\*Response:?\*\*:?\s*\n',
-        r'\n\*\*Final Answer:?\*\*:?\s*\n', r'\n\*\*Output:?\*\*:?\s*\n',
-        r'\n## Answer\s*\n', r'\n## Response\s*\n', r'\n## Final Answer\s*\n',
+        r"\n---\n",
+        r"\n\*\*Answer:?\*\*:?\s*\n",
+        r"\n\*\*Response:?\*\*:?\s*\n",
+        r"\n\*\*Final Answer:?\*\*:?\s*\n",
+        r"\n\*\*Output:?\*\*:?\s*\n",
+        r"\n## Answer\s*\n",
+        r"\n## Response\s*\n",
+        r"\n## Final Answer\s*\n",
     ]
     for pattern in answer_patterns:
         matches = list(re.finditer(pattern, text, re.IGNORECASE))
         if matches:
-            text = text[matches[-1].end():]
+            text = text[matches[-1].end() :]
             return text.strip()
 
     # Qwen3.5 "Thinking Process:" pattern — these models have numbered
     # sections like "1. **Analyze:**", "4. **Final Version:**", etc.
     # Find ALL "Final" sections and take the content after the last one.
-    final_sections = list(re.finditer(
-        r'\d+\.\s+\*\*Final[^*]*\*\*[:\s]*(?:\([^)]*\)\s*)?\.?\n',
-        text, re.IGNORECASE,
-    ))
+    final_sections = list(
+        re.finditer(
+            r"\d+\.\s+\*\*Final[^*]*\*\*[:\s]*(?:\([^)]*\)\s*)?\.?\n",
+            text,
+            re.IGNORECASE,
+        )
+    )
     if final_sections:
         # Try the last "Final" section first; if too short, try second-to-last
         for idx in range(len(final_sections) - 1, -1, -1):
-            candidate = text[final_sections[idx].end():].strip()
+            candidate = text[final_sections[idx].end() :].strip()
             # Remove any subsequent numbered "Final" sections (verification, etc.)
             if idx < len(final_sections) - 1:
                 # Only keep up to the next final section
@@ -958,9 +1309,24 @@ def _strip_thinking(text: str) -> str:
                 candidate = candidate[:next_start].strip()
             else:
                 # Last section — remove trailing thinking artifacts
-                candidate = re.sub(r'\n\s*\d+\.\s+\*\*(?:Final |Verif|Count|Check).*$', '', candidate, flags=re.DOTALL)
-            candidate = re.sub(r'\n\s*\*(?:Count|Verification|Check|Wait|Revised)[:\*,].*$', '', candidate, flags=re.DOTALL)
-            candidate = re.sub(r'^\s*\*(?:Wait|Revised|Note)[^*]*\*\s*\n', '', candidate, flags=re.MULTILINE)
+                candidate = re.sub(
+                    r"\n\s*\d+\.\s+\*\*(?:Final |Verif|Count|Check).*$",
+                    "",
+                    candidate,
+                    flags=re.DOTALL,
+                )
+            candidate = re.sub(
+                r"\n\s*\*(?:Count|Verification|Check|Wait|Revised)[:\*,].*$",
+                "",
+                candidate,
+                flags=re.DOTALL,
+            )
+            candidate = re.sub(
+                r"^\s*\*(?:Wait|Revised|Note)[^*]*\*\s*\n",
+                "",
+                candidate,
+                flags=re.MULTILINE,
+            )
             # Accept if substantial enough (>40 chars to avoid picking up tiny fragments)
             if len(candidate.strip()) > 40:
                 return candidate.strip()
@@ -978,14 +1344,18 @@ def _extract_answer_letter(text: str) -> str | None:
     to avoid matching option re-listings that verbose models emit.
     """
     # Priority 1: explicit "answer is X" / "answer: X" (last match wins)
-    matches = list(re.finditer(
-        r'answer\s+is\s*[:\s]*\(?([A-Ja-j])\)?', text, re.IGNORECASE,
-    ))
+    matches = list(
+        re.finditer(
+            r"answer\s+is\s*[:\s]*\(?([A-Ja-j])\)?",
+            text,
+            re.IGNORECASE,
+        )
+    )
     if matches:
         return matches[-1].group(1).upper()
 
     # Priority 2: standalone letter on its own line (last match)
-    matches = list(re.finditer(r'^\s*([A-Ja-j])\s*$', text, re.MULTILINE))
+    matches = list(re.finditer(r"^\s*([A-Ja-j])\s*$", text, re.MULTILINE))
     if matches:
         return matches[-1].group(1).upper()
 
@@ -994,26 +1364,33 @@ def _extract_answer_letter(text: str) -> str | None:
     tail = text[-500:] if len(text) > 500 else text
 
     # Priority 3: letter followed by period/closing-paren at start of line
-    matches = list(re.finditer(
-        r'^\s*([A-Ja-j])[\.\)]', tail, re.MULTILINE,
-    ))
+    matches = list(
+        re.finditer(
+            r"^\s*([A-Ja-j])[\.\)]",
+            tail,
+            re.MULTILINE,
+        )
+    )
     if matches:
         return matches[-1].group(1).upper()
 
     # Priority 4: parenthesised letter "(X)" in the tail
-    matches = list(re.finditer(r'\(([A-Ja-j])\)', tail))
+    matches = list(re.finditer(r"\(([A-Ja-j])\)", tail))
     if matches:
         return matches[-1].group(1).upper()
 
     # Priority 5: last letter A-J in tail preceded by word boundary,
     # excluding the pronoun "I"/"i" when followed by common verb patterns.
-    candidates = list(re.finditer(r'\b([A-Ja-j])\b', tail))
+    candidates = list(re.finditer(r"\b([A-Ja-j])\b", tail))
     for c in reversed(candidates):
         letter = c.group(1)
         if letter.upper() == "I":
-            after = tail[c.end():c.end() + 15].lstrip()
-            if re.match(r"(?:think|believe|choose|would|will|am|'m|'d|'ll)\b",
-                        after, re.IGNORECASE):
+            after = tail[c.end() : c.end() + 15].lstrip()
+            if re.match(
+                r"(?:think|believe|choose|would|will|am|'m|'d|'ll)\b",
+                after,
+                re.IGNORECASE,
+            ):
                 continue
         return letter.upper()
 
@@ -1054,7 +1431,7 @@ def check_general_response(response: str, checks: dict) -> tuple[bool, str]:
 
     if "valid_json" in checks and checks["valid_json"]:
         try:
-            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            json_match = re.search(r"\{.*\}", text, re.DOTALL)
             if json_match:
                 parsed = json.loads(json_match.group())
                 if "json_has_keys" in checks:
@@ -1067,18 +1444,24 @@ def check_general_response(response: str, checks: dict) -> tuple[bool, str]:
             return False, "invalid JSON"
 
     if "sentence_count" in checks:
-        sentences = [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
+        sentences = [s.strip() for s in re.split(r"[.!?]+", text) if s.strip()]
         if len(sentences) != checks["sentence_count"]:
-            return False, f"sentence count {len(sentences)} != {checks['sentence_count']}"
+            return (
+                False,
+                f"sentence count {len(sentences)} != {checks['sentence_count']}",
+            )
 
     if "max_sentences" in checks:
-        sentences = [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
+        sentences = [s.strip() for s in re.split(r"[.!?]+", text) if s.strip()]
         if len(sentences) > checks["max_sentences"]:
-            return False, f"too many sentences ({len(sentences)} > {checks['max_sentences']})"
+            return (
+                False,
+                f"too many sentences ({len(sentences)} > {checks['max_sentences']})",
+            )
 
     # Check numbered items (e.g. "1. ..." or "1) ...")
     if "min_items" in checks or "max_items" in checks:
-        numbered = [l for l in lines if re.match(r'^\d+[.)]\s', l)]
+        numbered = [l for l in lines if re.match(r"^\d+[.)]\s", l)]
         count = len(numbered)
         if "min_items" in checks and count < checks["min_items"]:
             return False, f"too few items ({count} < {checks['min_items']})"
@@ -1128,9 +1511,11 @@ def run_general_suite(host: str, port: int, verbose: bool = False) -> dict:
 
         try:
             resp = chat_request(
-                host, port,
+                host,
+                port,
                 [no_think_sys, {"role": "user", "content": task["prompt"]}],
-                max_tokens=2048, temperature=0.0,
+                max_tokens=2048,
+                temperature=0.0,
                 enable_thinking=False,
             )
             output = _strip_thinking(resp["choices"][0]["message"]["content"])
@@ -1150,15 +1535,24 @@ def run_general_suite(host: str, port: int, verbose: bool = False) -> dict:
                 print(f"FAIL ({reason})")
 
         except Exception as e:
-            result = {"id": tid, "description": task["description"],
-                      "correct": False, "reason": str(e)}
+            result = {
+                "id": tid,
+                "description": task["description"],
+                "correct": False,
+                "reason": str(e),
+            }
             print(f"ERROR ({e})")
 
         details.append(result)
 
     score = passed / len(tasks)
     print(f"  Score: {passed}/{len(tasks)} = {score:.0%}")
-    return {"score": round(score, 2), "passed": passed, "total": len(tasks), "details": details}
+    return {
+        "score": round(score, 2),
+        "passed": passed,
+        "total": len(tasks),
+        "details": details,
+    }
 
 
 # =============================================================================
@@ -1180,21 +1574,55 @@ Examples:
         """,
     )
     parser.add_argument("--model", required=True, help="Model display name for results")
-    parser.add_argument("--host", default="localhost", help="Server host (default: localhost)")
-    parser.add_argument("--port", type=int, default=8000, help="Server port (default: 8000)")
-    parser.add_argument("--parser", default=None, help="Tool parser name (e.g. hermes, glm47, harmony)")
-    parser.add_argument("--quantization", default=None, help="Quantization label (e.g. 4bit, mxfp4)")
     parser.add_argument(
-        "--suite", nargs="+", default=ALL_SUITES, choices=ALL_SUITES,
+        "--host", default="localhost", help="Server host (default: localhost)"
+    )
+    parser.add_argument(
+        "--port", type=int, default=8000, help="Server port (default: 8000)"
+    )
+    parser.add_argument(
+        "--parser", default=None, help="Tool parser name (e.g. hermes, glm47, harmony)"
+    )
+    parser.add_argument(
+        "--quantization", default=None, help="Quantization label (e.g. 4bit, mxfp4)"
+    )
+    parser.add_argument(
+        "--suite",
+        nargs="+",
+        default=ALL_SUITES,
+        choices=ALL_SUITES,
         help="Which suites to run (default: all)",
     )
-    parser.add_argument("--output", default=None, help="Output JSON file (default: evals/results/<model>.json)")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed output")
-    parser.add_argument("--hardware", default=None, help="Hardware description override (e.g. 'Mac Studio M3 Ultra 256GB')")
-    parser.add_argument("--server-flags", default=None, help="Server flags used (e.g. '--enable-auto-tool-choice --tool-call-parser harmony')")
-    parser.add_argument("--model-path", default=None, help="Local model path (for reproducibility)")
-    parser.add_argument("--engine", default="simple", choices=["simple", "batched"], help="Engine mode (default: simple)")
-    parser.add_argument("--notes", default=None, help="Free-form notes about this eval run")
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Output JSON file (default: evals/results/<model>.json)",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Show detailed output"
+    )
+    parser.add_argument(
+        "--hardware",
+        default=None,
+        help="Hardware description override (e.g. 'Mac Studio M3 Ultra 256GB')",
+    )
+    parser.add_argument(
+        "--server-flags",
+        default=None,
+        help="Server flags used (e.g. '--enable-auto-tool-choice --tool-call-parser harmony')",
+    )
+    parser.add_argument(
+        "--model-path", default=None, help="Local model path (for reproducibility)"
+    )
+    parser.add_argument(
+        "--engine",
+        default="simple",
+        choices=["simple", "batched"],
+        help="Engine mode (default: simple)",
+    )
+    parser.add_argument(
+        "--notes", default=None, help="Free-form notes about this eval run"
+    )
 
     args = parser.parse_args()
 
@@ -1245,6 +1673,7 @@ Examples:
                 httpx.post(url, timeout=10)
             else:
                 import urllib.request
+
                 req = urllib.request.Request(url, method="POST")
                 urllib.request.urlopen(req, timeout=10)
         except Exception:
@@ -1256,7 +1685,9 @@ Examples:
 
     if "tool_calling" in args.suite:
         _bust_cache(args.host, args.port)
-        result["tool_calling"] = run_tool_calling_suite(args.host, args.port, verbose=args.verbose)
+        result["tool_calling"] = run_tool_calling_suite(
+            args.host, args.port, verbose=args.verbose
+        )
 
     if "coding" in args.suite:
         _bust_cache(args.host, args.port)
@@ -1264,11 +1695,15 @@ Examples:
 
     if "reasoning" in args.suite:
         _bust_cache(args.host, args.port)
-        result["reasoning"] = run_reasoning_suite(args.host, args.port, verbose=args.verbose)
+        result["reasoning"] = run_reasoning_suite(
+            args.host, args.port, verbose=args.verbose
+        )
 
     if "general" in args.suite:
         _bust_cache(args.host, args.port)
-        result["general"] = run_general_suite(args.host, args.port, verbose=args.verbose)
+        result["general"] = run_general_suite(
+            args.host, args.port, verbose=args.verbose
+        )
 
     total_time = time.perf_counter() - start_time
     result["total_eval_time_s"] = round(total_time, 1)
@@ -1286,7 +1721,9 @@ Examples:
         if suite_name in result:
             suite_data = result[suite_name]
             if "score" in suite_data:
-                print(f"  {suite_name:15s} {suite_data['score']:.0%} ({suite_data['passed']}/{suite_data['total']})")
+                print(
+                    f"  {suite_name:15s} {suite_data['score']:.0%} ({suite_data['passed']}/{suite_data['total']})"
+                )
             elif "_summary" in suite_data:
                 print(f"  {suite_name:15s} {suite_data['_summary']}")
 
@@ -1298,13 +1735,15 @@ Examples:
         out_path = Path(args.output)
     else:
         # Sanitize model name for filename
-        safe_name = re.sub(r'[^\w\-.]', '-', args.model.lower()).strip('-')
+        safe_name = re.sub(r"[^\w\-.]", "-", args.model.lower()).strip("-")
         out_path = RESULTS_DIR / f"{safe_name}.json"
 
     # Remove internal keys before saving
     save_result = {k: v for k, v in result.items()}
     if "speed" in save_result and "_summary" in save_result["speed"]:
-        save_result["speed"] = {k: v for k, v in save_result["speed"].items() if not k.startswith("_")}
+        save_result["speed"] = {
+            k: v for k, v in save_result["speed"].items() if not k.startswith("_")
+        }
 
     out_path.write_text(json.dumps(save_result, indent=2, ensure_ascii=False) + "\n")
     print(f"\nResults saved to: {out_path}")

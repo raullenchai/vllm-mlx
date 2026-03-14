@@ -140,8 +140,7 @@ class StreamingJSONEncoder:
         if usage is not None:
             usage_json = json.dumps(usage)
             result = (
-                f"data: {self._prefix}{choices_json},"
-                f'"usage":{usage_json}}}' + "\n\n"
+                f'data: {self._prefix}{choices_json},"usage":{usage_json}}}' + "\n\n"
             )
         else:
             result = f"data: {self._prefix}{choices_json}}}" + "\n\n"
@@ -192,8 +191,7 @@ class StreamingJSONEncoder:
         if usage is not None:
             usage_json = json.dumps(usage)
             result = (
-                f"data: {self._prefix}{choices_json},"
-                f'"usage":{usage_json}}}' + "\n\n"
+                f'data: {self._prefix}{choices_json},"usage":{usage_json}}}' + "\n\n"
             )
         else:
             result = f"data: {self._prefix}{choices_json}}}" + "\n\n"

@@ -548,6 +548,7 @@ class TestThreadSafety:
     def test_concurrent_allocation(self):
         """Test concurrent block allocation."""
         import threading
+
         from vllm_mlx.paged_cache import PagedCacheManager
 
         # Use 101 blocks so we have 100 allocatable (after null block)

@@ -3,12 +3,10 @@
 
 import json
 
-import pytest
-
 from vllm_mlx.api.streaming import StreamingJSONEncoder, _escape_json_string
 
-
 # ── _escape_json_string ──────────────────────────────────────────────────
+
 
 class TestEscapeJsonString:
     def test_simple_string(self):
@@ -37,9 +35,12 @@ class TestEscapeJsonString:
 
 # ── StreamingJSONEncoder init ─────────────────────────────────────────────
 
+
 class TestEncoderInit:
     def test_basic_init(self):
-        enc = StreamingJSONEncoder("id-1", "model-1", "chat.completion.chunk", created=1000)
+        enc = StreamingJSONEncoder(
+            "id-1", "model-1", "chat.completion.chunk", created=1000
+        )
         assert enc.response_id == "id-1"
         assert enc.model == "model-1"
         assert enc.object_type == "chat.completion.chunk"
@@ -51,7 +52,9 @@ class TestEncoderInit:
         assert enc.created > 0
 
     def test_prefix_contains_metadata(self):
-        enc = StreamingJSONEncoder("id-1", "mymodel", "chat.completion.chunk", created=42)
+        enc = StreamingJSONEncoder(
+            "id-1", "mymodel", "chat.completion.chunk", created=42
+        )
         assert '"id":"id-1"' in enc._prefix
         assert '"model":"mymodel"' in enc._prefix
         assert '"created":42' in enc._prefix
@@ -59,9 +62,12 @@ class TestEncoderInit:
 
 # ── encode_chat_chunk ─────────────────────────────────────────────────────
 
+
 class TestEncodeChatChunk:
     def _enc(self):
-        return StreamingJSONEncoder("chatcmpl-test", "test-model", "chat.completion.chunk", created=100)
+        return StreamingJSONEncoder(
+            "chatcmpl-test", "test-model", "chat.completion.chunk", created=100
+        )
 
     def test_role_only(self):
         result = self._enc().encode_chat_chunk(role="assistant")
@@ -122,9 +128,12 @@ class TestEncodeChatChunk:
 
 # ── encode_completion_chunk ───────────────────────────────────────────────
 
+
 class TestEncodeCompletionChunk:
     def _enc(self):
-        return StreamingJSONEncoder("cmpl-test", "test-model", "text_completion", created=200)
+        return StreamingJSONEncoder(
+            "cmpl-test", "test-model", "text_completion", created=200
+        )
 
     def test_basic_text(self):
         result = self._enc().encode_completion_chunk(text="Hello")
@@ -157,6 +166,7 @@ class TestEncodeCompletionChunk:
 
 # ── encode_done ───────────────────────────────────────────────────────────
 
+
 class TestEncodeDone:
     def test_done_message(self):
         enc = StreamingJSONEncoder("id", "model", "type", created=0)
@@ -164,6 +174,7 @@ class TestEncodeDone:
 
 
 # ── Valid JSON output ─────────────────────────────────────────────────────
+
 
 class TestValidJson:
     """Ensure all outputs are valid JSON (parseable)."""

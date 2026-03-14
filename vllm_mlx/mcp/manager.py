@@ -5,10 +5,10 @@ MCP Client Manager for handling multiple MCP server connections.
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .client import MCPClient
-from .tools import merge_tools, mcp_tools_to_openai, openai_call_to_mcp
+from .tools import mcp_tools_to_openai, merge_tools, openai_call_to_mcp
 from .types import (
     MCPConfig,
     MCPServerStatus,
@@ -38,7 +38,7 @@ class MCPClientManager:
             config: MCP configuration with server definitions
         """
         self.config = config
-        self._clients: Dict[str, MCPClient] = {}
+        self._clients: dict[str, MCPClient] = {}
         self._started = False
         self._lock = asyncio.Lock()
 
@@ -111,7 +111,7 @@ class MCPClientManager:
             self._started = False
             logger.info("MCP client manager stopped")
 
-    def get_all_tools(self) -> List[MCPTool]:
+    def get_all_tools(self) -> list[MCPTool]:
         """
         Get all tools from all connected servers.
 
@@ -124,7 +124,7 @@ class MCPClientManager:
                 tools.extend(client.tools)
         return tools
 
-    def get_all_tools_openai(self) -> List[Dict[str, Any]]:
+    def get_all_tools_openai(self) -> list[dict[str, Any]]:
         """
         Get all tools in OpenAI function calling format.
 
@@ -135,8 +135,8 @@ class MCPClientManager:
 
     def get_merged_tools(
         self,
-        user_tools: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[Dict[str, Any]]:
+        user_tools: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Get MCP tools merged with user-provided tools.
 
@@ -150,7 +150,7 @@ class MCPClientManager:
         """
         return merge_tools(self.get_all_tools(), user_tools)
 
-    def get_server_status(self) -> List[MCPServerStatus]:
+    def get_server_status(self) -> list[MCPServerStatus]:
         """
         Get status of all servers.
 
@@ -159,7 +159,7 @@ class MCPClientManager:
         """
         return [client.get_status() for client in self._clients.values()]
 
-    def get_client(self, server_name: str) -> Optional[MCPClient]:
+    def get_client(self, server_name: str) -> MCPClient | None:
         """
         Get client for a specific server.
 
@@ -174,8 +174,8 @@ class MCPClientManager:
     async def execute_tool(
         self,
         full_name: str,
-        arguments: Dict[str, Any],
-        timeout: Optional[float] = None,
+        arguments: dict[str, Any],
+        timeout: float | None = None,
     ) -> MCPToolResult:
         """
         Execute a tool by its full name (server__tool).
@@ -233,8 +233,8 @@ class MCPClientManager:
 
     async def execute_tool_call(
         self,
-        tool_call: Dict[str, Any],
-        timeout: Optional[float] = None,
+        tool_call: dict[str, Any],
+        timeout: float | None = None,
     ) -> MCPToolResult:
         """
         Execute a tool call from OpenAI format.
@@ -255,7 +255,7 @@ class MCPClientManager:
 
         return await self.execute_tool(full_name, arguments, timeout)
 
-    def _find_tool_server(self, tool_name: str) -> Optional[str]:
+    def _find_tool_server(self, tool_name: str) -> str | None:
         """
         Find which server has a tool by name.
 
@@ -282,7 +282,7 @@ class MCPClientManager:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def reconnect(self, server_name: Optional[str] = None):
+    async def reconnect(self, server_name: str | None = None):
         """
         Reconnect to server(s).
 

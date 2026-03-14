@@ -10,7 +10,6 @@ Supports:
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +23,9 @@ class TranscriptionResult:
     """Result from audio transcription."""
 
     text: str
-    language: Optional[str] = None
-    duration: Optional[float] = None
-    segments: Optional[list] = None
+    language: str | None = None
+    duration: float | None = None
+    segments: list | None = None
 
 
 class STTEngine:
@@ -80,8 +79,8 @@ class STTEngine:
 
     def transcribe(
         self,
-        audio_path: Union[str, Path],
-        language: Optional[str] = None,
+        audio_path: str | Path,
+        language: str | None = None,
         task: str = "transcribe",
     ) -> TranscriptionResult:
         """
@@ -140,9 +139,9 @@ class STTEngine:
 
 
 def transcribe_audio(
-    audio_path: Union[str, Path],
+    audio_path: str | Path,
     model_name: str = DEFAULT_WHISPER_MODEL,
-    language: Optional[str] = None,
+    language: str | None = None,
 ) -> TranscriptionResult:
     """
     Convenience function to transcribe audio without managing engine.

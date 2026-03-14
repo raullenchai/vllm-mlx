@@ -280,11 +280,10 @@ class DeepSeekV31ToolParser(ToolParser):
                 }
                 self.streamed_args_for_tool[self.current_tool_id] = cur_arguments
             elif cur_arguments and prev_arguments:
-                if (
-                    len(cur_arguments) > len(prev_arguments)
-                    and cur_arguments.startswith(prev_arguments)
-                ):
-                    diff = cur_arguments[len(prev_arguments):]
+                if len(cur_arguments) > len(
+                    prev_arguments
+                ) and cur_arguments.startswith(prev_arguments):
+                    diff = cur_arguments[len(prev_arguments) :]
                     delta = {
                         "tool_calls": [
                             {

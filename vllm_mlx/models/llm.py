@@ -6,14 +6,11 @@ This module provides a wrapper around mlx-lm for LLM inference,
 integrating with vLLM's model execution system.
 """
 
-import copy
 import itertools
 import logging
-import time
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Iterator
-
-import mlx.core as mx
+from typing import Any
 
 from ..utils.decode import IncrementalDecoder
 
@@ -86,7 +83,6 @@ class MLXLanguageModel:
         self.prefill_step_size = prefill_step_size
         self.kv_bits = kv_bits
         self.kv_group_size = kv_group_size
-
         self.model = None
         self.tokenizer = None
         self.draft_model = None
@@ -148,8 +144,7 @@ class MLXLanguageModel:
 
         except ImportError:
             raise ImportError(
-                "mlx-lm is required for LLM inference. "
-                "Install with: pip install mlx-lm"
+                "mlx-lm is required for LLM inference. Install with: pip install mlx-lm"
             )
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
@@ -257,6 +252,7 @@ class MLXLanguageModel:
         if self._prompt_cache is None:
             # First call — create fresh cache
             from mlx_lm.models.cache import make_prompt_cache
+
             self._prompt_cache = make_prompt_cache(self.model)
             # When using speculative decoding, mlx-lm expects the prompt_cache
             # to contain layers for both the main model and draft model:
@@ -274,7 +270,7 @@ class MLXLanguageModel:
             for c in self._prompt_cache:
                 if not c.is_trimmable():
                     continue
-                current = c.offset if hasattr(c, 'offset') else 0
+                current = c.offset if hasattr(c, "offset") else 0
                 if current > 0:
                     c.trim(current)
             self._cached_token_ids = []
@@ -287,7 +283,7 @@ class MLXLanguageModel:
         for c in self._prompt_cache:
             if not c.is_trimmable():
                 continue
-            current = c.offset if hasattr(c, 'offset') else 0
+            current = c.offset if hasattr(c, "offset") else 0
             to_trim = current - common_len
             if to_trim > 0:
                 c.trim(to_trim)
@@ -310,9 +306,8 @@ class MLXLanguageModel:
         if not self._loaded:
             self.load()
 
-        add_special_tokens = (
-            self.tokenizer.bos_token is None
-            or not prompt.startswith(self.tokenizer.bos_token)
+        add_special_tokens = self.tokenizer.bos_token is None or not prompt.startswith(
+            self.tokenizer.bos_token
         )
         full_token_ids = self.tokenizer.encode(
             prompt, add_special_tokens=add_special_tokens
@@ -358,9 +353,8 @@ class MLXLanguageModel:
         t0 = _time.perf_counter()
 
         # Tokenize the full prompt
-        add_special_tokens = (
-            self.tokenizer.bos_token is None
-            or not prompt.startswith(self.tokenizer.bos_token)
+        add_special_tokens = self.tokenizer.bos_token is None or not prompt.startswith(
+            self.tokenizer.bos_token
         )
         full_token_ids = self.tokenizer.encode(
             prompt, add_special_tokens=add_special_tokens
@@ -375,9 +369,7 @@ class MLXLanguageModel:
         try:
             suffix_tokens = self._prepare_cache_for_prompt(full_token_ids)
         except Exception as cache_err:
-            logger.warning(
-                "Prompt cache error (%s), resetting cache", cache_err
-            )
+            logger.warning("Prompt cache error (%s), resetting cache", cache_err)
             self._prompt_cache = None
             self._cached_token_ids = []
             suffix_tokens = self._prepare_cache_for_prompt(full_token_ids)
@@ -390,9 +382,7 @@ class MLXLanguageModel:
                 f"(saved {prefix_len} tokens of prefill)"
             )
         else:
-            logger.info(
-                f"Prompt cache miss: {len(full_token_ids)} tokens to prefill"
-            )
+            logger.info(f"Prompt cache miss: {len(full_token_ids)} tokens to prefill")
 
         # Create sampler with parameters
         sampler = self._create_sampler(temperature, top_p)
@@ -456,7 +446,8 @@ class MLXLanguageModel:
                 if self._prompt_cache is not None and prefix_len > 0:
                     logger.warning(
                         "Generation failed with cached prompt (%s), "
-                        "retrying with fresh cache", gen_err,
+                        "retrying with fresh cache",
+                        gen_err,
                     )
                     # Reset cache and retry with full prompt
                     self._prompt_cache = None

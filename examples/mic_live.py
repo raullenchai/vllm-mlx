@@ -14,10 +14,10 @@ Requirements:
 """
 
 import argparse
-import sys
 import os
-import tempfile
 import queue
+import sys
+import tempfile
 import threading
 import time
 from collections import deque
@@ -48,8 +48,8 @@ class LiveTranscriber:
 
         # VAD settings
         self.silence_threshold = 0.015  # Audio level threshold
-        self.speech_pad_ms = 300        # Padding around speech
-        self.min_speech_ms = 500        # Minimum speech duration
+        self.speech_pad_ms = 300  # Padding around speech
+        self.min_speech_ms = 500  # Minimum speech duration
         self.silence_duration_ms = 700  # Silence to trigger transcription
 
         # State
@@ -70,6 +70,7 @@ class LiveTranscriber:
     def load_model(self):
         """Load STT model."""
         from vllm_mlx.audio.stt import STTEngine
+
         print(f"Loading: {self.model_name}")
         self.engine = STTEngine(self.model_name)
         self.engine.load()
@@ -77,7 +78,7 @@ class LiveTranscriber:
 
     def get_audio_level(self, audio):
         """Get RMS audio level."""
-        return np.sqrt(np.mean(audio ** 2))
+        return np.sqrt(np.mean(audio**2))
 
     def audio_callback(self, indata, frames, time_info, status):
         """Audio input callback."""
@@ -127,7 +128,10 @@ class LiveTranscriber:
                     speech_ms = (timestamp - self.speech_start) * 1000
 
                     # Check if silence long enough to trigger transcription
-                    if silence_ms > self.silence_duration_ms and speech_ms > self.min_speech_ms:
+                    if (
+                        silence_ms > self.silence_duration_ms
+                        and speech_ms > self.min_speech_ms
+                    ):
                         # Transcribe collected audio
                         audio_array = np.array(speech_buffer, dtype=np.float32)
 
@@ -184,7 +188,7 @@ class LiveTranscriber:
             channels=1,
             dtype=np.float32,
             callback=self.audio_callback,
-            blocksize=int(SAMPLE_RATE * 0.1)
+            blocksize=int(SAMPLE_RATE * 0.1),
         )
 
         try:
@@ -203,11 +207,20 @@ class LiveTranscriber:
 
 def main():
     parser = argparse.ArgumentParser(description="Live Speech Transcription")
-    parser.add_argument("--model", "-m", default="whisper-small",
-                        help="Model (whisper-small, whisper-medium, parakeet)")
+    parser.add_argument(
+        "--model",
+        "-m",
+        default="whisper-small",
+        help="Model (whisper-small, whisper-medium, parakeet)",
+    )
     parser.add_argument("--language", "-l", help="Language code (en, es, etc.)")
-    parser.add_argument("--sensitivity", "-s", type=float, default=0.015,
-                        help="Mic sensitivity 0.01-0.05 (default: 0.015)")
+    parser.add_argument(
+        "--sensitivity",
+        "-s",
+        type=float,
+        default=0.015,
+        help="Mic sensitivity 0.01-0.05 (default: 0.015)",
+    )
     args = parser.parse_args()
 
     print()
@@ -218,10 +231,7 @@ def main():
 
     model_name = MODEL_ALIASES.get(args.model, args.model)
 
-    transcriber = LiveTranscriber(
-        model_name=model_name,
-        language=args.language
-    )
+    transcriber = LiveTranscriber(model_name=model_name, language=args.language)
     transcriber.silence_threshold = args.sensitivity
 
     transcriber.load_model()

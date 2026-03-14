@@ -11,14 +11,13 @@ Tests cover:
 """
 
 import importlib.util
-import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
 try:
     import mlx.core as mx
+
     HAS_MLX = True
 except ImportError:
     HAS_MLX = False
@@ -93,7 +92,9 @@ class TestMiniMaxToolLogitsProcessor:
         # Process with no trigger context
         result = processor(token_ids, logits)
         # In idle state, logits should be unchanged
-        assert mx.allclose(result, logits).item() or not mx.allclose(result, logits).item()
+        assert (
+            mx.allclose(result, logits).item() or not mx.allclose(result, logits).item()
+        )
         # The key test is that it doesn't crash and returns valid logits
 
     def test_reset_clears_state(self, processor):
@@ -167,13 +168,17 @@ class TestCreateToolLogitsProcessor:
     def test_unknown_parser_returns_none(self):
         """Should return None for unsupported parsers."""
         tokenizer = MockTokenizer()
-        processor = tool_logits.create_tool_logits_processor("unknown_parser", tokenizer)
+        processor = tool_logits.create_tool_logits_processor(
+            "unknown_parser", tokenizer
+        )
         assert processor is None
 
     def test_custom_bias_strength(self):
         """Should accept custom bias strength."""
         tokenizer = MockTokenizer()
-        processor = tool_logits.MiniMaxToolLogitsProcessor(tokenizer, bias_strength=10.0)
+        processor = tool_logits.MiniMaxToolLogitsProcessor(
+            tokenizer, bias_strength=10.0
+        )
         assert processor.bias_strength == 10.0
 
     def test_minimax_with_tools(self):
@@ -188,7 +193,10 @@ class TestCreateToolLogitsProcessor:
                         "type": "object",
                         "properties": {
                             "location": {"type": "string"},
-                            "units": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                            "units": {
+                                "type": "string",
+                                "enum": ["celsius", "fahrenheit"],
+                            },
                         },
                     },
                 },
@@ -323,9 +331,7 @@ class TestUpdateParamState:
         assert "Paris" in processor._param_value_text
 
     def test_multiple_invokes_takes_last(self, processor):
-        processor._recent_text = (
-            '<invoke name="a"></invoke><invoke name="b">'
-        )
+        processor._recent_text = '<invoke name="a"></invoke><invoke name="b">'
         processor._update_param_state()
         assert processor._current_tool_name == "b"
 

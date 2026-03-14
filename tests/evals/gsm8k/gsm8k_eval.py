@@ -22,7 +22,6 @@ import asyncio
 import json
 import re
 import time
-from typing import List, Optional, Tuple
 
 import requests
 from tqdm import tqdm
@@ -72,7 +71,7 @@ GSM8K_SAMPLE = [
 ]
 
 
-def extract_answer(text: str) -> Optional[str]:
+def extract_answer(text: str) -> str | None:
     """Extract numerical answer from model response."""
     # Try to find answer in various formats
     patterns = [
@@ -111,12 +110,12 @@ def normalize_answer(answer: str) -> str:
 
 
 async def evaluate_with_server(
-    questions: List[dict],
+    questions: list[dict],
     host: str = "localhost",
     port: int = 8000,
     model: str = "test",
     max_tokens: int = 512,
-) -> Tuple[List[dict], float, int]:
+) -> tuple[list[dict], float, int]:
     """Evaluate using OpenAI-compatible server."""
     results = []
     total_output_tokens = 0
@@ -129,7 +128,7 @@ async def evaluate_with_server(
     for q in pbar:
         prompt = f"""Solve this math problem step by step. At the end, provide the final numerical answer after "####".
 
-Question: {q['question']}
+Question: {q["question"]}
 
 Solution:"""
 
@@ -185,7 +184,7 @@ Solution:"""
                 }
             )
             pbar.set_postfix(
-                {"acc": f"{correct_count/len(results):.1%}", "last": "Error"}
+                {"acc": f"{correct_count / len(results):.1%}", "last": "Error"}
             )
 
     pbar.close()
@@ -194,12 +193,13 @@ Solution:"""
 
 
 async def evaluate_with_engine(
-    questions: List[dict],
+    questions: list[dict],
     model_name: str,
     max_tokens: int = 512,
-) -> Tuple[List[dict], float, int]:
+) -> tuple[list[dict], float, int]:
     """Evaluate using local engine (no server)."""
     from mlx_lm import load
+
     from vllm_mlx import AsyncEngineCore, EngineConfig, SamplingParams, SchedulerConfig
 
     print(f"Loading model: {model_name}")
@@ -226,7 +226,7 @@ async def evaluate_with_engine(
         for q in pbar:
             prompt = f"""Solve this math problem step by step. At the end, provide the final numerical answer after "####".
 
-Question: {q['question']}
+Question: {q["question"]}
 
 Solution:"""
 
@@ -288,7 +288,7 @@ Solution:"""
                     }
                 )
                 pbar.set_postfix(
-                    {"acc": f"{correct_count/len(results):.1%}", "last": "Error"}
+                    {"acc": f"{correct_count / len(results):.1%}", "last": "Error"}
                 )
 
         pbar.close()
@@ -298,8 +298,8 @@ Solution:"""
 
 
 def load_gsm8k_dataset(
-    num_questions: Optional[int] = None, use_sample: bool = False
-) -> List[dict]:
+    num_questions: int | None = None, use_sample: bool = False
+) -> list[dict]:
     """Load GSM8K dataset from Hugging Face or use sample questions."""
     if use_sample:
         questions = GSM8K_SAMPLE

@@ -214,7 +214,7 @@ class TestContinuousBatchingIntegration:
             print(f"\nBatch: {len(prompts)} requests in {batch_time:.2f}s")
             print(f"Total tokens: {total_tokens}")
             print(f"Throughput: {batch_throughput:.1f} tok/s")
-            print(f"Requests/sec: {len(prompts)/batch_time:.2f}")
+            print(f"Requests/sec: {len(prompts) / batch_time:.2f}")
 
             # Batching should achieve reasonable throughput
             assert batch_throughput > 100  # At least 100 tok/s
@@ -313,8 +313,8 @@ if __name__ == "__main__":
             print(f"Total time:    {total_time:.2f}s")
             print(f"Requests:      {len(prompts)}")
             print(f"Total tokens:  {total_tokens}")
-            print(f"Throughput:    {total_tokens/total_time:.1f} tok/s")
-            print(f"Requests/sec:  {len(prompts)/total_time:.2f}")
+            print(f"Throughput:    {total_tokens / total_time:.1f} tok/s")
+            print(f"Requests/sec:  {len(prompts) / total_time:.2f}")
             print("=" * 60)
 
     asyncio.run(run_benchmark())

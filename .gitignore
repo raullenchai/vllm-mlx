@@ -100,4 +100,13 @@ temp/
 benchmark_results_*.json
 tier*_benchmark.json
 test_golden_*.py
+gsm8k_*.json
 *.jinja
+
+# Aider
+.aider*
+
+# Temp reports (scan outputs)
+reports/*.json
+reports/*.md
+reports/scan_*

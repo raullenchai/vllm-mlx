@@ -260,48 +260,61 @@ Prompt cache keeps multi-turn conversations fast. Ollama and mlx-lm re-prefill t
 | **OpenAI API** | ✓ | ✓ | ✓ | ✗ |
 
 <details>
-<summary><strong>Full 15-model bar chart</strong></summary>
+<summary><strong>Full 15-model bar chart (all engines)</strong></summary>
 
 ```
 Phi-4 Mini 14B            ⚡ Rapid-MLX  ████████████████████████████████████████████████████████████  174
+                            Upstream   ██████████████████████████████████████████████████████████     170
                             mlx-lm     ████████████████████████                                      77
                             llama.cpp  █████████████████                                              55
                             Ollama     ████████████████                                               51
 
 Qwen3.5-4B                ⚡ Rapid-MLX  █████████████████████████████████████████████████████         158
+                            Upstream   █████████████████████████████████████████████████████          155
                             mlx-lm     ████████████████████████████████████████████████████████       168
 
 GPT-OSS 20B               ⚡ Rapid-MLX  ████████████████████████████████████████                      123
+                            Upstream   █████████████████████████                                      79
                             mlx-lm     █████████████████████████                                      79
 
 Hermes-3-Llama 8B         ⚡ Rapid-MLX  ████████████████████████████████████████                      123
+                            Upstream   ███████████████████████████████████████                        122
                             mlx-lm     █████████████████████████████████████████                      127
 
 Qwen3.5-9B                ⚡ Rapid-MLX  ███████████████████████████████████                           109
-                            mlx-lm     ███████████████                                                61
+                            Upstream   █████████████████████████████████                              104
+                            mlx-lm     ███████████████████                                            61
                             Ollama     ████████                                                       26
 
 Qwen3.5-35B-A3B           ⚡ Rapid-MLX  ██████████████████████████                                     82
+                            Upstream   █████████████████████████                                       80
                             mlx-lm     ███████████████████████████                                     85
 
 Qwen3-Coder-Next 80B      ⚡ Rapid-MLX  ████████████████████████                                       74
+                            Upstream   ██████████████████████                                          69
                             mlx-lm     ████████████████████████                                        76
 
 GLM-4.7-Flash 9B          ⚡ Rapid-MLX  ███████████████████                                            60
+                            Upstream   █████████████████                                               56
 
 Gemma 3 12B                 Rapid-MLX  ███████████████                                                49
                             mlx-lm     ███████████████████████                                         73
+                            Ollama     █████████████████                                               54
 
 Devstral-Small-2 24B      ⚡ Rapid-MLX  ███████████████                                                48
+                            Upstream   ███████████████                                                 48
                             mlx-lm     ███████████████                                                 49
 
 Mistral Small 24B          ⚡ Rapid-MLX  ███████████████                                                48
+                            Upstream   ██████████████                                                  47
                             mlx-lm     █████████████                                                   41
 
 Qwen3.5-122B-A10B          ⚡ Rapid-MLX  ██████████████                                                 44
+                            Upstream   █████████████                                                   43
                             mlx-lm     ██████████████                                                  45
 
 Qwen3.5-27B                 Rapid-MLX  ████████████                                                   39
+                            Upstream   ████████████                                                    38
                             mlx-lm     ████████████                                                    39
 ```
 
@@ -526,8 +539,6 @@ Vision, audio (STT/TTS), video understanding, and text embeddings — all throug
 Issues and PRs welcome at [github.com/raullenchai/Rapid-MLX](https://github.com/raullenchai/Rapid-MLX).
 
 We need community data — hardware benchmarks, client verifications, model reports. If you test a model on your Mac, [open an issue](https://github.com/raullenchai/Rapid-MLX/issues/new) with your hardware, model, decode speed, and what worked.
-
-Built on [mlx-lm](https://github.com/ml-explore/mlx-examples) and [mlx-vlm](https://github.com/Blaizzy/mlx-vlm) — Apple's MLX framework for efficient on-device inference.
 
 ## License
 

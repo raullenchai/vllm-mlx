@@ -48,6 +48,8 @@ def make_model():
     model._cache_lock = False
     model._rnn_state_snapshot = None
     model._snapshot_prefix_ids = []
+    model.prefill_step_size = 2048
+    model.model = None
     return model
 
 
@@ -116,29 +118,30 @@ class TestSnapshotRnnLayers:
 
 
 class TestRestoreRnnLayers:
-    def test_restore_succeeds_with_matching_prefix(self):
+    def test_restore_succeeds_with_exact_matching_prefix(self):
+        """Restore succeeds when common_len == snap_len (no gap tokens)."""
         model = make_model()
         cache = make_hybrid_cache(num_rnn=2, num_kv=1, kv_offset=100)
         model._prompt_cache = cache
         model._cached_token_ids = [1, 2, 3, 4, 5]
 
-        # Take snapshot
+        # Take snapshot at exactly 5 tokens
         model._snapshot_rnn_layers([1, 2, 3, 4, 5])
 
         # Mutate the cache (simulating generation)
         cache[0].data[0] = 999.0
         cache[2].offset = 150  # KV grew during generation
 
-        # Now restore with a prompt that shares the same prefix
+        # Now restore with a prompt that shares the same 5-token prefix
         prompt = [1, 2, 3, 4, 5, 6, 7]  # same prefix + new suffix
-        common_len = 5
+        common_len = 5  # matches snap_len exactly → no gap tokens
         result = model._restore_rnn_layers(prompt, common_len)
 
         assert result is True
         # Non-trimmable layers should be restored from snapshot
         assert model._prompt_cache[0].data[0] == 0.0  # restored, not 999.0
-        # KV layers should be trimmed to common_len
-        assert model._prompt_cache[2].offset == common_len
+        # KV layers should be trimmed to snap_len (== common_len here)
+        assert model._prompt_cache[2].offset == 5
 
     def test_restore_fails_with_short_common_len(self):
         model = make_model()
@@ -188,15 +191,13 @@ class TestPrepareCacheHybrid:
         model._prompt_cache = cache
         model._cached_token_ids = [1, 2, 3, 4, 5]
 
-        # Take snapshot
+        # Take snapshot at exactly 5 tokens (same as cached)
         model._snapshot_rnn_layers([1, 2, 3, 4, 5])
 
         # Simulate generation mutating the cache
         cache[0].data[0] = 999.0
         cache[2].offset = 80
 
-        # Mock _cache_is_trimmable to return False (hybrid cache isn't fully trimmable)
-        # The real implementation would return False for hybrid caches
         original_is_trimmable = model._cache_is_trimmable
 
         def mock_not_trimmable():
@@ -204,17 +205,19 @@ class TestPrepareCacheHybrid:
 
         model._cache_is_trimmable = mock_not_trimmable
 
-        # Prepare with overlapping prompt
+        # Prepare with overlapping prompt (common_len == snap_len == 5)
         prompt = [1, 2, 3, 4, 5, 10, 11, 12]
         suffix = model._prepare_cache_for_prompt(prompt)
 
         assert suffix == [10, 11, 12]
         # RNN layers restored
         assert model._prompt_cache[0].data[0] == 0.0
+        # KV trimmed to snap_len (5)
+        assert model._prompt_cache[2].offset == 5
 
         model._cache_is_trimmable = original_is_trimmable
 
-    def test_hybrid_cache_no_snapshot_recreates(self):
+    def test_hybrid_cache_no_snapshot_no_overlap_recreates(self):
         model = make_model()
         model._prompt_cache = make_hybrid_cache(num_rnn=2, num_kv=1, kv_offset=50)
         model._cached_token_ids = [1, 2, 3]
@@ -230,10 +233,11 @@ class TestPrepareCacheHybrid:
         fresh = make_hybrid_cache(num_rnn=2, num_kv=1, kv_offset=0)
         model._make_fresh_cache = lambda: fresh
 
-        prompt = [1, 2, 3, 4, 5]
+        # Completely different prompt — no overlap
+        prompt = [99, 98, 97, 96]
         suffix = model._prepare_cache_for_prompt(prompt)
 
-        # No snapshot → full prompt returned
+        # No overlap, no snapshot → full prompt returned
         assert suffix == prompt
         assert model._cached_token_ids == []
 

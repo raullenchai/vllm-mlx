@@ -263,12 +263,57 @@ class MLXLanguageModel:
         self._snapshot_prefix_ids = list(prefix_ids)
         logger.info(f"Saved RNN state snapshot for {len(prefix_ids)} token prefix")
 
+    def _prefill_and_snapshot(self, prompt_token_ids: list[int], prefix_len: int) -> list[int]:
+        """Create fresh cache, prefill the common prefix, snapshot, return suffix.
+
+        For hybrid caches (Qwen3.5), this enables prefix reuse across requests
+        that share the same system prompt but have different user messages.
+        The RNN state after processing the prefix is snapshotted so future
+        requests can skip re-processing it.
+
+        Args:
+            prompt_token_ids: Full prompt token IDs for this request.
+            prefix_len: Number of leading tokens that match the previous request.
+
+        Returns:
+            Token IDs that still need to be processed (the suffix).
+        """
+        import mlx.core as mx
+
+        self._prompt_cache = self._make_fresh_cache()
+        self._cached_token_ids = []
+
+        if prefix_len <= 0:
+            return prompt_token_ids
+
+        prefix_tokens = mx.array(prompt_token_ids[:prefix_len])
+        # Process in chunks matching prefill_step_size
+        step = self.prefill_step_size
+        for start in range(0, prefix_len, step):
+            chunk = prefix_tokens[start : start + step]
+            self.model(chunk[None], cache=self._prompt_cache)
+        # Evaluate all cache states before snapshotting
+        mx.eval([c.state for c in self._prompt_cache])
+
+        # Snapshot the RNN state at the prefix boundary
+        self._cached_token_ids = list(prompt_token_ids[:prefix_len])
+        self._snapshot_rnn_layers(prompt_token_ids[:prefix_len])
+
+        # Return the suffix
+        return prompt_token_ids[prefix_len:]
+
     def _restore_rnn_layers(self, prompt_token_ids: list[int], common_len: int) -> bool:
         """Restore non-trimmable layers from snapshot and trim trimmable layers.
+
+        The RNN state is restored to snap_len tokens. If common_len > snap_len,
+        we must re-run tokens [snap_len:common_len] through the model to bring
+        both RNN and KV state into sync at common_len.
 
         Returns True if restore succeeded.
         """
         import copy
+
+        import mlx.core as mx
 
         if self._rnn_state_snapshot is None:
             return False
@@ -283,15 +328,32 @@ class MLXLanguageModel:
         for i, snap in enumerate(self._rnn_state_snapshot):
             if snap is not None:
                 self._prompt_cache[i] = copy.deepcopy(snap)
-        # Trim trimmable layers to common_len
+        # Trim trimmable layers to snap_len (must match RNN state position)
         for c in self._prompt_cache:
             if c.is_trimmable():
                 current = c.offset if hasattr(c, "offset") else c.size()
-                to_trim = current - common_len
+                to_trim = current - snap_len
                 if to_trim > 0:
                     c.trim(to_trim)
-        self._cached_token_ids = self._cached_token_ids[:common_len]
-        logger.info(f"Restored RNN snapshot ({snap_len} tok), trimmed KV to {common_len}")
+
+        # If there are gap tokens between snap_len and common_len,
+        # run them through the model to advance both RNN and KV state
+        if common_len > snap_len:
+            gap_tokens = mx.array(prompt_token_ids[snap_len:common_len])
+            step = self.prefill_step_size
+            for start in range(0, len(gap_tokens), step):
+                chunk = gap_tokens[start : start + step]
+                self.model(chunk[None], cache=self._prompt_cache)
+            mx.eval([c.state for c in self._prompt_cache])
+            # Update snapshot to common_len — better checkpoint for next time
+            self._snapshot_rnn_layers(prompt_token_ids[:common_len])
+
+        self._cached_token_ids = list(prompt_token_ids[:common_len])
+        logger.info(
+            f"Restored RNN snapshot ({snap_len} tok), "
+            f"re-ran {common_len - snap_len} gap tokens, "
+            f"cache at {common_len}"
+        )
         return True
 
     def _make_fresh_cache(self) -> list:
@@ -338,11 +400,14 @@ class MLXLanguageModel:
             if self._is_hybrid_cache():
                 # Hybrid cache (e.g. Qwen3.5): mix of trimmable KVCache +
                 # non-trimmable ArraysCache.  Try to restore from snapshot.
-                common_len = self._find_common_prefix_len(prompt_token_ids)
                 if common_len > 0 and self._restore_rnn_layers(prompt_token_ids, common_len):
                     suffix = prompt_token_ids[common_len:]
                     return suffix
-            # Pure non-trimmable or no snapshot match — recreate
+                # No usable snapshot but there IS a common prefix — do a
+                # prefix-only prefill to build the snapshot for next time.
+                if common_len > 0:
+                    return self._prefill_and_snapshot(prompt_token_ids, common_len)
+            # Pure non-trimmable or no overlap — recreate
             self._prompt_cache = self._make_fresh_cache()
             self._cached_token_ids = []
             return prompt_token_ids
@@ -566,11 +631,6 @@ class MLXLanguageModel:
                         f"(prompt={len(full_token_ids)} tokens, "
                         f"prefilled={len(prompt_to_send)} tokens)"
                     )
-                    # Snapshot RNN state after first prompt processing
-                    if (self._is_hybrid_cache() and
-                        (self._rnn_state_snapshot is None or
-                         len(full_token_ids) > len(self._snapshot_prefix_ids))):
-                        self._snapshot_rnn_layers(full_token_ids)
                 token_id = response.token if hasattr(response, "token") else 0
                 new_text = decoder.add_token(token_id)
                 accumulated_text += new_text

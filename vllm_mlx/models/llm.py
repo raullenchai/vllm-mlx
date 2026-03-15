@@ -388,23 +388,47 @@ class MLXLanguageModel:
         return cache
 
     def _validate_and_setup_mtp(self) -> None:
-        """Validate MTP support and set up if available."""
+        """Validate MTP support and set up if available.
+
+        If the model doesn't natively support MTP methods (return_hidden,
+        mtp_forward), tries to monkey-patch them onto the model class.
+        """
         from ..patches.qwen3_next_mtp import validate_mtp_support
 
-        if validate_mtp_support(self.model):
-            self._mtp_validated = True
-            if self.draft_model is not None:
-                logger.warning(
-                    "[MTP] Both MTP and speculative decoding (draft model) are enabled. "
-                    "MTP will be used; draft model will be ignored during MTP generation."
-                )
-            logger.info("[MTP] MTP validated and enabled for SimpleEngine")
-        else:
-            self._mtp_validated = False
+        if not validate_mtp_support(self.model):
+            # Try monkey-patching the model
+            try:
+                from ..patches.qwen3_next_mtp_patch import patch_model_for_mtp
+
+                if patch_model_for_mtp(self.model, model_name=self.model_name):
+                    logger.info("[MTP] Applied monkey-patch to model class")
+                    # Re-validate after patching
+                    if not validate_mtp_support(self.model):
+                        self._mtp_validated = False
+                        logger.warning(
+                            "[MTP] MTP validation failed after patching — "
+                            "--enable-mtp will be ignored."
+                        )
+                        return
+                else:
+                    self._mtp_validated = False
+                    logger.warning(
+                        "[MTP] MTP validation failed — --enable-mtp will be ignored. "
+                        "Model may not have MTP weights. Run scripts/add_mtp_weights.py."
+                    )
+                    return
+            except Exception as e:
+                self._mtp_validated = False
+                logger.warning(f"[MTP] MTP patch failed: {e}")
+                return
+
+        self._mtp_validated = True
+        if self.draft_model is not None:
             logger.warning(
-                "[MTP] MTP validation failed — --enable-mtp will be ignored. "
-                "Model may not have MTP weights. Run scripts/add_mtp_weights.py."
+                "[MTP] Both MTP and speculative decoding (draft model) are enabled. "
+                "MTP will be used; draft model will be ignored during MTP generation."
             )
+        logger.info("[MTP] MTP validated and enabled for SimpleEngine")
 
     def _cache_is_trimmable(self) -> bool:
         """Check if all layers in the prompt cache support trim."""
@@ -610,6 +634,19 @@ class MLXLanguageModel:
                     logits = skip_state["logits"]
                     hidden = skip_state["hidden"]
                     skip_state = None
+                elif token_count > 0:
+                    # No skip_state (error recovery) — need fresh model forward
+                    # Use last token from _cached_token_ids
+                    last_tok = mx.array([[self._cached_token_ids[-1]]])
+                    fresh_out = model(last_tok, cache=main_cache, return_hidden=True)
+                    if isinstance(fresh_out, tuple):
+                        logits, hidden = fresh_out
+                        logits = logits[:, -1, :]
+                        hidden = hidden[:, -1:, :]
+                    else:
+                        raise RuntimeError(
+                            "[MTP] model forward did not return hidden states"
+                        )
 
                 # --- 2. Sample primary token ---
                 logprobs = logits - mx.logsumexp(logits, keepdims=True)
@@ -678,7 +715,7 @@ class MLXLanguageModel:
                             if not (hasattr(c, "is_trimmable") and c.is_trimmable()):
                                 if hasattr(c, "state"):
                                     rnn_snapshots[ci] = [
-                                        s.copy() if s is not None else None
+                                        mx.array(s) if s is not None else None
                                         for s in c.state
                                     ]
 

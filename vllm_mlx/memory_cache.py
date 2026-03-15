@@ -300,7 +300,9 @@ def _trim_cache_offset(cache: list[Any], trim_by: int) -> list[Any]:
             tc.offset = max(layer_cache.offset - trim_by, 0)
             trimmed.append(tc)
         else:
-            trimmed.append(layer_cache)
+            # Deep copy unknown/wrapper layers (e.g. CacheList) to prevent
+            # aliasing the stored cache entry — generation mutates in-place.
+            trimmed.append(copy.deepcopy(layer_cache))
     return trimmed
 
 

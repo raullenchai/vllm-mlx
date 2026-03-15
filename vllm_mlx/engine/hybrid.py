@@ -148,6 +148,7 @@ class HybridEngine(BaseEngine):
             # For MLLM, just use BatchedEngine (no speculative)
             self._batched = BatchedEngine(
                 model_name=self._model_name,
+                trust_remote_code=self._trust_remote_code,
                 scheduler_config=self._scheduler_config,
                 stream_interval=self._stream_interval,
                 force_mllm=True,

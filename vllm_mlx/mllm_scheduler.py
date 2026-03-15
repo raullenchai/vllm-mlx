@@ -204,6 +204,12 @@ class MLLMScheduler:
         # Output queues for async streaming
         self.output_queues: dict[str, asyncio.Queue] = {}
 
+        # Thread-safe set for deferred aborts (event loop → executor thread).
+        # CPython GIL guarantees set.add() and set.pop() are atomic.
+        self._pending_abort_ids: set[str] = set()
+        # Aborted request IDs that need queue signaling (executor → event loop).
+        self._aborted_queue_ids: set[str] = set()
+
         # Async processing control
         self._running = False
         self._processing_task: asyncio.Task | None = None
@@ -323,20 +329,37 @@ class MLLMScheduler:
 
     def abort_request(self, request_id: str) -> bool:
         """
-        Abort a request.
+        Queue request for abort.  Thread-safe (called from event loop).
+
+        The actual abort is deferred to the executor thread (inside
+        ``_step_no_queue``) to avoid racing with in-flight GPU work
+        and shared scheduler state mutations.
 
         Args:
             request_id: The request ID to abort
 
         Returns:
-            True if request was found and aborted
+            True (abort is always enqueued)
         """
+        self._pending_abort_ids.add(request_id)
+        logger.debug(f"Enqueued abort for request {request_id}")
+        return True
+
+    def _process_pending_aborts(self) -> None:
+        """Drain and execute pending abort requests.
+
+        Must be called from the executor / step thread only.
+        """
+        while self._pending_abort_ids:
+            request_id = self._pending_abort_ids.pop()
+            self._do_abort_request(request_id)
+
+    def _do_abort_request(self, request_id: str) -> None:
+        """Actually abort a request.  Must run on the step thread."""
         request = self.requests.get(request_id)
-        if request is None:
-            return False
 
         # Remove from waiting queue
-        if request.status == RequestStatus.WAITING:
+        if request is not None and request.status == RequestStatus.WAITING:
             try:
                 self.waiting.remove(request)
             except ValueError:
@@ -354,19 +377,18 @@ class MLLMScheduler:
             del self.running[request_id]
 
         # Mark as aborted
-        request.status = RequestStatus.FINISHED_ABORTED
+        if request is not None:
+            request.status = RequestStatus.FINISHED_ABORTED
         self.finished_req_ids.add(request_id)
         self.requests.pop(request_id, None)
 
-        # Signal output queue
-        if request_id in self.output_queues:
-            try:
-                self.output_queues[request_id].put_nowait(None)
-            except asyncio.QueueFull:
-                pass
+        # Do NOT write to output_queues here — this may run on the
+        # executor thread where asyncio.Queue is not safe.  Mark for
+        # signaling on the event loop thread via _distribute_outputs.
+        self._aborted_queue_ids.add(request_id)
 
         logger.debug(f"Aborted request {request_id}")
-        return True
+        mx.clear_cache()
 
     def has_requests(self) -> bool:
         """Check if there are any pending or running requests."""
@@ -556,9 +578,16 @@ class MLLMScheduler:
         but does NOT touch ``self.output_queues`` (which are
         ``asyncio.Queue`` instances and not thread-safe).
 
+        Abort requests are deferred from the event loop thread and
+        processed here at the start of each step, ensuring all shared
+        state mutations happen on a single thread.
+
         Returns:
             MLLMSchedulerOutput with results of this step.
         """
+        # Process deferred aborts FIRST (same thread as all other mutations)
+        self._process_pending_aborts()
+
         output = MLLMSchedulerOutput()
 
         # Schedule waiting requests
@@ -618,7 +647,7 @@ class MLLMScheduler:
         return output
 
     def _distribute_outputs(self, output: MLLMSchedulerOutput) -> None:
-        """Push step outputs to async queues.
+        """Push step outputs and abort signals to async queues.
 
         MUST be called on the event loop thread (asyncio.Queue is not
         thread-safe).
@@ -630,6 +659,16 @@ class MLLMScheduler:
                     queue.put_nowait(req_output)
                     if req_output.finished:
                         queue.put_nowait(None)  # Signal end
+                except asyncio.QueueFull:
+                    pass
+
+        # Signal queues for requests aborted during this step
+        while self._aborted_queue_ids:
+            request_id = self._aborted_queue_ids.pop()
+            queue = self.output_queues.get(request_id)
+            if queue is not None:
+                try:
+                    queue.put_nowait(None)
                 except asyncio.QueueFull:
                     pass
 

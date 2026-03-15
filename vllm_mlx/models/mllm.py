@@ -1616,11 +1616,11 @@ class MLXMultimodalLM:
                 # for multimodal prompts and would truncate the KV cache.
                 prompt_tokens_count = getattr(chunk, "prompt_tokens", 0) if "chunk" in dir() else 0
                 if prompt_tokens_count <= 0:
-                    # Fallback: use text tokenization (may undercount for multimodal)
-                    token_ids = self.processor.tokenizer.encode(formatted_prompt)
-                    prompt_tokens_count = len(token_ids)
-                else:
-                    token_ids = self.processor.tokenizer.encode(formatted_prompt)
+                    # Zero-token streams have no reliable prompt length —
+                    # skip cache storage to avoid truncating KV with a
+                    # text-only token count that undercounts multimodal prompts.
+                    raise ValueError("No prompt_tokens from generation, skipping cache store")
+                token_ids = self.processor.tokenizer.encode(formatted_prompt)
 
                 cache_to_store = []
                 for layer_cache in prompt_cache:

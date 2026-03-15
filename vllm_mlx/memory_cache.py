@@ -9,7 +9,7 @@ Key features:
 - Automatic memory limit detection based on available system RAM
 - Accurate memory tracking for MLX array caches
 - LRU eviction triggered by memory thresholds
-- No unnecessary deep copies (MLX arrays are immutable)
+- Deep copies on fetch to prevent mutation of stored cache entries
 
 Example:
     config = MemoryCacheConfig(max_memory_percent=0.25)
@@ -25,6 +25,7 @@ Example:
 from __future__ import annotations
 
 import bisect
+import copy
 import logging
 import math
 from collections import OrderedDict
@@ -299,7 +300,9 @@ def _trim_cache_offset(cache: list[Any], trim_by: int) -> list[Any]:
             tc.offset = max(layer_cache.offset - trim_by, 0)
             trimmed.append(tc)
         else:
-            trimmed.append(layer_cache)
+            # Deep copy unknown/wrapper layers (e.g. CacheList) to prevent
+            # aliasing the stored cache entry — generation mutates in-place.
+            trimmed.append(copy.deepcopy(layer_cache))
     return trimmed
 
 
@@ -494,11 +497,11 @@ class MemoryAwarePrefixCache:
             self._stats.hits += 1
             self._stats.tokens_saved += len(tokens)
             self._last_match_type = "exact"
-            cache_out = (
-                _dequantize_cache(entry.cache)
-                if self._config.kv_quantize
-                else entry.cache
-            )
+            # Deep copy: cache objects have mutable offset/state that
+            # generation modifies in-place, corrupting the stored entry.
+            cache_out = copy.deepcopy(entry.cache)
+            if self._config.kv_quantize:
+                cache_out = _dequantize_cache(cache_out)
             return cache_out, []
 
         # --- O(log N) prefix & supersequence match via sorted index ---
@@ -580,11 +583,9 @@ class MemoryAwarePrefixCache:
                 self._stats.hits += 1
                 self._stats.tokens_saved += n_requested
                 self._last_match_type = "supersequence"
-                cache_out = (
-                    _dequantize_cache(best_super.cache)
-                    if self._config.kv_quantize
-                    else best_super.cache
-                )
+                cache_out = copy.deepcopy(best_super.cache)
+                if self._config.kv_quantize:
+                    cache_out = _dequantize_cache(cache_out)
                 return cache_out, []
 
         # --- Prefix match ---
@@ -594,11 +595,9 @@ class MemoryAwarePrefixCache:
             self._stats.tokens_saved += best_length
             remaining = tokens[best_length:]
             self._last_match_type = "prefix"
-            cache_out = (
-                _dequantize_cache(best_match.cache)
-                if self._config.kv_quantize
-                else best_match.cache
-            )
+            cache_out = copy.deepcopy(best_match.cache)
+            if self._config.kv_quantize:
+                cache_out = _dequantize_cache(cache_out)
             return cache_out, remaining
 
         # --- LCP (Longest Common Prefix) for divergent sequences ---

@@ -49,6 +49,8 @@ class MLLMBatchRequest:
     max_tokens: int = 256
     temperature: float = 0.7
     top_p: float = 0.9
+    video_fps: float | None = None  # Caller-specified video FPS
+    video_max_frames: int | None = None  # Caller-specified max video frames
 
     # Processed inputs (set after vision preprocessing)
     input_ids: mx.array | None = None
@@ -473,13 +475,20 @@ class MLLMBatchGenerator:
                 save_frames_to_temp,
             )
 
+            fps = request.video_fps if request.video_fps is not None else DEFAULT_FPS
+            max_frames = (
+                request.video_max_frames
+                if request.video_max_frames is not None
+                else MAX_FRAMES
+            )
+
             for video in request.videos:
                 try:
                     video_path = process_video_input(video)
                     frames = extract_video_frames_smart(
                         video_path,
-                        fps=DEFAULT_FPS,
-                        max_frames=MAX_FRAMES,
+                        fps=fps,
+                        max_frames=max_frames,
                     )
                     frame_paths = save_frames_to_temp(frames)
                     all_images.extend(frame_paths)

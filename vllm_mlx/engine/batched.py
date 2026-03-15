@@ -468,6 +468,8 @@ class BatchedEngine(BaseEngine):
                 temperature=temperature,
                 top_p=top_p,
                 stop=stop,
+                video_fps=kwargs.pop("video_fps", None),
+                video_max_frames=kwargs.pop("video_max_frames", None),
             )
 
             return GenerationOutput(
@@ -541,6 +543,8 @@ class BatchedEngine(BaseEngine):
                 temperature=temperature,
                 top_p=top_p,
                 stop=stop,
+                video_fps=kwargs.pop("video_fps", None),
+                video_max_frames=kwargs.pop("video_max_frames", None),
             )
 
             async for output in self._mllm_scheduler.stream_outputs(request_id):

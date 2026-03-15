@@ -213,6 +213,7 @@ class MLLMScheduler:
         # Async processing control
         self._running = False
         self._processing_task: asyncio.Task | None = None
+        self._step_executor = None  # ThreadPoolExecutor, created in _process_loop
 
         # Statistics
         self.num_requests_processed = 0
@@ -722,6 +723,11 @@ class MLLMScheduler:
             self.batch_generator.close()
             self.batch_generator = None
 
+        # Shut down the step executor to avoid leaking worker threads
+        if self._step_executor is not None:
+            self._step_executor.shutdown(wait=False)
+            self._step_executor = None
+
         logger.info("MLLM Scheduler stopped")
 
     async def _process_loop(self) -> None:
@@ -733,44 +739,58 @@ class MLLMScheduler:
 
         Queue distribution always happens on the event loop thread to
         avoid thread-safety issues with asyncio.Queue.
+
+        Thread safety note: ``add_request()`` mutates ``self.requests``
+        (dict) and ``self.waiting`` (deque) from the event loop thread
+        while ``_step_no_queue()`` reads/pops them on the executor
+        thread.  Under CPython, ``dict.__setitem__`` and
+        ``deque.append``/``deque.popleft`` are atomic (protected by
+        the GIL), so these concurrent accesses are safe.  Abort
+        requests are fully deferred via ``_pending_abort_ids`` to
+        avoid compound mutations across threads.
         """
         import concurrent.futures
 
-        _executor = concurrent.futures.ThreadPoolExecutor(
+        self._step_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="mllm-step"
         )
         loop = asyncio.get_running_loop()
 
-        while self._running:
-            try:
-                if self.has_requests():
-                    # Use executor when waiting requests need vision encoding
-                    # (prefill can block for seconds). Pure generation steps
-                    # are fast and can run inline.
-                    has_waiting = len(self.waiting) > 0
-                    if has_waiting:
-                        output = await loop.run_in_executor(
-                            _executor, self._step_no_queue
-                        )
+        try:
+            while self._running:
+                try:
+                    if self.has_requests():
+                        # Use executor when waiting requests need vision encoding
+                        # (prefill can block for seconds). Pure generation steps
+                        # are fast and can run inline.
+                        has_waiting = len(self.waiting) > 0
+                        if has_waiting:
+                            output = await loop.run_in_executor(
+                                self._step_executor, self._step_no_queue
+                            )
+                        else:
+                            output = self._step_no_queue()
+
+                        # Distribute outputs to queues ON the event loop thread
+                        # (asyncio.Queue is not thread-safe).
+                        if output is not None:
+                            self._distribute_outputs(output)
+
+                        # Yield to other tasks
+                        await asyncio.sleep(0)
                     else:
-                        output = self._step_no_queue()
+                        # No work, wait a bit
+                        await asyncio.sleep(0.01)
 
-                    # Distribute outputs to queues ON the event loop thread
-                    # (asyncio.Queue is not thread-safe).
-                    if output is not None:
-                        self._distribute_outputs(output)
-
-                    # Yield to other tasks
-                    await asyncio.sleep(0)
-                else:
-                    # No work, wait a bit
-                    await asyncio.sleep(0.01)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Error in MLLM process loop: {e}")
-                await asyncio.sleep(0.1)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"Error in MLLM process loop: {e}")
+                    await asyncio.sleep(0.1)
+        finally:
+            if self._step_executor is not None:
+                self._step_executor.shutdown(wait=False)
+                self._step_executor = None
 
     async def add_request_async(
         self,

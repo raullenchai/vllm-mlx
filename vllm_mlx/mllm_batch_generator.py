@@ -649,12 +649,13 @@ class MLLMBatchGenerator:
                 # Run VLM forward pass — cache= flows through to language_model
                 logits = self._run_vision_encoding(req, cache=request_cache)
 
-                # Extract last token logits and sample
+                # Extract last token logits and sample with per-request params
                 last_logits = logits[:, -1, :]
                 logprobs = last_logits - mx.logsumexp(
                     last_logits, axis=-1, keepdims=True
                 )
-                sampled = self.sampler(logprobs)
+                req_sampler = make_sampler(temp=req.temperature, top_p=req.top_p)
+                sampled = req_sampler(logprobs)
 
                 mx.eval(sampled, logprobs)
 
@@ -707,7 +708,10 @@ class MLLMBatchGenerator:
         )
 
     def _step(
-        self, input_tokens: mx.array, cache: list[Any]
+        self,
+        input_tokens: mx.array,
+        cache: list[Any],
+        requests: list[MLLMBatchRequest] | None = None,
     ) -> tuple[mx.array, list[mx.array]]:
         """
         Run one generation step through the language model.
@@ -715,10 +719,13 @@ class MLLMBatchGenerator:
         Args:
             input_tokens: Input tokens [batch_size, 1] or [batch_size]
             cache: BatchKVCache for the language model
+            requests: Per-request data for per-request sampling params
 
         Returns:
             Tuple of (sampled tokens, logprobs list)
         """
+        from mlx_lm.sample_utils import make_sampler
+
         # Ensure correct shape
         if input_tokens.ndim == 1:
             input_tokens = input_tokens[:, None]
@@ -734,9 +741,16 @@ class MLLMBatchGenerator:
 
         logits = logits[:, -1, :]
 
-        # Sample
+        # Sample per-request with correct temperature/top_p
         logprobs = logits - mx.logsumexp(logits, axis=-1, keepdims=True)
-        sampled = self.sampler(logprobs)
+        if requests and len(requests) == logprobs.shape[0]:
+            sampled_tokens = []
+            for i, req in enumerate(requests):
+                req_sampler = make_sampler(temp=req.temperature, top_p=req.top_p)
+                sampled_tokens.append(req_sampler(logprobs[i : i + 1]))
+            sampled = mx.concatenate(sampled_tokens, axis=0)
+        else:
+            sampled = self.sampler(logprobs)
 
         return sampled, list(logprobs)
 
@@ -776,7 +790,7 @@ class MLLMBatchGenerator:
             return []
 
         y, logprobs = batch.y, batch.logprobs
-        batch.y, batch.logprobs = self._step(y[:, None], batch.cache)
+        batch.y, batch.logprobs = self._step(y[:, None], batch.cache, batch.requests)
         mx.async_eval(batch.y, batch.logprobs)
 
         y = y.tolist()

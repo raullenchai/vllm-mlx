@@ -144,10 +144,13 @@ class TestImageHashing:
             path2 = f2.name
 
         try:
-            # Order shouldn't matter (sorted internally)
+            # Order matters: image sequence affects vision embeddings/KV state
             hash_a = compute_images_hash([path1, path2])
             hash_b = compute_images_hash([path2, path1])
-            assert hash_a == hash_b
+            assert hash_a != hash_b, "Different image orders must produce different hashes"
+            # Same order is deterministic
+            hash_c = compute_images_hash([path1, path2])
+            assert hash_a == hash_c
         finally:
             os.unlink(path1)
             os.unlink(path2)
@@ -375,12 +378,8 @@ class TestMLLMCacheManager:
         # Stats should also be reset
         assert cache_manager.stats.hits == 0
 
-    def test_cache_returns_reference(self, cache_manager, temp_image):
-        """Test that fetched cache returns the stored reference.
-
-        Note: For performance, the cache returns direct references to stored
-        KV caches. In practice, MLX arrays are immutable so this is safe.
-        """
+    def test_cache_returns_deep_copy(self, cache_manager, temp_image):
+        """Test that fetched cache returns a deep copy to prevent mutation corruption."""
         original = [[1, 2, 3]]
         cache_manager.store_cache([temp_image], "prompt", original)
 
@@ -389,9 +388,9 @@ class TestMLLMCacheManager:
         assert cache is not None
         assert cache[0] == [1, 2, 3]
 
-        # Cache returns the same reference (for performance)
+        # Each fetch returns an independent deep copy
         cache2, _ = cache_manager.fetch_cache([temp_image], "prompt")
-        assert cache2 is cache  # Same reference
+        assert cache2 is not cache  # Different objects
 
     def test_repr(self, cache_manager):
         """Test string representation."""
@@ -417,13 +416,14 @@ class TestMLLMCacheManager:
             # Store
             cache_manager.store_cache(images, prompt, ["multi_cache"], num_tokens=200)
 
-            # Fetch same images in same order
+            # Fetch same images in same order — should hit
             cache, hit = cache_manager.fetch_cache(images, prompt)
             assert hit is True
 
-            # Fetch same images in different order - should still hit (sorted internally)
+            # Fetch same images in different order — must MISS
+            # (image order affects vision embeddings and KV state)
             cache, hit = cache_manager.fetch_cache([img2, img1], prompt)
-            assert hit is True
+            assert hit is False, "Different image order should produce cache miss"
         finally:
             os.unlink(img1)
             os.unlink(img2)

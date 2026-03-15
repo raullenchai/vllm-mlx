@@ -1607,7 +1607,10 @@ class MLXMultimodalLM:
 
                 import mlx.core as mx
 
-                prompt_tokens_count = getattr(chunk, "prompt_tokens", 0) if "chunk" in dir() else 0
+                # Compute prompt length from tokenizer, not from streamed chunks
+                # (chunks may be empty if generation produces zero tokens).
+                token_ids = self.processor.tokenizer.encode(formatted_prompt)
+                prompt_tokens_count = len(token_ids)
 
                 cache_to_store = []
                 for layer_cache in prompt_cache:
@@ -1639,7 +1642,6 @@ class MLXMultimodalLM:
                                     )
                     cache_to_store.append(new_cache)
 
-                token_ids = self.processor.tokenizer.encode(formatted_prompt)
                 self._cache_manager.store(
                     images=all_images,
                     prompt=formatted_prompt,

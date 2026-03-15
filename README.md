@@ -7,15 +7,23 @@
 [![Tests](https://img.shields.io/badge/tests-1500%2B-brightgreen.svg)](tests/)
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1%20|%20M2%20|%20M3%20|%20M4-black.svg?logo=apple)](https://support.apple.com/en-us/HT211814)
 
-Rapid-MLX turns your Mac into a local AI server. It runs the same models as ChatGPT — Qwen, Llama, Mistral, Gemma, DeepSeek — directly on Apple Silicon, with no cloud, no subscription, and no data leaving your machine.
-
-**Why not Ollama?** Rapid-MLX is **2-4x faster** on the same models. It uses Apple's [MLX framework](https://github.com/ml-explore/mlx), built specifically for the M-series GPU, instead of the generic C++ backend that Ollama and llama.cpp use. More speed from the same hardware.
+Drop-in OpenAI API replacement for Apple Silicon. Built for AI agents and developer tools — with 100% tool-calling reliability, sub-100ms prompt caching, and 2-4x faster inference than Ollama.
 
 | | Your Mac runs AI | How fast | What works |
 |:---|:---:|:---:|:---:|
 | **16 GB MacBook Air** | Qwen3.5-4B | 158 tok/s | Chat, coding, tools |
 | **64 GB Mac Mini / Studio** | Qwen3.5-35B | 80 tok/s | Best balance of smart + fast |
 | **128+ GB Mac Studio / Pro** | Qwen3.5-122B | 57 tok/s | Frontier-level intelligence |
+
+---
+
+## Why Rapid-MLX
+
+**Instant multi-turn context** — Prompt cache keeps prior turns alive. 0.08s cached TTFT vs re-prefilling the full context every turn.
+
+**Bulletproof tool calling** — 17 parser formats with automatic recovery. Even 4-bit quantized models achieve 100% function call success rate.
+
+**Zero code changes** — Full OpenAI API compatibility. Change one env var and your existing tools just work.
 
 ---
 
@@ -64,7 +72,143 @@ print(response.choices[0].message.content)
 
 ---
 
+## Works With
+
+| Client | Status | Notes |
+|--------|--------|-------|
+| [Claude Code](https://claude.ai/claude-code) | Verified | Env var config, streaming tools |
+| [Cursor](https://cursor.com) | Verified | Settings UI config |
+| [Aider](https://aider.chat) | Verified | Code editing agent |
+| [Open WebUI](https://github.com/open-webui/open-webui) | Verified | Self-hosted ChatGPT UI, Docker one-liner |
+| [Continue.dev](https://continue.dev) | Verified | YAML config, VS Code + JetBrains |
+| [OpenClaw](https://github.com/nicepkg/openclaw) | Verified | 14 tools, multi-round, streaming |
+| [OpenCode](https://github.com/opencode-ai/opencode) | Verified | JSON config |
+| [LangChain](https://langchain.com) | Compatible | Standard OpenAI client |
+| Any OpenAI SDK client | Compatible | Drop-in `base_url` swap |
+
+<details>
+<summary><strong>Client setup instructions</strong></summary>
+
+**Claude Code:**
+```bash
+OPENAI_BASE_URL=http://localhost:8000/v1 claude
+# Or add to ~/.claude/settings.json:
+# { "env": { "OPENAI_BASE_URL": "http://localhost:8000/v1" } }
+```
+
+**Cursor:** Settings > Models > OpenAI API Base → `http://localhost:8000/v1`
+
+**Continue.dev** (`~/.continue/config.yaml`):
+```yaml
+models:
+  - name: rapid-mlx
+    provider: openai
+    model: default
+    apiBase: http://localhost:8000/v1
+    apiKey: not-needed
+```
+
+**Aider:**
+```bash
+aider --openai-api-base http://localhost:8000/v1 --openai-api-key not-needed
+```
+
+**Open WebUI** (Docker one-liner):
+```bash
+docker run -d -p 3000:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -e ENABLE_OLLAMA_API=False \
+  -e OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1 \
+  -e OPENAI_API_KEY=not-needed \
+  -v open-webui:/app/backend/data \
+  --name open-webui \
+  ghcr.io/open-webui/open-webui:main
+```
+
+**OpenCode** (`~/.config/opencode/opencode.json`):
+```json
+{
+  "provider": {
+    "openai-compatible": {
+      "apiKey": "not-needed",
+      "models": {
+        "default": {
+          "id": "default",
+          "name": "rapid-mlx local",
+          "api_base": "http://localhost:8000/v1"
+        }
+      }
+    }
+  }
+}
+```
+
+</details>
+
+---
+
 ## Choose Your Model
+
+### What fits my Mac?
+
+Model weights must fit in unified memory. If Activity Monitor shows red memory pressure, the model is too big — switch to a smaller one or a lower quantization.
+
+| Your Mac | Best Model | RAM Used | Speed | Quality |
+|----------|-----------|---------|-------|---------|
+| **16 GB** MacBook Air/Pro | [Qwen3.5-4B 4bit](https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit) | 2.4 GB | 158 tok/s | Good for chat and simple tasks |
+| **24 GB** MacBook Pro | [Qwen3.5-9B 4bit](https://huggingface.co/mlx-community/Qwen3.5-9B-4bit) | 5.1 GB | 106 tok/s | Great all-rounder |
+| **32 GB** Mac Mini / Studio | [Qwen3.5-27B 4bit](https://huggingface.co/mlx-community/Qwen3.5-27B-4bit) | 15.3 GB | 38 tok/s | Solid coding model |
+| **64 GB** Mac Mini / Studio | [Qwen3.5-35B-A3B 8bit](https://huggingface.co/mlx-community/Qwen3.5-35B-A3B-8bit) | 37 GB | 80 tok/s | **Sweet spot** — smart + fast |
+| **96 GB** Mac Studio / Pro | [Qwen3.5-122B mxfp4](https://huggingface.co/nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx) | 65 GB | 57 tok/s | Best model, fits comfortably |
+| **128+ GB** Mac Studio / Pro | [Qwen3.5-122B 8bit](https://huggingface.co/mlx-community/Qwen3.5-122B-A10B-8bit) | 130 GB | 43 tok/s | Maximum quality |
+
+### Copy-paste commands
+
+Pick the one that matches your Mac:
+
+```bash
+# 16 GB — lightweight, fast
+rapid-mlx serve mlx-community/Qwen3.5-4B-MLX-4bit --tool-call-parser hermes --port 8000
+
+# 24 GB — best small model
+rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --tool-call-parser hermes --port 8000
+
+# 64 GB — sweet spot
+rapid-mlx serve mlx-community/Qwen3.5-35B-A3B-8bit --tool-call-parser hermes --prefill-step-size 8192 --port 8000
+
+# 96+ GB — best model
+rapid-mlx serve nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx --tool-call-parser hermes --kv-bits 8 --prefill-step-size 8192 --port 8000
+
+# Coding agent — fast MoE, great for Claude Code / Cursor
+rapid-mlx serve lmstudio-community/Qwen3-Coder-Next-MLX-4bit --tool-call-parser hermes --prefill-step-size 8192 --port 8000
+
+# Vision — image understanding
+rapid-mlx serve mlx-community/Qwen3-VL-4B-Instruct-MLX-4bit --mllm --port 8000
+```
+
+<details>
+<summary><strong>Other model families (DeepSeek, Mistral, GLM, Llama)</strong></summary>
+
+| Model Family | `--tool-call-parser` | `--reasoning-parser` | Notes |
+|-------------|---------------------|---------------------|-------|
+| Qwen3.5 (all sizes) | `hermes` | `qwen3` | **Recommended** — 100% tool calling |
+| Qwen3-Coder-Next | `hermes` | *(none)* | Fast coding, non-thinking mode |
+| GLM-4.7 | `glm47` | *(none)* | 100% tool calling |
+| MiniMax-M2.5 | `minimax` | `minimax` | XML tool format |
+| GPT-OSS | `seed_oss` | `gpt_oss` | Native format |
+| DeepSeek-R1 | `deepseek` | `deepseek_r1` | With reasoning |
+| Llama 3.x | `llama` | *(none)* | JSON tool format |
+| Mistral | `hermes` | *(none)* | Hermes-compatible |
+
+All 17 parsers include automatic recovery — if a quantized model outputs broken tool calls as text, they're auto-converted back to structured format.
+
+</details>
+
+---
+
+## Benchmarks
+
+*This section is for ML engineers who want the numbers. If you just want to run models, see [Quick Start](#quick-start) and [Choose Your Model](#choose-your-model) above.*
 
 ### Performance — 21 models, 6 engines
 
@@ -194,143 +338,44 @@ Qwen3.5-122B-A10B       ⚡ Rapid-MLX   ██████░░░░░░░�
 
 *⚡ = best combined score (decode + TTFT + tools). Longer bar = better overall experience. TTFT capped at 0.5s — thinking models have higher TTFT due to reasoning tokens. mlx-lm/oMLX have no TTFT or tool data (library/decode-only server). Engines: [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX), [vllm-mlx](https://github.com/waybarrios/vllm-mlx) (upstream), [mlx-lm](https://github.com/ml-explore/mlx-examples), [oMLX](https://github.com/jundot/omlx), [Ollama](https://ollama.com), [llama.cpp](https://github.com/ggml-org/llama.cpp).*
 
-### What fits my Mac?
+### Why faster than Ollama?
 
-Model weights must fit in unified memory. If Activity Monitor shows red memory pressure, the model is too big — switch to a smaller one or a lower quantization.
+Ollama and llama.cpp use C++ with generic Metal shaders. Rapid-MLX uses Apple's [MLX framework](https://github.com/ml-explore/mlx) — purpose-built for Apple Silicon unified memory with native Metal compute kernels and zero-copy GPU access.
 
-| Your Mac | Best Model | RAM Used | Speed | Quality |
-|----------|-----------|---------|-------|---------|
-| **16 GB** MacBook Air/Pro | [Qwen3.5-4B 4bit](https://huggingface.co/mlx-community/Qwen3.5-4B-MLX-4bit) | 2.4 GB | 158 tok/s | Good for chat and simple tasks |
-| **24 GB** MacBook Pro | [Qwen3.5-9B 4bit](https://huggingface.co/mlx-community/Qwen3.5-9B-4bit) | 5.1 GB | 106 tok/s | Great all-rounder |
-| **32 GB** Mac Mini / Studio | [Qwen3.5-27B 4bit](https://huggingface.co/mlx-community/Qwen3.5-27B-4bit) | 15.3 GB | 38 tok/s | Solid coding model |
-| **64 GB** Mac Mini / Studio | [Qwen3.5-35B-A3B 8bit](https://huggingface.co/mlx-community/Qwen3.5-35B-A3B-8bit) | 37 GB | 80 tok/s | **Sweet spot** — smart + fast |
-| **96 GB** Mac Studio / Pro | [Qwen3.5-122B mxfp4](https://huggingface.co/nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx) | 65 GB | 57 tok/s | Best model, fits comfortably |
-| **128+ GB** Mac Studio / Pro | [Qwen3.5-122B 8bit](https://huggingface.co/mlx-community/Qwen3.5-122B-A10B-8bit) | 130 GB | 43 tok/s | Maximum quality |
+**Where it's slower:** Gemma 3 doesn't benefit from MLX optimizations. We report honestly.
 
-### Copy-paste commands
+**Same speed = still wins.** On models where decode is tied with mlx-lm, Rapid-MLX adds prompt cache (10-30x faster TTFT), 17 tool parsers, reasoning separation, vision, audio, and cloud routing — with zero speed overhead.
 
-Pick the one that matches your Mac:
-
-```bash
-# 16 GB — lightweight, fast
-rapid-mlx serve mlx-community/Qwen3.5-4B-MLX-4bit --tool-call-parser hermes --port 8000
-
-# 24 GB — best small model
-rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --tool-call-parser hermes --port 8000
-
-# 64 GB — sweet spot
-rapid-mlx serve mlx-community/Qwen3.5-35B-A3B-8bit --tool-call-parser hermes --prefill-step-size 8192 --port 8000
-
-# 96+ GB — best model
-rapid-mlx serve nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx --tool-call-parser hermes --kv-bits 8 --prefill-step-size 8192 --port 8000
-
-# Coding agent — fast MoE, great for Claude Code / Cursor
-rapid-mlx serve lmstudio-community/Qwen3-Coder-Next-MLX-4bit --tool-call-parser hermes --prefill-step-size 8192 --port 8000
-
-# Vision — image understanding
-rapid-mlx serve mlx-community/Qwen3-VL-4B-Instruct-MLX-4bit --mllm --port 8000
+```
+                    ┌──────────────────────────────────────┐
+                    │     OpenAI-compatible API (port 8000) │
+                    │    /v1/chat/completions, /v1/models   │
+                    └──────────────────┬───────────────────┘
+                                       │
+                              ┌────────┴────────┐
+                              │  Cloud Router   │ (optional)
+                              │  new_tokens >   │
+                              │  threshold?     │
+                              └───┬─────────┬───┘
+                            yes   │         │  no
+                     ┌────────────┘         └──────────────┐
+                     ▼                                     ▼
+          ┌─────────────────┐               ┌──────────────────────┐
+          │  Cloud LLM      │               │   Local MLX Engine   │
+          │  (via litellm)  │               │                      │
+          │  GPT-5, Claude, │               │  ┌────────────────┐  │
+          │  Gemini, etc.   │               │  │ SimpleEngine   │  │
+          └─────────────────┘               │  │ + prompt cache │  │
+                                            │  └───────┬────────┘  │
+                                            │          │           │
+                                            │  ┌───────┴────────┐  │
+                                            │  │  mlx-lm/mlx-vlm│  │
+                                            │  │  MLX + Metal   │  │
+                                            │  └────────────────┘  │
+                                            └──────────────────────┘
 ```
 
-<details>
-<summary><strong>Other model families (DeepSeek, Mistral, GLM, Llama)</strong></summary>
-
-| Model Family | `--tool-call-parser` | `--reasoning-parser` | Notes |
-|-------------|---------------------|---------------------|-------|
-| Qwen3.5 (all sizes) | `hermes` | `qwen3` | **Recommended** — 100% tool calling |
-| Qwen3-Coder-Next | `hermes` | *(none)* | Fast coding, non-thinking mode |
-| GLM-4.7 | `glm47` | *(none)* | 100% tool calling |
-| MiniMax-M2.5 | `minimax` | `minimax` | XML tool format |
-| GPT-OSS | `seed_oss` | `gpt_oss` | Native format |
-| DeepSeek-R1 | `deepseek` | `deepseek_r1` | With reasoning |
-| Llama 3.x | `llama` | *(none)* | JSON tool format |
-| Mistral | `hermes` | *(none)* | Hermes-compatible |
-
-All 17 parsers include automatic recovery — if a quantized model outputs broken tool calls as text, they're auto-converted back to structured format.
-
-</details>
-
----
-
-## Works With
-
-| Client | Status | Notes |
-|--------|--------|-------|
-| [Claude Code](https://claude.ai/claude-code) | Verified | Env var config, streaming tools |
-| [Cursor](https://cursor.com) | Verified | Settings UI config |
-| [Aider](https://aider.chat) | Verified | Code editing agent |
-| [Open WebUI](https://github.com/open-webui/open-webui) | Verified | Self-hosted ChatGPT UI, Docker one-liner |
-| [Continue.dev](https://continue.dev) | Verified | YAML config, VS Code + JetBrains |
-| [OpenClaw](https://github.com/nicepkg/openclaw) | Verified | 14 tools, multi-round, streaming |
-| [OpenCode](https://github.com/opencode-ai/opencode) | Verified | JSON config |
-| [LangChain](https://langchain.com) | Compatible | Standard OpenAI client |
-| Any OpenAI SDK client | Compatible | Drop-in `base_url` swap |
-
-<details>
-<summary><strong>Client setup instructions</strong></summary>
-
-**Claude Code:**
-```bash
-OPENAI_BASE_URL=http://localhost:8000/v1 claude
-# Or add to ~/.claude/settings.json:
-# { "env": { "OPENAI_BASE_URL": "http://localhost:8000/v1" } }
-```
-
-**Cursor:** Settings > Models > OpenAI API Base → `http://localhost:8000/v1`
-
-**Continue.dev** (`~/.continue/config.yaml`):
-```yaml
-models:
-  - name: rapid-mlx
-    provider: openai
-    model: default
-    apiBase: http://localhost:8000/v1
-    apiKey: not-needed
-```
-
-**Aider:**
-```bash
-aider --openai-api-base http://localhost:8000/v1 --openai-api-key not-needed
-```
-
-**Open WebUI** (Docker one-liner):
-```bash
-docker run -d -p 3000:8080 \
-  --add-host=host.docker.internal:host-gateway \
-  -e ENABLE_OLLAMA_API=False \
-  -e OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1 \
-  -e OPENAI_API_KEY=not-needed \
-  -v open-webui:/app/backend/data \
-  --name open-webui \
-  ghcr.io/open-webui/open-webui:main
-```
-
-**OpenCode** (`~/.config/opencode/opencode.json`):
-```json
-{
-  "provider": {
-    "openai-compatible": {
-      "apiKey": "not-needed",
-      "models": {
-        "default": {
-          "id": "default",
-          "name": "rapid-mlx local",
-          "api_base": "http://localhost:8000/v1"
-        }
-      }
-    }
-  }
-}
-```
-
-</details>
-
-> **Community-maintained tables.** Tested on M3 Ultra so far — if you verify a client or model on your hardware, [open an issue](https://github.com/raullenchai/Rapid-MLX/issues) or PR to update.
-
----
-
-## Benchmarks
-
-*This section is for ML engineers who want the numbers. If you just want to run models, see [Quick Start](#quick-start) and [Choose Your Model](#choose-your-model) above.*
+### Speedup Summary
 
 17 models tested across 6 engines on **Mac Studio M3 Ultra (256GB)**. Same model, same hardware, head-to-head.
 
@@ -353,12 +398,6 @@ docker run -d -p 3000:8080 \
 | **MiniMax-M2.5** | **52** tok/s | 51 (mlx-lm) | ~1.0x |
 | **Qwen3.5-27B** | 39 tok/s | 39 (mlx-lm) | ~1.0x |
 | Gemma 3 12B | 49 tok/s | 73 (mlx-lm) / 54 (Ollama) | 0.7x |
-
-> **Why faster than Ollama/llama.cpp?** They use C++ with generic Metal shaders. Rapid-MLX uses Apple's [MLX framework](https://github.com/ml-explore/mlx) — purpose-built for Apple Silicon unified memory with native Metal compute kernels and zero-copy GPU access.
->
-> **Where it's slower:** Gemma 3 doesn't benefit from MLX optimizations. We report honestly.
->
-> **Same speed = still wins.** On models where decode is tied with mlx-lm, Rapid-MLX adds prompt cache (10-30x faster TTFT), 17 tool parsers, reasoning separation, vision, audio, and cloud routing — with zero speed overhead.
 
 ### TTFT — Prompt Cache Advantage
 
@@ -508,46 +547,6 @@ Vision, audio (STT/TTS), video understanding, and text embeddings — all throug
 | `--mllm` | Force multimodal (vision) mode | auto-detect |
 | `--mcp-config` | MCP configuration file for tool integration | *(none)* |
 | `--embedding-model` | Pre-load embedding model at startup | *(none)* |
-
-</details>
-
-<details>
-<summary><strong>Architecture</strong></summary>
-
-```
-                    ┌──────────────────────────────────────┐
-                    │     OpenAI-compatible API (port 8000) │
-                    │    /v1/chat/completions, /v1/models   │
-                    └──────────────────┬───────────────────┘
-                                       │
-                              ┌────────┴────────┐
-                              │  Cloud Router   │ (optional)
-                              │  new_tokens >   │
-                              │  threshold?     │
-                              └───┬─────────┬───┘
-                            yes   │         │  no
-                     ┌────────────┘         └──────────────┐
-                     ▼                                     ▼
-          ┌─────────────────┐               ┌──────────────────────┐
-          │  Cloud LLM      │               │   Local MLX Engine   │
-          │  (via litellm)  │               │                      │
-          │  GPT-5, Claude, │               │  ┌────────────────┐  │
-          │  Gemini, etc.   │               │  │ SimpleEngine   │  │
-          └─────────────────┘               │  │ + prompt cache │  │
-                                            │  └───────┬────────┘  │
-                                            │          │           │
-                                            │  ┌───────┴────────┐  │
-                                            │  │  mlx-lm/mlx-vlm│  │
-                                            │  │  MLX + Metal   │  │
-                                            │  └────────────────┘  │
-                                            └──────────────────────┘
-```
-
-**SimpleEngine** (default) — Single-user, persistent prompt cache, maximum throughput.
-
-**BatchedEngine** (`--continuous-batching`) — Multi-user, paged KV cache with prefix sharing.
-
-**Cloud Router** (`--cloud-model`) — Routes large-context cold requests to cloud. Routing based on new tokens after cache hit, not total input.
 
 </details>
 

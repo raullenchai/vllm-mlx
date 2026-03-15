@@ -135,7 +135,9 @@ class HybridEngine(BaseEngine):
         logger.info(f"HybridEngine loading shared model: {self._model_name}")
 
         # Load model once using mlx-lm
-        self._shared_model, self._shared_tokenizer = load(self._model_name)
+        self._shared_model, self._shared_tokenizer = load(
+            self._model_name, trust_remote_code=self._trust_remote_code
+        )
 
         # Check if MLLM
         from ..api.utils import is_mllm_model

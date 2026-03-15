@@ -446,6 +446,9 @@ class MockCacheEntry:
     def trim(self, amount: int) -> None:
         self._offset = max(0, self._offset - amount)
 
+    def is_trimmable(self) -> bool:
+        return True
+
 
 class TestMLXLanguageModelEstimateNewTokens:
     """Tests for MLXLanguageModel.estimate_new_tokens method."""

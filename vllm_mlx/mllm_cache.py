@@ -19,6 +19,7 @@ Based on research from:
 - mlx-lm cache_prompt: https://github.com/ml-explore/mlx-lm
 """
 
+import copy
 import hashlib
 import logging
 import time
@@ -173,7 +174,8 @@ def compute_images_hash(images: list[str]) -> str:
         return "no_images"
 
     hashes = [compute_image_hash(img) for img in images]
-    combined = "_".join(sorted(hashes))
+    # Preserve order: image sequence affects vision embeddings and KV state.
+    combined = "_".join(hashes)
     return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
 
@@ -301,7 +303,8 @@ class MLLMPrefixCacheManager:
                 f"MLLM cache HIT: {cache_key[:32]}..., prefix_match={match_length}"
             )
 
-            return entry, match_length
+            # Deep copy: generation mutates kv_cache state in-place.
+            return copy.deepcopy(entry), match_length
 
         # Check for image-only match (can reuse vision embeddings)
         if images:
@@ -320,7 +323,7 @@ class MLLMPrefixCacheManager:
 
                     # Return entry for vision embeddings, but 0 prefix match
                     # (prompt is different, so KV cache can't be reused)
-                    return entry, 0
+                    return copy.deepcopy(entry), 0
 
         self.stats.misses += 1
         logger.debug(f"MLLM cache MISS: {cache_key[:32]}...")
@@ -339,7 +342,8 @@ class MLLMPrefixCacheManager:
         entry, match_len = self.fetch(images, prompt)
         # For legacy API, return hit if entry exists (don't require token match)
         if entry is not None and entry.kv_cache is not None:
-            return entry.kv_cache, True
+            # Deep copy: generation mutates cache state in-place.
+            return copy.deepcopy(entry.kv_cache), True
         return None, False
 
     def store(

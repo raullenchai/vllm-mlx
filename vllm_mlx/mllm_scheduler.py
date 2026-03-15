@@ -474,6 +474,9 @@ class MLLMScheduler:
                         # Trim output at stop string
                         idx = decoded_so_far.index(stop_str)
                         request.output_text = decoded_so_far[:idx]
+                        # Trim new_text so the stop string isn't streamed
+                        # to the client in the final chunk.
+                        output.new_text = ""
                         break
 
             # Check if finished
@@ -553,6 +556,18 @@ class MLLMScheduler:
                 # running requests instead of retrying forever.
                 logger.error(f"Batch generation failed: {e}")
                 error_ids = set(self.running.keys())
+
+                # Remove from batch generator BEFORE scheduler cleanup so
+                # stale requests don't poison subsequent batches.
+                if self.batch_generator is not None:
+                    uids_to_remove = [
+                        self.request_id_to_uid[rid]
+                        for rid in error_ids
+                        if rid in self.request_id_to_uid
+                    ]
+                    if uids_to_remove:
+                        self.batch_generator.remove(uids_to_remove)
+
                 for request_id in error_ids:
                     queue = self.output_queues.get(request_id)
                     if queue is not None:

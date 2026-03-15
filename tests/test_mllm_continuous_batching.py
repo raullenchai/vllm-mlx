@@ -557,6 +557,8 @@ class TestMLLMSchedulerStopSequences:
         assert outputs[0].finish_reason == "stop"
         # Output text should be trimmed at stop string
         assert outputs[0].output_text == "Hello world"
+        # new_text must be cleared so the stop string isn't streamed
+        assert outputs[0].new_text == ""
 
     def test_add_request_forwards_stop(self):
         """add_request should store stop sequences on the MLLMRequest."""
@@ -575,6 +577,103 @@ class TestMLLMSchedulerStopSequences:
 
         request = scheduler.requests[req_id]
         assert request.stop == ["<|end|>", "STOP"]
+
+
+class TestPrefillErrorCleanup:
+    """Regression tests for prefill error cleaning batch generator state (PR #21)."""
+
+    def test_error_removes_from_batch_generator(self):
+        """step() error path must remove failed requests from batch generator."""
+        import asyncio
+        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
+        from vllm_mlx.mllm_batch_generator import MLLMBatchRequest
+
+        mock_model = MagicMock()
+        mock_processor = MagicMock()
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.encode.return_value = [1, 2, 3]
+        mock_processor.tokenizer = mock_tokenizer
+
+        config = MLLMSchedulerConfig()
+        scheduler = MLLMScheduler(mock_model, mock_processor, config)
+
+        # Force-create batch generator via _ensure_batch_generator
+        scheduler._ensure_batch_generator()
+        bg = scheduler.batch_generator
+        assert bg is not None
+
+        # Manually insert a request as if it was scheduled
+        req_id = "bad-req"
+        scheduler.requests[req_id] = MagicMock()
+        scheduler.running[req_id] = scheduler.requests[req_id]
+        scheduler.output_queues[req_id] = asyncio.Queue()
+
+        # Insert a fake batch request into the batch generator
+        fake_batch_req = MLLMBatchRequest(
+            uid=42,
+            request_id=req_id,
+            prompt="oversized prompt",
+        )
+        bg.unprocessed_requests.append(fake_batch_req)
+        scheduler.request_id_to_uid[req_id] = 42
+        scheduler.uid_to_request_id[42] = req_id
+
+        # Make next() raise to simulate prefill error
+        bg.next = MagicMock(side_effect=ValueError("prompt too large"))
+
+        output = scheduler.step()
+
+        # Batch generator should have had remove() called
+        assert len(bg.unprocessed_requests) == 0
+        # Scheduler bookkeeping should be clean
+        assert req_id not in scheduler.running
+        assert req_id not in scheduler.request_id_to_uid
+        # Error output should have been queued
+        queued = scheduler.output_queues[req_id].get_nowait()
+        assert queued.finished is True
+        assert queued.finish_reason == "error"
+
+    def test_subsequent_request_not_poisoned(self):
+        """A good request after a failed one should not be affected."""
+        import asyncio
+        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
+        from vllm_mlx.mllm_batch_generator import MLLMBatchRequest
+
+        mock_model = MagicMock()
+        mock_processor = MagicMock()
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.encode.return_value = [1, 2, 3]
+        mock_processor.tokenizer = mock_tokenizer
+
+        config = MLLMSchedulerConfig()
+        scheduler = MLLMScheduler(mock_model, mock_processor, config)
+        scheduler._ensure_batch_generator()
+        bg = scheduler.batch_generator
+
+        # First request: will fail
+        bad_id = "bad-req"
+        scheduler.requests[bad_id] = MagicMock()
+        scheduler.running[bad_id] = scheduler.requests[bad_id]
+        scheduler.output_queues[bad_id] = asyncio.Queue()
+        bad_batch = MLLMBatchRequest(uid=1, request_id=bad_id, prompt="bad")
+        bg.unprocessed_requests.append(bad_batch)
+        scheduler.request_id_to_uid[bad_id] = 1
+        scheduler.uid_to_request_id[1] = bad_id
+
+        # Trigger error
+        bg.next = MagicMock(side_effect=ValueError("too large"))
+        scheduler.step()
+
+        # After cleanup, batch generator should be empty
+        assert len(bg.unprocessed_requests) == 0
+        assert bad_id not in scheduler.running
+
+        # Now add a good request — it should not be affected by the old one
+        good_batch = MLLMBatchRequest(uid=2, request_id="good-req", prompt="ok")
+        bg.unprocessed_requests.append(good_batch)
+
+        assert len(bg.unprocessed_requests) == 1
+        assert bg.unprocessed_requests[0].request_id == "good-req"
 
 
 class TestDeferredAbortWaitingDeque:

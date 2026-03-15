@@ -235,21 +235,20 @@ class MLXLanguageModel:
         # The cache itself is the live object — we just track what's in it
         self._cached_token_ids = list(token_ids)
 
-    def _reset_all_caches(self) -> None:
-        """Reset all cache layers to empty state.
+    def _make_fresh_cache(self) -> list:
+        """Create a fresh prompt cache from the model (and draft model)."""
+        from mlx_lm.models.cache import make_prompt_cache
 
-        Handles both trimmable caches (KVCache — trim to zero) and
-        non-trimmable caches (ArraysCache/DeltaNet — set entries to None).
-        """
-        for c in self._prompt_cache:
-            if c.is_trimmable():
-                current = c.offset if hasattr(c, "offset") else 0
-                if current > 0:
-                    c.trim(current)
-            elif hasattr(c, "cache"):
-                # ArraysCache: reset all entries to None
-                for i in range(len(c.cache)):
-                    c.cache[i] = None
+        cache = make_prompt_cache(self.model)
+        if self.draft_model is not None:
+            cache.extend(make_prompt_cache(self.draft_model))
+        return cache
+
+    def _cache_is_trimmable(self) -> bool:
+        """Check if all layers in the prompt cache support trim."""
+        from mlx_lm.models.cache import can_trim_prompt_cache
+
+        return can_trim_prompt_cache(self._prompt_cache)
 
     def _prepare_cache_for_prompt(self, prompt_token_ids: list[int]) -> list[int]:
         """
@@ -262,60 +261,34 @@ class MLXLanguageModel:
         generated tokens from the previous call are also in the cache.
         We must trim based on actual cache offset, not just tracked token count.
 
+        For non-trimmable caches (ArraysCache, CacheList with non-trimmable
+        sub-caches), the cache is recreated from scratch since partial trimming
+        is not possible.
+
         Returns:
             Token IDs that still need to be processed (the non-cached suffix).
         """
         if self._prompt_cache is None:
-            # First call — create fresh cache
-            from mlx_lm.models.cache import make_prompt_cache
-
-            self._prompt_cache = make_prompt_cache(self.model)
-            # When using speculative decoding, mlx-lm expects the prompt_cache
-            # to contain layers for both the main model and draft model:
-            #   prompt_cache[:len(model.layers)] = main model cache
-            #   prompt_cache[len(model.layers):] = draft model cache
-            if self.draft_model is not None:
-                self._prompt_cache.extend(make_prompt_cache(self.draft_model))
+            self._prompt_cache = self._make_fresh_cache()
             self._cached_token_ids = []
             return prompt_token_ids
 
         common_len = self._find_common_prefix_len(prompt_token_ids)
 
-        # Check if any cache layers are non-trimmable (e.g. DeltaNet recurrent
-        # state in Qwen3.5).  These layers accumulate a compressed hidden state
-        # that cannot be partially rolled back — unlike KV caches which can
-        # simply drop trailing entries.
-        has_non_trimmable = any(
-            not c.is_trimmable() and not c.empty()
-            for c in self._prompt_cache
-        )
-
-        if common_len == 0:
-            # No overlap — reset cache entirely
-            self._reset_all_caches()
+        if not self._cache_is_trimmable():
+            # Non-trimmable caches (e.g. ArraysCache, mixed CacheList) cannot
+            # be partially trimmed.  Recreate from scratch so recurrent state
+            # doesn't leak across unrelated prompts.
+            self._prompt_cache = self._make_fresh_cache()
             self._cached_token_ids = []
             return prompt_token_ids
 
-        # For non-trimmable caches (DeltaNet), check if trimming is needed.
-        # The recurrent state encodes ALL previously processed tokens.  If the
-        # new prompt diverges from what was cached (common_len < total cached),
-        # we cannot trim the recurrent state to just the prefix — we must
-        # reset it and reprocess the full prompt from scratch.
-        needs_trim = False
-        for c in self._prompt_cache:
-            if c.is_trimmable():
-                current = c.offset if hasattr(c, "offset") else 0
-                if current > common_len:
-                    needs_trim = True
-                    break
-
-        if has_non_trimmable and needs_trim:
-            logger.info(
-                "Non-trimmable cache layers detected (DeltaNet/SSM), "
-                "resetting all caches for correct recomputation "
-                f"(common_len={common_len})"
-            )
-            self._reset_all_caches()
+        if common_len == 0:
+            # No overlap — reset every trimmable layer to offset 0
+            for c in self._prompt_cache:
+                current = c.offset if hasattr(c, "offset") else c.size()
+                if current > 0:
+                    c.trim(current)
             self._cached_token_ids = []
             return prompt_token_ids
 
@@ -323,10 +296,10 @@ class MLXLanguageModel:
         # Cache offset = prompt_tokens + generated_tokens from last call,
         # so we must trim (cache_offset - common_len), not just
         # (cached_token_ids_len - common_len).
+        # Use .offset when available (KVCache), fall back to .size()
+        # for wrappers like CacheList that delegate trim to sub-caches.
         for c in self._prompt_cache:
-            if not c.is_trimmable():
-                continue
-            current = c.offset if hasattr(c, "offset") else 0
+            current = c.offset if hasattr(c, "offset") else c.size()
             to_trim = current - common_len
             if to_trim > 0:
                 c.trim(to_trim)

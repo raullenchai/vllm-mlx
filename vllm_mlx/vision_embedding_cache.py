@@ -106,9 +106,9 @@ def compute_image_hash(image_path: str) -> str:
     try:
         path = Path(image_path)
         if path.exists() and path.is_file():
-            # Hash file content (first 64KB for speed)
-            with open(path, "rb") as f:
-                content = f.read(65536)
+            # Hash full file content to avoid collisions between images
+            # that share a prefix.
+            content = path.read_bytes()
             return hashlib.sha256(content).hexdigest()[:16]
         else:
             # Hash the string (URL or base64)
@@ -118,10 +118,15 @@ def compute_image_hash(image_path: str) -> str:
 
 
 def compute_images_hash(images: list[str]) -> str:
-    """Compute combined hash for multiple images."""
+    """Compute combined hash for multiple images.
+
+    Order is preserved: [img_a, img_b] and [img_b, img_a] produce
+    different hashes because image order affects vision embeddings
+    and KV state.
+    """
     if not images:
         return "no_images"
-    hashes = sorted(compute_image_hash(img) for img in images)
+    hashes = [compute_image_hash(img) for img in images]
     return hashlib.sha256("_".join(hashes).encode()).hexdigest()[:16]
 
 

@@ -79,6 +79,8 @@ class MLLMRequest:
     videos: list[str] | None = None
     sampling_params: SamplingParams = field(default_factory=SamplingParams)
     stop: list[str] = field(default_factory=list)  # Text-based stop sequences
+    video_fps: float | None = None
+    video_max_frames: int | None = None
     arrival_time: float = field(default_factory=time.time)
 
     # Batch generator UID (assigned when scheduled)
@@ -265,6 +267,8 @@ class MLLMScheduler:
         temperature: float = 0.7,
         top_p: float = 0.9,
         stop: list[str] | None = None,
+        video_fps: float | None = None,
+        video_max_frames: int | None = None,
         request_id: str | None = None,
         **kwargs,
     ) -> str:
@@ -279,6 +283,8 @@ class MLLMScheduler:
             temperature: Sampling temperature
             top_p: Top-p sampling
             stop: Text-based stop sequences
+            video_fps: FPS for video frame extraction
+            video_max_frames: Max frames to extract from video
             request_id: Optional custom request ID
             **kwargs: Additional generation parameters
 
@@ -301,6 +307,8 @@ class MLLMScheduler:
             videos=videos,
             sampling_params=sampling_params,
             stop=stop or [],
+            video_fps=video_fps,
+            video_max_frames=video_max_frames,
         )
 
         self.requests[request_id] = request
@@ -397,6 +405,8 @@ class MLLMScheduler:
                 max_tokens=request.sampling_params.max_tokens,
                 temperature=request.sampling_params.temperature,
                 top_p=request.sampling_params.top_p,
+                video_fps=request.video_fps,
+                video_max_frames=request.video_max_frames,
             )
             batch_requests.append(batch_req)
 
@@ -678,6 +688,8 @@ class MLLMScheduler:
         temperature: float = 0.7,
         top_p: float = 0.9,
         stop: list[str] | None = None,
+        video_fps: float | None = None,
+        video_max_frames: int | None = None,
         **kwargs,
     ) -> str:
         """
@@ -691,6 +703,8 @@ class MLLMScheduler:
             temperature: Sampling temperature
             top_p: Top-p sampling
             stop: Text-based stop sequences
+            video_fps: FPS for video frame extraction
+            video_max_frames: Max frames to extract from video
             **kwargs: Additional parameters
 
         Returns:
@@ -704,6 +718,8 @@ class MLLMScheduler:
             temperature=temperature,
             top_p=top_p,
             stop=stop,
+            video_fps=video_fps,
+            video_max_frames=video_max_frames,
             **kwargs,
         )
 

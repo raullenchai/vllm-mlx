@@ -486,6 +486,122 @@ class TestVisionCache:
         assert hit is False
 
 
+class TestVisionEmbeddingCacheHash:
+    """Regression tests for vision_embedding_cache hash correctness (PR #22)."""
+
+    def test_image_order_produces_different_hashes(self):
+        """Reversed image order must produce a different cache key."""
+        from vllm_mlx.vision_embedding_cache import compute_images_hash
+
+        h1 = compute_images_hash(["img_a.jpg", "img_b.jpg"])
+        h2 = compute_images_hash(["img_b.jpg", "img_a.jpg"])
+        assert h1 != h2, "Image order must be significant for cache keys"
+
+    def test_full_file_hash_no_64kb_collision(self):
+        """Two files differing only after 64KB must produce different hashes."""
+        import os
+        import tempfile
+        from vllm_mlx.vision_embedding_cache import compute_image_hash
+
+        # Create two files with identical first 64KB but different tails
+        prefix = b"\x00" * 65536
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f1:
+            f1.write(prefix + b"AAAA")
+            path1 = f1.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f2:
+            f2.write(prefix + b"BBBB")
+            path2 = f2.name
+
+        try:
+            h1 = compute_image_hash(path1)
+            h2 = compute_image_hash(path2)
+            assert h1 != h2, "Files differing after 64KB must have different hashes"
+        finally:
+            os.unlink(path1)
+            os.unlink(path2)
+
+
+@_skip_no_mlx_lm
+class TestVideoFpsForwarding:
+    """Regression tests for video_fps/video_max_frames forwarding (PR #22)."""
+
+    def test_mllm_request_carries_video_params(self):
+        """MLLMRequest should store video_fps and video_max_frames."""
+        from vllm_mlx.mllm_scheduler import MLLMRequest
+
+        req = MLLMRequest(
+            request_id="test-video",
+            prompt="Describe this video",
+            video_fps=4.0,
+            video_max_frames=64,
+        )
+        assert req.video_fps == 4.0
+        assert req.video_max_frames == 64
+
+    def test_batch_request_carries_video_params(self):
+        """MLLMBatchRequest should store video_fps and video_max_frames."""
+        from vllm_mlx.mllm_batch_generator import MLLMBatchRequest
+
+        req = MLLMBatchRequest(
+            uid=0,
+            request_id="test-video",
+            prompt="Describe",
+            video_fps=5.0,
+            video_max_frames=32,
+        )
+        assert req.video_fps == 5.0
+        assert req.video_max_frames == 32
+
+    def test_add_request_forwards_video_params(self):
+        """add_request should store video params on the MLLMRequest."""
+        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
+
+        mock_model = MagicMock()
+        mock_processor = MagicMock()
+        mock_processor.tokenizer = MagicMock()
+
+        scheduler = MLLMScheduler(mock_model, mock_processor, MLLMSchedulerConfig())
+
+        req_id = scheduler.add_request(
+            prompt="test",
+            videos=["video.mp4"],
+            video_fps=10.0,
+            video_max_frames=50,
+        )
+
+        request = scheduler.requests[req_id]
+        assert request.video_fps == 10.0
+        assert request.video_max_frames == 50
+
+    def test_schedule_waiting_forwards_video_params(self):
+        """_schedule_waiting should copy video params to MLLMBatchRequest."""
+        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
+
+        mock_model = MagicMock()
+        mock_processor = MagicMock()
+        mock_processor.tokenizer = MagicMock()
+
+        scheduler = MLLMScheduler(mock_model, mock_processor, MLLMSchedulerConfig())
+        scheduler._ensure_batch_generator()
+
+        scheduler.add_request(
+            prompt="test",
+            videos=["video.mp4"],
+            video_fps=3.0,
+            video_max_frames=24,
+        )
+
+        scheduled = scheduler._schedule_waiting()
+        assert len(scheduled) == 1
+
+        # Check the batch request in the generator
+        bg = scheduler.batch_generator
+        assert len(bg.unprocessed_requests) == 1
+        batch_req = bg.unprocessed_requests[0]
+        assert batch_req.video_fps == 3.0
+        assert batch_req.video_max_frames == 24
+
+
 @_skip_no_mlx_lm
 class TestMLLMSchedulerStopSequences:
     """Regression tests for stop sequence forwarding (PR #21)."""

@@ -1594,6 +1594,67 @@ class MLXMultimodalLM:
                 completion_tokens=token_count,
             )
 
+        # Store KV cache for future reuse (on cache miss, same as non-streaming path)
+        if (
+            use_cache
+            and self._cache_manager is not None
+            and all_images
+            and not cache_hit
+            and prompt_cache
+        ):
+            try:
+                import copy
+
+                import mlx.core as mx
+
+                prompt_tokens_count = getattr(chunk, "prompt_tokens", 0) if "chunk" in dir() else 0
+
+                cache_to_store = []
+                for layer_cache in prompt_cache:
+                    new_cache = copy.copy(layer_cache)
+                    if hasattr(layer_cache, "state"):
+                        state = layer_cache.state
+                        if (
+                            state is not None
+                            and len(state) >= 2
+                            and state[0] is not None
+                        ):
+                            keys = mx.array(state[0])
+                            values = mx.array(state[1])
+                            if (
+                                hasattr(layer_cache, "offset")
+                                and layer_cache.offset > prompt_tokens_count
+                            ):
+                                new_cache.keys = keys[:, :, :prompt_tokens_count, :]
+                                new_cache.values = values[:, :, :prompt_tokens_count, :]
+                                new_cache.offset = prompt_tokens_count
+                            else:
+                                new_cache.keys = keys
+                                new_cache.values = values
+                                if len(state) >= 3:
+                                    new_cache.offset = state[2]
+                                elif hasattr(layer_cache, "offset"):
+                                    new_cache.offset = min(
+                                        layer_cache.offset, prompt_tokens_count
+                                    )
+                    cache_to_store.append(new_cache)
+
+                token_ids = self.processor.tokenizer.encode(formatted_prompt)
+                self._cache_manager.store(
+                    images=all_images,
+                    prompt=formatted_prompt,
+                    vision_embeddings=None,
+                    kv_cache=cache_to_store,
+                    token_ids=token_ids,
+                    num_image_tokens=256,
+                    model_name=self.model_name,
+                )
+                logger.info(
+                    f"[PREFIX CACHE] Stream: stored KV cache for {len(all_images)} image(s) ({prompt_tokens_count} prompt tokens)"
+                )
+            except Exception as e:
+                logger.warning(f"Stream cache store failed: {e}")
+
         # Final yield with finish_reason
         yield MLLMOutput(
             text="",

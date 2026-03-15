@@ -24,6 +24,7 @@ from typing import Any
 
 import mlx.core as mx
 import mlx.nn as nn
+from mlx_lm.sample_utils import make_sampler
 
 from .multimodal_processor import MultimodalProcessor
 from .vision_embedding_cache import VisionEmbeddingCache
@@ -724,8 +725,6 @@ class MLLMBatchGenerator:
         Returns:
             Tuple of (sampled tokens, logprobs list)
         """
-        from mlx_lm.sample_utils import make_sampler
-
         # Ensure correct shape
         if input_tokens.ndim == 1:
             input_tokens = input_tokens[:, None]

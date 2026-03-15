@@ -695,6 +695,8 @@ class MLXLanguageModel:
                     break
 
                 # --- 3. MTP draft ---
+                rnn_snapshots = {}
+                cache_advanced_by_verify = False
                 try:
                     primary_arr = mx.array([[primary_id]])
                     draft_logits = model.mtp_forward(
@@ -709,7 +711,6 @@ class MLXLanguageModel:
                     draft_token = draft_sampler(draft_logprobs)
 
                     # --- 4. Snapshot RNN if hybrid ---
-                    rnn_snapshots = {}
                     if is_hybrid:
                         for ci, c in enumerate(main_cache):
                             if not (hasattr(c, "is_trimmable") and c.is_trimmable()):
@@ -723,6 +724,7 @@ class MLXLanguageModel:
                     verify_input = mx.concatenate(
                         [primary_arr, draft_token[:, None]], axis=1
                     )
+                    cache_advanced_by_verify = True
                     verify_output = model(
                         verify_input, cache=main_cache, return_hidden=True
                     )
@@ -846,8 +848,43 @@ class MLXLanguageModel:
                     logger.debug(f"[MTP] draft/verify failed: {e}")
                     mtp_stats["errors"] += 1
                     skip_state = None
-                    # Fall through to next iteration — model forward will
-                    # be called fresh without skip_state
+                    # Roll back cache if verify advanced it by 2 (P + D).
+                    # If error happened before verify, cache is clean.
+                    if cache_advanced_by_verify:
+                        if rnn_snapshots:
+                            # Hybrid: trim KV by 2, restore RNN snapshot
+                            for c in main_cache:
+                                if hasattr(c, "is_trimmable") and c.is_trimmable():
+                                    c.trim(2)
+                            for ci, snap in rnn_snapshots.items():
+                                main_cache[ci].state = snap
+                        else:
+                            # Pure attention: trim 2 to undo verify
+                            for c in main_cache:
+                                if hasattr(c, "is_trimmable") and c.is_trimmable():
+                                    c.trim(2)
+                        # Re-advance with primary only so cache matches
+                        # the token we already emitted
+                        try:
+                            rerun_out = model(
+                                mx.array([[primary_id]]),
+                                cache=main_cache,
+                                return_hidden=True,
+                            )
+                            if isinstance(rerun_out, tuple):
+                                rerun_logits, rerun_hidden = rerun_out
+                                skip_state = {
+                                    "logits": rerun_logits[:, -1, :],
+                                    "hidden": rerun_hidden[:, -1:, :],
+                                }
+                                mx.async_eval(
+                                    skip_state["logits"], skip_state["hidden"]
+                                )
+                        except Exception as e2:
+                            logger.warning(
+                                "[MTP] recovery forward also failed: %s", e2
+                            )
+                    # Fall through to next iteration
 
         # Log MTP stats
         total = mtp_stats["accepted"] + mtp_stats["rejected"]

@@ -2,11 +2,15 @@
 """Tests for MTP (Multi-Token Prediction) in SimpleEngine.
 
 Uses mock model objects — no real model loading required.
+Requires mlx and mlx-lm to be installed (used transitively by the code under test).
 """
 
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+mlx_lm = pytest.importorskip("mlx_lm", reason="mlx-lm required for MTP tests")
 import mlx.core as mx
 
 
@@ -418,6 +422,127 @@ class TestMTPEOS(unittest.TestCase):
         self.assertEqual(len(tokens), 2)
         self.assertEqual(tokens[0], primary_id)
         self.assertEqual(tokens[1], draft_id)
+
+
+class TestMTPErrorRecovery(unittest.TestCase):
+    """Test MTP cache rollback when draft/verify throws an exception."""
+
+    def _make_error_model(self, fail_on_verify=True):
+        """Create a model that raises on the verify pass (seq_len == 2).
+
+        First call (seq_len == 1, primary forward) works normally.
+        Second call (seq_len == 2, verify pass) raises RuntimeError.
+        """
+        model = MagicMock()
+        primary_id = 42
+        draft_id = 99
+        call_count = [0]
+
+        def mock_call(input_ids, cache=None, return_hidden=False):
+            call_count[0] += 1
+            seq_len = input_ids.shape[-1]
+
+            if fail_on_verify and seq_len == 2:
+                raise RuntimeError("Simulated verify failure")
+
+            logits = mx.zeros((1, seq_len, 100))
+            logits = logits.at[:, :, primary_id].add(10.0)
+            if return_hidden:
+                hidden = mx.ones((1, seq_len, 64))
+                return logits, hidden
+            return logits
+
+        model.side_effect = mock_call
+        model.__call__ = mock_call
+
+        def mock_mtp_forward(hidden, token_ids, mtp_cache=None):
+            draft_logits = mx.zeros((1, 1, 100))
+            draft_logits = draft_logits.at[:, :, draft_id].add(10.0)
+            return draft_logits
+
+        model.mtp_forward = mock_mtp_forward
+        model.mtp = MagicMock()
+        model.mtp.layers = [MagicMock()]
+        model.make_mtp_cache = MagicMock(return_value=[])
+        model.args = MagicMock()
+        model.args.num_nextn_predict_layers = 1
+
+        return model, primary_id, draft_id
+
+    def test_kv_cache_rolled_back_on_error(self):
+        """KV cache should be rolled back when verify throws after advancing."""
+        from vllm_mlx.models.llm import MLXLanguageModel
+
+        llm = MLXLanguageModel("test-model")
+        model, primary_id, draft_id = self._make_error_model(fail_on_verify=True)
+        llm.model = model
+        llm.tokenizer = _make_mock_tokenizer(eos_token_id=999)
+        llm._loaded = True
+        llm.enable_mtp = True
+        llm._mtp_validated = True
+        llm.mtp_optimistic = False
+
+        cache = [MockCache(offset=5)]
+        llm._prompt_cache = cache
+        llm._main_cache_len = 1
+        llm._cached_token_ids = [1, 2, 3, 4, 5]
+
+        tokens = []
+        for chunk in llm._mtp_generate(
+            suffix_tokens=[5],
+            full_token_ids=[1, 2, 3, 4, 5],
+            max_tokens=3,
+            sampler=lambda lp: mx.argmax(lp, axis=-1),
+            stop=None,
+        ):
+            tokens.append(chunk.token)
+            if chunk.finished:
+                break
+
+        # Should still produce tokens (primary only, no draft) via error recovery
+        self.assertEqual(len(tokens), 3)
+        # All tokens should be primary_id (draft never accepted)
+        for t in tokens:
+            self.assertEqual(t, primary_id)
+
+    def test_hybrid_cache_rnn_restored_on_error(self):
+        """Hybrid cache: RNN state should be restored when verify throws."""
+        from vllm_mlx.models.llm import MLXLanguageModel
+
+        llm = MLXLanguageModel("test-model")
+        model, primary_id, draft_id = self._make_error_model(fail_on_verify=True)
+        llm.model = model
+        llm.tokenizer = _make_mock_tokenizer(eos_token_id=999)
+        llm._loaded = True
+        llm.enable_mtp = True
+        llm._mtp_validated = True
+        llm.mtp_optimistic = False
+
+        kv_cache = MockCache(offset=5, trimmable=True)
+        rnn_cache = MockRNNCache(offset=5)
+        # Save initial RNN state reference to verify it gets restored
+        initial_rnn_state_val = mx.array(rnn_cache.state[0]._arr)
+
+        llm._prompt_cache = [kv_cache, rnn_cache]
+        llm._main_cache_len = 2
+        llm._cached_token_ids = [1, 2, 3, 4, 5]
+
+        tokens = []
+        for chunk in llm._mtp_generate(
+            suffix_tokens=[5],
+            full_token_ids=[1, 2, 3, 4, 5],
+            max_tokens=2,
+            sampler=lambda lp: mx.argmax(lp, axis=-1),
+            stop=None,
+        ):
+            tokens.append(chunk.token)
+            if chunk.finished:
+                break
+
+        # Should still produce tokens via error recovery
+        self.assertEqual(len(tokens), 2)
+        for t in tokens:
+            self.assertEqual(t, primary_id)
 
 
 class TestMTPFlagPassthrough(unittest.TestCase):

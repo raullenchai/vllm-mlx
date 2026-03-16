@@ -80,16 +80,35 @@ class TestDetectModelConfig:
         assert config.tool_call_parser == "hermes"
         assert config.reasoning_parser is None
 
-    # DeepSeek
-    def test_deepseek(self):
-        config = detect_model_config("deepseek-ai/DeepSeek-R1-0528-Qwen3-8B")
-        config2 = detect_model_config("deepseek-v3-0324")
-        # DeepSeek should match deepseek pattern, not qwen
+    # DeepSeek V3.1 / R1-0528 → deepseek_v31 parser
+    @pytest.mark.parametrize(
+        "model_path",
+        [
+            "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
+            "deepseek-ai/DeepSeek-V3.1-0324",
+            "mlx-community/DeepSeek-R1-0528-4bit",
+        ],
+    )
+    def test_deepseek_v31(self, model_path):
+        config = detect_model_config(model_path)
+        assert config is not None
+        assert config.tool_call_parser == "deepseek_v31"
+        assert config.reasoning_parser == "deepseek_r1"
+
+    # DeepSeek older (V3, R1 non-0528) → generic deepseek parser
+    @pytest.mark.parametrize(
+        "model_path",
+        [
+            "deepseek-v3-0324",
+            "deepseek-ai/DeepSeek-R1",
+            "mlx-community/DeepSeek-V2.5-4bit",
+        ],
+    )
+    def test_deepseek_generic(self, model_path):
+        config = detect_model_config(model_path)
         assert config is not None
         assert config.tool_call_parser == "deepseek"
         assert config.reasoning_parser == "deepseek_r1"
-        assert config2 is not None
-        assert config2.tool_call_parser == "deepseek"
 
     # Hermes fine-tuned
     def test_hermes(self):

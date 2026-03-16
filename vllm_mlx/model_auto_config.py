@@ -22,7 +22,12 @@ class ModelConfig:
 # Model family patterns → optimal config.
 # Order matters: first match wins. More specific patterns go first.
 _MODEL_PATTERNS: list[tuple[re.Pattern, ModelConfig]] = [
-    # DeepSeek (R1, V3) — before Qwen because DeepSeek-R1-Qwen3 distills exist
+    # DeepSeek V3.1 / R1-0528 — dedicated parser, before generic deepseek
+    (re.compile(r"deepseek.*(v3\.1|r1[-_]?0528)", re.IGNORECASE), ModelConfig(
+        tool_call_parser="deepseek_v31",
+        reasoning_parser="deepseek_r1",
+    )),
+    # DeepSeek (older V3, R1) — before Qwen because DeepSeek-R1-Qwen3 distills exist
     (re.compile(r"deepseek", re.IGNORECASE), ModelConfig(
         tool_call_parser="deepseek",
         reasoning_parser="deepseek_r1",

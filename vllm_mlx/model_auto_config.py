@@ -62,6 +62,11 @@ _MODEL_PATTERNS: list[tuple[re.Pattern, ModelConfig]] = [
         tool_call_parser="harmony",
         reasoning_parser="harmony",
     )),
+    # Kimi
+    (re.compile(r"kimi", re.IGNORECASE), ModelConfig(
+        tool_call_parser="kimi",
+        reasoning_parser=None,
+    )),
     # Mistral / Devstral
     (re.compile(r"mistral|devstral", re.IGNORECASE), ModelConfig(
         tool_call_parser="hermes",

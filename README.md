@@ -201,6 +201,7 @@ Parsers are **auto-detected from the model name** — you don't need to specify 
 | GLM-4.7 | `glm47` | *(none)* | 100% tool calling |
 | MiniMax-M2.5 | `minimax` | `minimax` | XML tool format |
 | GPT-OSS | `harmony` | `harmony` | Native format |
+| Kimi-Linear | `kimi` | *(none)* | Kimi tool format |
 | Llama 3.x | `llama` | *(none)* | JSON tool format |
 | Mistral / Devstral | `hermes` | *(none)* | Hermes-compatible |
 | Gemma | `hermes` | *(none)* | Hermes-compatible |
@@ -216,9 +217,9 @@ All 17 parsers include automatic recovery — if a quantized model outputs broke
 
 *This section is for ML engineers who want the numbers. If you just want to run models, see [Quick Start](#quick-start) and [Choose Your Model](#choose-your-model) above.*
 
-### Performance — 21 models, 6 engines
+### Performance — 22 models, 6 engines
 
-All benchmarks on Mac Studio M3 Ultra (256GB). Sorted by model size. Engines ranked by total bar length per model. **Rapid-MLX is #1 on 15 of 17 benchmarked models.**
+All benchmarks on Mac Studio M3 Ultra (256GB). Sorted by model size. Engines ranked by total bar length per model. **Rapid-MLX is #1 on 16 of 18 benchmarked models.**
 
 ```
 █ = decode speed (tok/s)  ▒ = TTFT responsiveness  ░ = tool calling
@@ -247,7 +248,7 @@ Hermes-3-Llama 8B       ⚡ Rapid-MLX   █████████████�
 Qwen3.5-9B              ⚡ Rapid-MLX   ████████████████▒▒▒▒▒▒▒▒░░░░░░░░                          109 tok/s · 0.18s · 100%
                           vllm-mlx    ███████████████▒▒▒▒▒▒░░░░░░░░                             104 tok/s · 0.26s · 100%
                           oMLX        ███████████████                                           102 tok/s
-                          Ollama      ████▒▒▒▒▒▒░░░░░░░░                                        26 tok/s · 0.27s · 100%
+                          Ollama      ███████▒▒▒▒▒▒                                             46 tok/s · 0.19s · 0%
                           mlx-lm      █████████                                                 61 tok/s
                           llama.cpp   not supported
 
@@ -258,7 +259,7 @@ GLM-4.7-Flash 9B        ⚡ Rapid-MLX   █████████▒▒▒▒�
                           llama.cpp   not supported
 
 Gemma 3 12B               oMLX        ██████████                                                67 tok/s
-                          Ollama      ████████▒▒▒▒▒▒▒▒▒                                         54 tok/s · 0.14s · 0%
+                          Ollama      ████████▒▒▒▒▒▒▒▒▒                                         58 tok/s · 0.14s · 0%
                           Rapid-MLX   ███████▒▒▒▒                                               49 tok/s · 0.32s · 0%
                           mlx-lm      ███████████                                               73 tok/s
                           vllm-mlx    not supported
@@ -267,7 +268,7 @@ Gemma 3 12B               oMLX        ██████████            
 Phi-4 Mini 14B          ⚡ Rapid-MLX   ██████████████████████████▒▒▒▒▒▒▒▒▒▒                      174 tok/s · 0.10s · 0%
                           vllm-mlx    █████████████████████████▒▒▒▒▒▒▒▒                         170 tok/s · 0.15s · 0%
                           llama.cpp   ████████▒▒▒▒▒▒▒▒▒▒▒░░░░░░                                 55 tok/s · 0.03s · 80%
-                          Ollama      ████████▒▒▒▒▒▒▒▒▒▒▒                                       51 tok/s · 0.06s · 0%
+                          Ollama      ████████▒▒▒▒▒▒▒▒▒▒▒                                       56 tok/s · 0.05s · 0%
                           mlx-lm      ███████████                                               77 tok/s
 
 DeepSeek-R1 14B           coming soon
@@ -312,6 +313,11 @@ Qwen3.5-35B-A3B         ⚡ Rapid-MLX   ████████████▒�
 MiniMax-M2.5            ⚡ Rapid-MLX   ████████▒▒▒▒▒▒▒▒▒░░░░░░░░                                 52 tok/s · 0.13s · 100%
                           mlx-lm      ████████                                                  51 tok/s
                           vllm-mlx    not supported
+                          Ollama      not supported
+                          llama.cpp   not supported
+
+Kimi-Linear-48B-A3B     ⚡ Rapid-MLX   ██████████████▒▒▒▒▒▒▒▒                                    96 tok/s · 0.06s · 0%
+                          mlx-lm      not supported (trust_remote_code)
                           Ollama      not supported
                           llama.cpp   not supported
 
@@ -383,18 +389,19 @@ Ollama and llama.cpp use C++ with generic Metal shaders. Rapid-MLX uses Apple's 
 
 ### Speedup Summary
 
-17 models tested across 6 engines on **Mac Studio M3 Ultra (256GB)**. Same model, same hardware, head-to-head.
+18 models tested across 6 engines on **Mac Studio M3 Ultra (256GB)**. Same model, same hardware, head-to-head.
 
-**Rapid-MLX is the fastest or tied on 15 of 17 models** vs upstream vllm-mlx, mlx-lm, oMLX, Ollama, and llama.cpp.
+**Rapid-MLX is the fastest or tied on 16 of 18 models** vs upstream vllm-mlx, mlx-lm, oMLX, Ollama, and llama.cpp.
 
 | Model | Rapid-MLX | Best Alternative | Speedup |
 |-------|----------|-----------------|---------|
 | **Llama 3.2 3B** | **225** tok/s | 238 (mlx-lm) / 196 (oMLX) | ~1.0x / **1.1x** |
-| **Phi-4 Mini 14B** | **174** tok/s | 77 (mlx-lm) / 51 (Ollama) | **2.3x** / **3.4x** |
+| **Phi-4 Mini 14B** | **174** tok/s | 77 (mlx-lm) / 56 (Ollama) | **2.3x** / **3.1x** |
 | **Qwen3.5-4B** | **158** tok/s · 0.16s | 168 (mlx-lm) / 0.19s (vllm-mlx) | ~1.0x decode / **1.2x TTFT** |
 | **GPT-OSS 20B** | **123** tok/s | 106 (oMLX) / 79 (upstream) | **1.2x** / **1.6x** |
 | **Hermes-3-Llama 8B** | **123** tok/s | 127 (mlx-lm) | ~1.0x |
-| **Qwen3.5-9B** | **109** tok/s | 61 (mlx-lm) / 26 (Ollama) | **1.8x** / **4.2x** |
+| **Qwen3.5-9B** | **109** tok/s | 61 (mlx-lm) / 46 (Ollama) | **1.8x** / **2.4x** |
+| **Kimi-Linear-48B-A3B** | **96** tok/s | — (only engine supporting it) | — |
 | **Qwen3.5-35B-A3B** | **82** tok/s | 85 (mlx-lm) | ~1.0x |
 | **Qwen3-Coder 80B** | **74** tok/s | 76 (mlx-lm) | ~1.0x |
 | **GLM-4.7-Flash 9B** | **60** tok/s | 56 (upstream) | 1.07x |
@@ -403,7 +410,7 @@ Ollama and llama.cpp use C++ with generic Metal shaders. Rapid-MLX uses Apple's 
 | **Qwen3.5-122B-A10B** | **44** tok/s | 45 (mlx-lm) | ~1.0x |
 | **MiniMax-M2.5** | **52** tok/s | 51 (mlx-lm) | ~1.0x |
 | **Qwen3.5-27B** | 39 tok/s | 39 (mlx-lm) | ~1.0x |
-| Gemma 3 12B | 49 tok/s | 73 (mlx-lm) / 54 (Ollama) | 0.7x |
+| Gemma 3 12B | 49 tok/s | 73 (mlx-lm) / 58 (Ollama) | 0.7x |
 
 ### TTFT — Prompt Cache Advantage
 

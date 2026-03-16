@@ -129,6 +129,13 @@ class TestDetectModelConfig:
         assert config.tool_call_parser == "llama"
         assert config.reasoning_parser is None
 
+    # Kimi
+    def test_kimi(self):
+        config = detect_model_config("mlx-community/Kimi-Linear-48B-A3B-Instruct-6bit")
+        assert config is not None
+        assert config.tool_call_parser == "kimi"
+        assert config.reasoning_parser is None
+
     # Gemma
     def test_gemma(self):
         config = detect_model_config("mlx-community/gemma-3-12b-it-4bit")

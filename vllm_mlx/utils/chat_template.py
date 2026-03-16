@@ -44,10 +44,10 @@ def _build_tool_injection_text(tools: list[dict]) -> str:
             lines.append(f"Required: {json.dumps(required)}")
         lines.append("")
 
-    lines.append("To call a tool, output exactly this format:")
-    lines.append("<tool_call>")
-    lines.append('{"name": "tool_name", "arguments": {"param": "value"}}')
-    lines.append("</tool_call>")
+    lines.append(
+        "When you need to use a tool, respond with a JSON object "
+        'containing "name" and "arguments" keys.'
+    )
 
     return "\n".join(lines)
 
@@ -72,7 +72,15 @@ def _inject_tools_into_messages(
 
     if msgs and msgs[0].get("role") == "system":
         first = dict(msgs[0])
-        first["content"] = first.get("content", "") + "\n\n" + injection
+        existing = first.get("content", "")
+        # Handle content parts format (multimodal messages)
+        if isinstance(existing, list):
+            # Append as a new text part
+            first["content"] = list(existing) + [
+                {"type": "text", "text": "\n\n" + injection}
+            ]
+        else:
+            first["content"] = str(existing) + "\n\n" + injection
         msgs[0] = first
     else:
         msgs.insert(0, {"role": "system", "content": injection})

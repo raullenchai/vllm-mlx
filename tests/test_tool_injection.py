@@ -57,10 +57,10 @@ class TestBuildToolInjectionText:
         text = _build_tool_injection_text(SAMPLE_TOOLS)
         assert '["location"]' in text
 
-    def test_includes_calling_format(self):
+    def test_includes_calling_instruction(self):
         text = _build_tool_injection_text(SAMPLE_TOOLS)
-        assert "<tool_call>" in text
-        assert "</tool_call>" in text
+        assert '"name"' in text
+        assert '"arguments"' in text
 
     def test_multiple_tools(self):
         tools = SAMPLE_TOOLS + [
@@ -110,6 +110,36 @@ class TestInjectToolsIntoMessages:
         msgs = _inject_tools_into_messages(MESSAGES_NO_SYSTEM, SAMPLE_TOOLS)
         assert len(msgs) == len(MESSAGES_NO_SYSTEM) + 1
 
+    def test_handles_content_parts_format(self):
+        """System message with content parts (multimodal) should append text part."""
+        messages = [
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": "You are helpful."}],
+            },
+            {"role": "user", "content": "Hi"},
+        ]
+        msgs = _inject_tools_into_messages(messages, SAMPLE_TOOLS)
+        content = msgs[0]["content"]
+        assert isinstance(content, list)
+        assert len(content) == 2
+        assert content[0] == {"type": "text", "text": "You are helpful."}
+        assert content[1]["type"] == "text"
+        assert "get_weather" in content[1]["text"]
+
+    def test_content_parts_does_not_mutate_original(self):
+        """Content parts list must not be mutated."""
+        messages = [
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": "You are helpful."}],
+            },
+            {"role": "user", "content": "Hi"},
+        ]
+        original_len = len(messages[0]["content"])
+        _inject_tools_into_messages(messages, SAMPLE_TOOLS)
+        assert len(messages[0]["content"]) == original_len
+
 
 class TestApplyChatTemplateToolInjection:
     """Tests for apply_chat_template with tool injection fallback."""
@@ -146,7 +176,6 @@ class TestApplyChatTemplateToolInjection:
         tok = self.MockTokenizerRejectsTools()
         result = apply_chat_template(tok, MESSAGES_WITH_SYSTEM, tools=SAMPLE_TOOLS)
         assert "get_weather" in result
-        assert "<tool_call>" in result
 
     def test_no_tools_no_injection(self):
         """When no tools provided, no injection occurs even on TypeError."""

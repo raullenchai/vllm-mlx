@@ -90,9 +90,10 @@ class MistralToolParser(ToolParser):
                 continue
 
             # Try new format first: func_name{"arg": "value"}
+            # Devstral may emit func_name[ARGS]{"arg": "value"} — strip [ARGS].
             if not raw_tool_call.startswith("[") and "{" in raw_tool_call:
                 end_name = raw_tool_call.find("{")
-                tool_name = raw_tool_call[:end_name].strip()
+                tool_name = raw_tool_call[:end_name].replace("[ARGS]", "").strip()
                 args_str = raw_tool_call[end_name:]
 
                 if tool_name:
@@ -243,11 +244,12 @@ class MistralToolParser(ToolParser):
         result: dict[str, str] = {}
 
         # Check for function name (before {)
+        # Strip [ARGS] suffix emitted by Devstral models.
         if "{" in text:
             name_part = text[: text.find("{")]
             args_part = text[text.find("{") :]
             if name_part.strip():
-                result["name"] = name_part.strip()
+                result["name"] = name_part.replace("[ARGS]", "").strip()
             if args_part:
                 result["arguments"] = args_part
         else:

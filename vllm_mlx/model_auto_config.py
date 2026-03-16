@@ -27,10 +27,15 @@ _MODEL_PATTERNS: list[tuple[re.Pattern, ModelConfig]] = [
         tool_call_parser="deepseek_v31",
         reasoning_parser="deepseek_r1",
     )),
-    # DeepSeek (older V3, R1) — before Qwen because DeepSeek-R1-Qwen3 distills exist
-    (re.compile(r"deepseek", re.IGNORECASE), ModelConfig(
+    # DeepSeek R1 (non-0528) — has reasoning
+    (re.compile(r"deepseek.*r1", re.IGNORECASE), ModelConfig(
         tool_call_parser="deepseek",
         reasoning_parser="deepseek_r1",
+    )),
+    # DeepSeek (V3, V2.5, etc.) — no reasoning parser
+    (re.compile(r"deepseek", re.IGNORECASE), ModelConfig(
+        tool_call_parser="deepseek",
+        reasoning_parser=None,
     )),
     # Qwen3-Coder — before generic Qwen3 (non-thinking, no reasoning parser)
     (re.compile(r"qwen3[-_]?coder", re.IGNORECASE), ModelConfig(

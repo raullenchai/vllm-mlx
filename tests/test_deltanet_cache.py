@@ -8,9 +8,7 @@ cache logic must handle both types correctly to avoid stale recurrent state
 corrupting multi-turn conversations.
 """
 
-from unittest.mock import MagicMock
 
-import pytest
 
 
 class FakeKVCache:

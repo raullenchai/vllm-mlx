@@ -501,6 +501,7 @@ class TestVisionEmbeddingCacheHash:
         """Two files differing only after 64KB must produce different hashes."""
         import os
         import tempfile
+
         from vllm_mlx.vision_embedding_cache import compute_image_hash
 
         # Create two files with identical first 64KB but different tails
@@ -626,12 +627,12 @@ class TestMLLMSchedulerStopSequences:
 
     def test_process_batch_responses_stop_string(self):
         """_process_batch_responses should finish request when stop string found."""
+        from vllm_mlx.mllm_batch_generator import MLLMBatchResponse
         from vllm_mlx.mllm_scheduler import (
             MLLMRequest,
             MLLMScheduler,
             MLLMSchedulerConfig,
         )
-        from vllm_mlx.mllm_batch_generator import MLLMBatchResponse
         from vllm_mlx.request import SamplingParams
 
         # Create scheduler with mocks
@@ -711,8 +712,9 @@ class TestPrefillErrorCleanup:
     def test_error_removes_from_batch_generator(self):
         """step() error path must remove failed requests from batch generator."""
         import asyncio
-        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
+
         from vllm_mlx.mllm_batch_generator import MLLMBatchRequest
+        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
 
         mock_model = MagicMock()
         mock_processor = MagicMock()
@@ -762,8 +764,9 @@ class TestPrefillErrorCleanup:
     def test_subsequent_request_not_poisoned(self):
         """A good request after a failed one should not be affected."""
         import asyncio
-        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
+
         from vllm_mlx.mllm_batch_generator import MLLMBatchRequest
+        from vllm_mlx.mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
 
         mock_model = MagicMock()
         mock_processor = MagicMock()
@@ -808,8 +811,8 @@ class TestDeferredAbortWaitingDeque:
 
     def test_do_abort_removes_waiting_when_request_none(self):
         """_do_abort_request should remove from waiting even if request already cleaned."""
-        from vllm_mlx.scheduler import Scheduler, SchedulerConfig
         from vllm_mlx.request import Request, RequestStatus, SamplingParams
+        from vllm_mlx.scheduler import Scheduler, SchedulerConfig
 
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()

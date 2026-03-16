@@ -1,9 +1,6 @@
 """Tests for DeltaNet/hybrid cache snapshot logic in MLXLanguageModel."""
 
-import copy
 from unittest.mock import MagicMock
-
-import pytest
 
 
 class FakeKVCache:

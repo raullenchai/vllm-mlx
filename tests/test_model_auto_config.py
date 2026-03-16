@@ -2,7 +2,7 @@
 
 import pytest
 
-from vllm_mlx.model_auto_config import ModelConfig, detect_model_config
+from vllm_mlx.model_auto_config import detect_model_config
 
 
 class TestDetectModelConfig:

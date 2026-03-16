@@ -33,8 +33,8 @@ Drop-in OpenAI API replacement for Apple Silicon. We aggressively adopt cutting-
 # 1. Install (one command, checks Apple Silicon + Python automatically)
 curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash
 
-# 2. Pick a model and start serving
-rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --tool-call-parser hermes --port 8000
+# 2. Pick a model and start serving (parsers auto-detected from model name)
+rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --port 8000
 
 # 3. Use with any OpenAI-compatible app
 OPENAI_BASE_URL=http://localhost:8000/v1 claude
@@ -168,37 +168,43 @@ Pick the one that matches your Mac:
 
 ```bash
 # 16 GB — lightweight, fast
-rapid-mlx serve mlx-community/Qwen3.5-4B-MLX-4bit --tool-call-parser hermes --port 8000
+rapid-mlx serve mlx-community/Qwen3.5-4B-MLX-4bit --port 8000
 
 # 24 GB — best small model
-rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --tool-call-parser hermes --port 8000
+rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --port 8000
 
 # 64 GB — sweet spot
-rapid-mlx serve mlx-community/Qwen3.5-35B-A3B-8bit --tool-call-parser hermes --prefill-step-size 8192 --port 8000
+rapid-mlx serve mlx-community/Qwen3.5-35B-A3B-8bit --prefill-step-size 8192 --port 8000
 
 # 96+ GB — best model
-rapid-mlx serve nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx --tool-call-parser hermes --kv-bits 8 --prefill-step-size 8192 --port 8000
+rapid-mlx serve nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx --kv-bits 8 --prefill-step-size 8192 --port 8000
 
 # Coding agent — fast MoE, great for Claude Code / Cursor
-rapid-mlx serve lmstudio-community/Qwen3-Coder-Next-MLX-4bit --tool-call-parser hermes --prefill-step-size 8192 --port 8000
+rapid-mlx serve lmstudio-community/Qwen3-Coder-Next-MLX-4bit --prefill-step-size 8192 --port 8000
 
 # Vision — image understanding
 rapid-mlx serve mlx-community/Qwen3-VL-4B-Instruct-MLX-4bit --mllm --port 8000
 ```
 
 <details>
-<summary><strong>Other model families (DeepSeek, Mistral, GLM, Llama)</strong></summary>
+<summary><strong>Parser auto-detection & manual overrides</strong></summary>
 
-| Model Family | `--tool-call-parser` | `--reasoning-parser` | Notes |
+Parsers are **auto-detected from the model name** — you don't need to specify `--tool-call-parser` or `--reasoning-parser` for supported families. Explicit flags always override auto-detection.
+
+| Model Family | Auto-detected `--tool-call-parser` | Auto-detected `--reasoning-parser` | Notes |
 |-------------|---------------------|---------------------|-------|
 | Qwen3.5 (all sizes) | `hermes` | `qwen3` | **Recommended** — 100% tool calling |
 | Qwen3-Coder-Next | `hermes` | *(none)* | Fast coding, non-thinking mode |
+| DeepSeek R1-0528 / V3.1 | `deepseek_v31` | `deepseek_r1` | Dedicated V3.1 parser |
+| DeepSeek R1 (older) | `deepseek` | `deepseek_r1` | With reasoning |
+| DeepSeek V3 / V2.5 | `deepseek` | *(none)* | No reasoning parser |
 | GLM-4.7 | `glm47` | *(none)* | 100% tool calling |
 | MiniMax-M2.5 | `minimax` | `minimax` | XML tool format |
-| GPT-OSS | `seed_oss` | `gpt_oss` | Native format |
-| DeepSeek-R1 | `deepseek` | `deepseek_r1` | With reasoning |
+| GPT-OSS | `harmony` | `harmony` | Native format |
 | Llama 3.x | `llama` | *(none)* | JSON tool format |
-| Mistral | `hermes` | *(none)* | Hermes-compatible |
+| Mistral / Devstral | `hermes` | *(none)* | Hermes-compatible |
+| Gemma | `hermes` | *(none)* | Hermes-compatible |
+| Phi-3/4 | `hermes` | *(none)* | Hermes-compatible |
 
 All 17 parsers include automatic recovery — if a quantized model outputs broken tool calls as text, they're auto-converted back to structured format.
 
@@ -545,8 +551,8 @@ Vision, audio (STT/TTS), video understanding, and text embeddings — all throug
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--tool-call-parser` | Parser: `hermes`, `minimax`, `qwen`, `llama`, `deepseek`, etc. | *(none)* |
-| `--reasoning-parser` | Parser: `qwen3`, `deepseek_r1`, `minimax`, `gpt_oss` | *(none)* |
+| `--tool-call-parser` | Parser: `hermes`, `minimax`, `qwen`, `llama`, `deepseek`, etc. | *(auto-detected)* |
+| `--reasoning-parser` | Parser: `qwen3`, `deepseek_r1`, `minimax`, `gpt_oss` | *(auto-detected)* |
 | `--enable-tool-logits-bias` | Jump-forward decoding for faster tool calls | off |
 
 ### Performance

@@ -21,6 +21,23 @@ SPECIAL_TOKENS_PATTERN = re.compile(
     r"\[e~\[|\]~b\][a-z]*|\]~!b\["
 )
 
+# Fast-path characters that MUST be present for any special token to match.
+# If none of these appear in the text, regex can be skipped entirely.
+_SPECIAL_TOKEN_CHARS = frozenset("<[]")
+
+
+def strip_special_tokens(text: str) -> str:
+    """Remove special tokens from text with a fast-path bypass.
+
+    Most per-token deltas are plain text without special token markers.
+    Checking for marker characters first avoids regex overhead on ~99% of tokens.
+    """
+    # Fast path: no marker characters → no special tokens possible
+    for ch in text:
+        if ch in _SPECIAL_TOKEN_CHARS:
+            return SPECIAL_TOKENS_PATTERN.sub("", text)
+    return text
+
 
 # Regex for matching final channel marker with optional constrain token:
 #   <|channel|>final<|message|>

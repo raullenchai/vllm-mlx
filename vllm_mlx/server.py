@@ -108,6 +108,7 @@ from .api.utils import (
     extract_json_from_response,
     extract_multimodal_content,
     is_mllm_model,  # noqa: F401
+    strip_special_tokens,
     strip_thinking_tags,
 )
 from .engine import (
@@ -2377,7 +2378,7 @@ async def _stream_anthropic_messages(
 
         if delta_text:
             # Filter special tokens
-            content = SPECIAL_TOKENS_PATTERN.sub("", delta_text)
+            content = strip_special_tokens(delta_text)
 
             if content:
                 accumulated_text += content
@@ -2519,6 +2520,23 @@ async def stream_chat_completion(
                 output.logprobs, token_id, engine.tokenizer, top_k_logprobs
             )
             return ChoiceLogProbs(content=[token_lp])
+
+        def _fast_sse_chunk(
+            text: str, field: str = "content", created: int | None = None
+        ) -> str:
+            """Build SSE chunk JSON directly, bypassing Pydantic serialization.
+
+            For the common case (single content/reasoning delta, no logprobs,
+            no finish_reason), this avoids constructing Pydantic objects and
+            calling model_dump_json().
+            """
+            _created = created or int(time.time())
+            escaped = json.dumps(text)  # Handles escaping
+            return (
+                f'data: {{"id":"{response_id}","object":"chat.completion.chunk",'
+                f'"created":{_created},"model":"{request.model}",'
+                f'"choices":[{{"index":0,"delta":{{"{field}":{escaped}}}}}]}}\n\n'
+            )
 
         # First chunk with role
         first_chunk = ChatCompletionChunk(
@@ -2679,9 +2697,9 @@ async def stream_chat_completion(
 
                 # Filter special tokens from reasoning parser output
                 if content:
-                    content = SPECIAL_TOKENS_PATTERN.sub("", content)
+                    content = strip_special_tokens(content)
                 if reasoning:
-                    reasoning = SPECIAL_TOKENS_PATTERN.sub("", reasoning)
+                    reasoning = strip_special_tokens(reasoning)
 
                 # Skip empty deltas (no content, no reasoning, no finish)
                 finish_reason = (
@@ -2691,6 +2709,20 @@ async def stream_chat_completion(
                 )
                 if not content and not reasoning and not finish_reason:
                     continue
+
+                # Fast path: simple content or reasoning delta without
+                # logprobs, finish_reason, or usage — skip Pydantic entirely.
+                if (
+                    not finish_reason
+                    and not want_logprobs
+                    and not output.finished
+                ):
+                    if content and not reasoning:
+                        yield _fast_sse_chunk(content, "content")
+                        continue
+                    if reasoning and not content:
+                        yield _fast_sse_chunk(reasoning, "reasoning")
+                        continue
 
                 chunk = ChatCompletionChunk(
                     id=response_id,
@@ -2708,7 +2740,8 @@ async def stream_chat_completion(
                     usage=get_usage(output) if output.finished else None,
                 )
                 sse_line = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
-                logger.info(f"[SSE] {sse_line.strip()[:300]}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f"[SSE] {sse_line.strip()[:300]}")
                 yield sse_line
             else:
                 # Standard path without reasoning parsing
@@ -2716,7 +2749,7 @@ async def stream_chat_completion(
 
                 # Filter special tokens that may leak into streaming output
                 if content:
-                    content = SPECIAL_TOKENS_PATTERN.sub("", content)
+                    content = strip_special_tokens(content)
 
                 # Add <think> prefix on first content chunk for thinking models
                 if is_thinking_model and not think_prefix_sent and content:
@@ -2776,7 +2809,7 @@ async def stream_chat_completion(
                 # bypassed the earlier filter (e.g. via tool parser path
                 # which operates on raw delta_text).
                 if content:
-                    content = SPECIAL_TOKENS_PATTERN.sub("", content)
+                    content = strip_special_tokens(content)
 
                 # Skip empty-string content but preserve whitespace/newlines
                 # (newlines are significant for markdown formatting)
@@ -2792,6 +2825,16 @@ async def stream_chat_completion(
 
                 # Skip empty chunks (no content and no finish)
                 if not content and not finish_reason:
+                    continue
+
+                # Fast path: simple content delta — skip Pydantic.
+                if (
+                    content
+                    and not finish_reason
+                    and not want_logprobs
+                    and not output.finished
+                ):
+                    yield _fast_sse_chunk(content, "content")
                     continue
 
                 chunk = ChatCompletionChunk(

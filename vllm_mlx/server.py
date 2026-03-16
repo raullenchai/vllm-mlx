@@ -2680,14 +2680,16 @@ async def stream_chat_completion(
                 # Filter special tokens from reasoning parser output
                 if content:
                     content = SPECIAL_TOKENS_PATTERN.sub("", content)
+                if reasoning:
+                    reasoning = SPECIAL_TOKENS_PATTERN.sub("", reasoning)
 
-                # Skip empty deltas (e.g. reasoning-only chunks with no content)
+                # Skip empty deltas (no content, no reasoning, no finish)
                 finish_reason = (
                     "tool_calls"
                     if (output.finished and tool_calls_detected)
                     else (output.finish_reason if output.finished else None)
                 )
-                if not content and not finish_reason:
+                if not content and not reasoning and not finish_reason:
                     continue
 
                 chunk = ChatCompletionChunk(
@@ -2697,6 +2699,7 @@ async def stream_chat_completion(
                         ChatCompletionChunkChoice(
                             delta=ChatCompletionChunkDelta(
                                 content=content if content else None,
+                                reasoning=reasoning if reasoning else None,
                             ),
                             finish_reason=finish_reason,
                             logprobs=_build_chunk_logprobs(output),

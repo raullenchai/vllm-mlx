@@ -129,6 +129,27 @@ class TestDetectModelConfig:
         assert config.tool_call_parser == "llama"
         assert config.reasoning_parser is None
 
+    # Gemma
+    def test_gemma(self):
+        config = detect_model_config("mlx-community/gemma-3-12b-it-4bit")
+        assert config is not None
+        assert config.tool_call_parser == "hermes"
+        assert config.reasoning_parser is None
+
+    # Phi
+    @pytest.mark.parametrize(
+        "model_path",
+        [
+            "mlx-community/Phi-4-mini-instruct-4bit",
+            "microsoft/Phi-3.5-mini-instruct",
+        ],
+    )
+    def test_phi(self, model_path):
+        config = detect_model_config(model_path)
+        assert config is not None
+        assert config.tool_call_parser == "hermes"
+        assert config.reasoning_parser is None
+
     # Unknown model → None
     def test_unknown_model(self):
         config = detect_model_config("some-random-model-xyz")

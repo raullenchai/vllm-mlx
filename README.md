@@ -9,7 +9,7 @@
 
 Drop-in OpenAI API replacement for Apple Silicon. 2-4x faster than Ollama, 100% tool-calling, sub-200ms cached TTFT.
 
-![Benchmark comparison — Rapid-MLX vs Ollama, llama.cpp, mlx-lm, and more](docs/assets/benchmark-comparison.png)
+![Benchmark comparison — Rapid-MLX vs Ollama, llama.cpp, mlx-lm, and more](https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/docs/assets/benchmark-comparison.png)
 
 | | Your Mac runs AI | How fast | What works |
 |:---|:---:|:---:|:---:|

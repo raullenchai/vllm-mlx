@@ -188,7 +188,7 @@ def run_suite(n_runs=3, verbose=True):
             tc_success += 1
             if r.get("tc_latency_ms"):
                 tc_latencies.append(r["tc_latency_ms"])
-        log(f"  Run {i+1}: TC={'YES' if r.get('has_tool_calls') else 'NO'} | Latency={r.get('tc_latency_ms', 0):.0f}ms")
+        log(f"  Run {i+1}: TC={'YES' if r.get('has_tool_calls') else 'NO'} | Latency={r.get('tc_latency_ms') or 0:.0f}ms")
     results["tc_latency_ms"] = statistics.mean(tc_latencies) if tc_latencies else 0
     results["tc_success_rate"] = tc_success / n_runs
 

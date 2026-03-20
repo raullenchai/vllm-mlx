@@ -2524,9 +2524,10 @@ async def stream_chat_completion(
         # Pre-compute SSE template parts that don't change per-token.
         # This avoids repeated f-string interpolation and time.time() syscalls.
         _sse_created = int(time.time())
+        _model_escaped = json.dumps(request.model)  # Properly escape quotes/newlines
         _sse_prefix = (
             f'data: {{"id":"{response_id}","object":"chat.completion.chunk",'
-            f'"created":{_sse_created},"model":"{request.model}",'
+            f'"created":{_sse_created},"model":{_model_escaped},'
             f'"choices":[{{"index":0,"delta":{{'
         )
         _sse_suffix = "}}]}\n\n"

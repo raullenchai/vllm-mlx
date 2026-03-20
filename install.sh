@@ -1,22 +1,23 @@
 #!/bin/bash
-# vllm-mlx installer — production-grade LLM inference for Apple Silicon
-# Usage: curl -fsSL https://raw.githubusercontent.com/raullenchai/vllm-mlx/main/install.sh | bash
+# Rapid-MLX installer — AI inference for Apple Silicon
+# Usage: curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash
 set -euo pipefail
 
-INSTALL_DIR="${HOME}/.vllm-mlx"
+INSTALL_DIR="${HOME}/.rapid-mlx"
 BIN_DIR="${HOME}/.local/bin"
-REPO="https://github.com/raullenchai/vllm-mlx.git"
+PYPI_PACKAGE="vllm-mlx"
+GITHUB_REPO="https://github.com/raullenchai/Rapid-MLX.git"
 MIN_PYTHON_MINOR=10
 
 echo ""
-echo "  vllm-mlx installer"
+echo "  Rapid-MLX installer"
 echo "  ==================="
 echo ""
 
 # 1. Check Apple Silicon
 ARCH=$(uname -m)
 if [ "$ARCH" != "arm64" ]; then
-    echo "Error: vllm-mlx requires Apple Silicon (M1/M2/M3/M4)."
+    echo "Error: Rapid-MLX requires Apple Silicon (M1/M2/M3/M4)."
     echo "Detected architecture: $ARCH"
     exit 1
 fi
@@ -24,7 +25,7 @@ fi
 # 2. Check macOS version (13+ for MLX)
 MACOS_VERSION=$(sw_vers -productVersion | cut -d. -f1)
 if [ "$MACOS_VERSION" -lt 13 ]; then
-    echo "Error: vllm-mlx requires macOS 13 (Ventura) or later."
+    echo "Error: Rapid-MLX requires macOS 13 (Ventura) or later."
     echo "Detected: macOS $(sw_vers -productVersion)"
     exit 1
 fi
@@ -60,13 +61,21 @@ fi
 PY_VERSION=$("$PYTHON" --version 2>&1)
 echo "  Python: $PY_VERSION ($PYTHON)"
 
-# 4. Create or update venv
+# 4. Migrate from old install location if needed
+OLD_DIR="${HOME}/.vllm-mlx"
+if [ -d "$OLD_DIR" ] && [ ! -d "$INSTALL_DIR" ]; then
+    echo ""
+    echo "  Migrating from $OLD_DIR to $INSTALL_DIR ..."
+    mv "$OLD_DIR" "$INSTALL_DIR"
+fi
+
+# 5. Create or update venv
 if [ -d "$INSTALL_DIR" ]; then
     echo ""
     echo "  Existing installation found at $INSTALL_DIR"
     echo "  Upgrading..."
     "$INSTALL_DIR/bin/pip" install --upgrade pip -q
-    "$INSTALL_DIR/bin/pip" install --force-reinstall --no-cache-dir --no-deps "vllm-mlx @ git+${REPO}"
+    "$INSTALL_DIR/bin/pip" install --force-reinstall --no-cache-dir --no-deps "$PYPI_PACKAGE @ git+${GITHUB_REPO}"
 else
     echo ""
     echo "  Installing to $INSTALL_DIR ..."
@@ -74,10 +83,10 @@ else
     echo ""
     "$PYTHON" -m venv "$INSTALL_DIR"
     "$INSTALL_DIR/bin/pip" install --upgrade pip -q
-    "$INSTALL_DIR/bin/pip" install "vllm-mlx @ git+${REPO}"
+    "$INSTALL_DIR/bin/pip" install "$PYPI_PACKAGE @ git+${GITHUB_REPO}"
 fi
 
-# 5. Create symlinks
+# 6. Create symlinks (both rapid-mlx and vllm-mlx names)
 mkdir -p "$BIN_DIR"
 for cmd in vllm-mlx vllm-mlx-chat vllm-mlx-bench; do
     if [ -f "$INSTALL_DIR/bin/$cmd" ]; then
@@ -85,10 +94,15 @@ for cmd in vllm-mlx vllm-mlx-chat vllm-mlx-bench; do
     fi
 done
 
-# Also symlink python so `vllm-mlx serve` can find dependencies
-ln -sf "$INSTALL_DIR/bin/python3" "$BIN_DIR/vllm-mlx-python"
+# Create rapid-mlx aliases pointing to vllm-mlx commands
+if [ -f "$INSTALL_DIR/bin/vllm-mlx" ]; then
+    ln -sf "$INSTALL_DIR/bin/vllm-mlx" "$BIN_DIR/rapid-mlx"
+fi
 
-# 6. Ensure ~/.local/bin is in PATH
+# Also symlink python so rapid-mlx serve can find dependencies
+ln -sf "$INSTALL_DIR/bin/python3" "$BIN_DIR/rapid-mlx-python"
+
+# 7. Ensure ~/.local/bin is in PATH
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     SHELL_RC=""
     if [ -n "${ZSH_VERSION:-}" ] || [ "$(basename "$SHELL")" = "zsh" ]; then
@@ -102,36 +116,35 @@ if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     if [ -n "$SHELL_RC" ]; then
         if ! grep -q '\.local/bin' "$SHELL_RC" 2>/dev/null; then
             echo '' >> "$SHELL_RC"
-            echo '# vllm-mlx' >> "$SHELL_RC"
+            echo '# Rapid-MLX' >> "$SHELL_RC"
             echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
             echo "  Added ~/.local/bin to PATH in $SHELL_RC"
         fi
     fi
 fi
 
-# 7. Verify installation
+# 8. Verify installation
 if ! "$INSTALL_DIR/bin/vllm-mlx" --help &>/dev/null; then
     echo ""
-    echo "  Warning: vllm-mlx installed but CLI verification failed."
+    echo "  Warning: Rapid-MLX installed but CLI verification failed."
     echo "  Try running: $INSTALL_DIR/bin/vllm-mlx --help"
     echo ""
 fi
 
 echo ""
-echo "  vllm-mlx installed successfully!"
+echo "  Rapid-MLX installed successfully!"
 echo ""
 echo "  Quick start:"
-echo "    vllm-mlx serve --model lmstudio-community/Qwen3-Coder-Next-MLX-4bit \\"
-echo "      --tool-call-parser hermes --port 8000"
+echo "    rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --port 8000"
 echo ""
-echo "  Or run directly:"
-echo "    $INSTALL_DIR/bin/vllm-mlx serve --model <model-name>"
+echo "  Then use with any OpenAI-compatible app:"
+echo "    OPENAI_BASE_URL=http://localhost:8000/v1 claude"
 echo ""
 echo "  To upgrade later:"
-echo "    curl -fsSL https://raw.githubusercontent.com/raullenchai/vllm-mlx/main/install.sh | bash"
+echo "    curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash"
 echo ""
 echo "  To uninstall:"
-echo "    rm -rf $INSTALL_DIR && rm -f $BIN_DIR/vllm-mlx $BIN_DIR/vllm-mlx-chat $BIN_DIR/vllm-mlx-bench $BIN_DIR/vllm-mlx-python"
+echo "    rm -rf $INSTALL_DIR && rm -f $BIN_DIR/rapid-mlx $BIN_DIR/vllm-mlx $BIN_DIR/vllm-mlx-chat $BIN_DIR/vllm-mlx-bench $BIN_DIR/rapid-mlx-python"
 echo ""
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo "  NOTE: Restart your terminal or run: export PATH=\"\$HOME/.local/bin:\$PATH\""

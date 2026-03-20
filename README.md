@@ -35,9 +35,19 @@ OPENAI_BASE_URL=http://localhost:8000/v1 claude
 That's it — you now have an AI server on `localhost:8000`. Works with Claude Code, Cursor, Aider, Open WebUI, or any app that speaks the OpenAI API.
 
 <details>
-<summary>Alternative install methods</summary>
+<summary>All install methods</summary>
+
+**Homebrew** (recommended for macOS users):
+```bash
+brew install raullenchai/rapid-mlx/rapid-mlx
+```
 
 **pip** (if you manage your own venv):
+```bash
+pip install vllm-mlx
+```
+
+**pip** (latest from GitHub):
 ```bash
 pip install git+https://github.com/raullenchai/Rapid-MLX.git
 ```
@@ -45,7 +55,7 @@ pip install git+https://github.com/raullenchai/Rapid-MLX.git
 **From source** (for development):
 ```bash
 git clone https://github.com/raullenchai/Rapid-MLX.git
-cd rapid-mlx && pip install -e .
+cd Rapid-MLX && pip install -e .
 ```
 </details>
 

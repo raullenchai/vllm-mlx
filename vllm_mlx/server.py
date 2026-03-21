@@ -1963,6 +1963,26 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
             )
 
     if request.stream:
+        # Validate chat template eagerly so template errors return 400,
+        # not a broken SSE stream.  build_prompt is cheap (no generation).
+        if hasattr(engine, "build_prompt"):
+            try:
+                engine.build_prompt(
+                    messages,
+                    tools=chat_kwargs.get("tools"),
+                    enable_thinking=chat_kwargs.get("enable_thinking"),
+                )
+            except Exception as e:
+                err_msg = str(e)
+                err_type = type(e).__name__
+                if "TemplateError" in err_type or "template" in err_msg.lower() or (
+                    "user" in err_msg.lower() and "found" in err_msg.lower()
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Chat template error: {err_msg}",
+                    )
+                raise
         return StreamingResponse(
             _disconnect_guard(
                 stream_chat_completion(engine, messages, request, **chat_kwargs),
@@ -2040,6 +2060,18 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
                 raw_request,
                 timeout=timeout,
             )
+    except HTTPException:
+        raise  # Don't wrap FastAPI HTTPExceptions
+    except Exception as e:
+        # Catch Jinja2 template errors (e.g. "No user query found in messages")
+        # and other chat template failures, return 400 instead of 500.
+        err_msg = str(e)
+        err_type = type(e).__name__
+        if "TemplateError" in err_type or "template" in err_msg.lower() or (
+            "user" in err_msg.lower() and "found" in err_msg.lower()
+        ):
+            raise HTTPException(status_code=400, detail=f"Chat template error: {err_msg}")
+        raise  # Re-raise non-template errors
     finally:
         if _gc_control and gc_was_enabled:
             gc.enable()
@@ -2246,11 +2278,22 @@ async def create_anthropic_message(
     start_time = time.perf_counter()
     timeout = _default_timeout
 
-    output = await _wait_with_disconnect(
-        engine.chat(messages=messages, **chat_kwargs),
-        request,
-        timeout=timeout,
-    )
+    try:
+        output = await _wait_with_disconnect(
+            engine.chat(messages=messages, **chat_kwargs),
+            request,
+            timeout=timeout,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        err_msg = str(e)
+        err_type = type(e).__name__
+        if "TemplateError" in err_type or "template" in err_msg.lower() or (
+            "user" in err_msg.lower() and "found" in err_msg.lower()
+        ):
+            raise HTTPException(status_code=400, detail=f"Chat template error: {err_msg}")
+        raise
     if output is None:
         return Response(status_code=499)  # Client closed request
 

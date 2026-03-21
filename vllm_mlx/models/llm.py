@@ -23,6 +23,7 @@ class GenerationOutput:
 
     text: str
     tokens: list[int]
+    prompt_tokens: int = 0
     finish_reason: str | None = None
 
 
@@ -201,6 +202,7 @@ class MLXLanguageModel:
         output_text = ""
         token_ids = []
         finish_reason = "stop"
+        prompt_tokens = 0
         for chunk in self.stream_generate(
             prompt=prompt,
             max_tokens=max_tokens,
@@ -211,6 +213,8 @@ class MLXLanguageModel:
             output_text += chunk.text
             if hasattr(chunk, "token") and chunk.token:
                 token_ids.append(chunk.token)
+            if chunk.prompt_tokens:
+                prompt_tokens = chunk.prompt_tokens
             if chunk.finished:
                 finish_reason = chunk.finish_reason or "stop"
                 break
@@ -219,9 +223,14 @@ class MLXLanguageModel:
         if not token_ids:
             token_ids = self.tokenizer.encode(output_text)
 
+        # Fall back to encoding the prompt if prompt_tokens wasn't captured
+        if not prompt_tokens:
+            prompt_tokens = len(self.tokenizer.encode(prompt))
+
         return GenerationOutput(
             text=output_text,
             tokens=token_ids,
+            prompt_tokens=prompt_tokens,
             finish_reason=finish_reason,
         )
 

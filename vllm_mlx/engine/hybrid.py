@@ -127,6 +127,14 @@ class HybridEngine(BaseEngine):
         """Get the tokenizer."""
         return self._shared_tokenizer
 
+    def generate_warmup(self) -> None:
+        """Run a minimal forward pass to compile Metal shaders."""
+        # Delegate to the simple engine if available (it has the model loaded)
+        if self._simple is not None:
+            self._simple.generate_warmup()
+        elif self._batched is not None:
+            self._batched.generate_warmup()
+
     async def start(self) -> None:
         """Start the engine (load shared model and initialize sub-engines)."""
         if self._loaded:

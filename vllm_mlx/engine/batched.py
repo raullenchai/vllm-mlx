@@ -186,6 +186,20 @@ class BatchedEngine(BaseEngine):
             return getattr(self._processor, "tokenizer", self._processor)
         return self._tokenizer
 
+    def generate_warmup(self) -> None:
+        """Run a minimal forward pass to compile Metal shaders."""
+        if not self._loaded or self._model is None or self._is_mllm:
+            return
+        try:
+            import mlx.core as mx
+
+            tokens = self._tokenizer.encode("Hi")
+            input_ids = mx.array([tokens])
+            self._model(input_ids)
+            mx.eval(mx.zeros(1))
+        except Exception:
+            pass  # Non-fatal
+
     async def start(self) -> None:
         """Start the engine (load model if not loaded)."""
         if self._loaded:

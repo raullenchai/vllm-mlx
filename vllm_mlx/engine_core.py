@@ -158,7 +158,11 @@ class EngineCore:
                 "max_recommended_working_set_size",
                 _device_info.get("memory_size", 0),
             )
-            _memory_pressure_threshold = int(_max_recommended * 0.85) if _max_recommended > 0 else 200 * 1024 * 1024 * 1024
+            _memory_pressure_threshold = (
+                int(_max_recommended * 0.85)
+                if _max_recommended > 0
+                else 200 * 1024 * 1024 * 1024
+            )
         except Exception:
             _memory_pressure_threshold = 200 * 1024 * 1024 * 1024
         _memory_check_interval = 64

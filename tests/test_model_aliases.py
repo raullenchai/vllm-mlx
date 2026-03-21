@@ -2,7 +2,6 @@
 """Tests for the model alias registry."""
 
 import os
-import tempfile
 
 from vllm_mlx.model_aliases import list_aliases, resolve_model
 

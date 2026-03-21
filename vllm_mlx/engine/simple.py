@@ -505,6 +505,8 @@ class SimpleEngine(BaseEngine):
                 token_count = 0
 
                 # Run the synchronous generator in a thread
+                # Pop enable_thinking — MLLM models don't support it
+                kwargs.pop("enable_thinking", None)
                 sync_gen = self._model.stream_chat(
                     messages=messages,
                     max_tokens=max_tokens,
@@ -540,7 +542,7 @@ class SimpleEngine(BaseEngine):
             return
 
         # For LLM, apply chat template and stream
-        enable_thinking = kwargs.get("enable_thinking")
+        enable_thinking = kwargs.pop("enable_thinking", None)
         prompt = shared_apply_chat_template(
             self._model.tokenizer,
             messages,

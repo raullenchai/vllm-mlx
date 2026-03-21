@@ -25,25 +25,29 @@ Drop-in OpenAI API replacement for Apple Silicon. 2-4x faster than Ollama, with 
 
 ## Quick Start
 
+**Step 1 — Install:**
 ```bash
-# 1. Install (one command, checks Apple Silicon + Python automatically)
 curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash
-source ~/.zshrc  # or restart your terminal
+```
+Then close and reopen your terminal (or run `source ~/.zshrc`).
 
-# 2. Start serving (first run downloads the model — ~5 GB, takes a few minutes)
-rapid-mlx serve qwen3.5-9b --port 8000
-# Wait until you see: "Ready: http://localhost:8000/v1"
+**Step 2 — Start the server:**
+```bash
+rapid-mlx serve qwen3.5-9b
+```
+First run downloads the model (~5 GB) — you'll see a progress bar. Wait for `Ready: http://localhost:8000/v1`.
 
-# 3. Test it — open a NEW terminal and run:
+**Step 3 — Test it** (open a **second** terminal tab):
+```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"default","messages":[{"role":"user","content":"Hello!"}]}'
-# You should get a JSON response with the AI's reply
+  -d '{"model":"qwen3.5-9b","messages":[{"role":"user","content":"Hello!"}]}'
 ```
+You should get a JSON response with the AI's reply. To stop the server: Ctrl+C in the first terminal.
 
-That's it — you now have an AI server on `localhost:8000`. Works with Claude Code, Cursor, Aider, Open WebUI, or any app that speaks the OpenAI API.
+That's it — you now have an AI server on `localhost:8000`. Next: scroll down to [**Choose Your Model**](#choose-your-model) to pick the best model for your Mac, or see [**Works With**](#works-with) to connect Claude Code, Cursor, or other apps.
 
-> **Tip:** If you get "Connection refused", the server is still loading the model. Wait for the "Ready" message in the first terminal.
+> **Tip:** If you get "Connection refused", the server is still loading. Wait for the "Ready" message.
 
 <details>
 <summary>Other install methods</summary>
@@ -53,15 +57,17 @@ That's it — you now have an AI server on `localhost:8000`. Works with Claude C
 brew install raullenchai/rapid-mlx/rapid-mlx
 ```
 
-**pip**:
+**pip** (use a virtual environment on macOS Sonoma+):
 ```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install rapid-mlx
 ```
 
 **From source** (for development):
 ```bash
 git clone https://github.com/raullenchai/Rapid-MLX.git
-cd Rapid-MLX && pip install -e .
+cd Rapid-MLX && python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
 ```
 
 **Vision models** (adds torch + torchvision, ~2.5 GB extra):
@@ -70,7 +76,7 @@ pip install 'rapid-mlx[vision]'
 ```
 </details>
 
-**Try it with Python:**
+**Try it with Python** (make sure the server is running, then `pip install openai`):
 
 ```python
 from openai import OpenAI
@@ -202,8 +208,10 @@ rapid-mlx serve qwen3-coder --prefill-step-size 8192 --port 8000
 rapid-mlx serve qwen3-vl-4b --mllm --port 8000
 ```
 
-> **Vision deps:** If you used `install.sh`, install into its venv: `~/.rapid-mlx/bin/pip install 'rapid-mlx[vision]'`.
-> If you used `pip install rapid-mlx`, just run `pip install 'rapid-mlx[vision]'` in the same environment.
+> **Vision deps:** Install into the same environment where rapid-mlx lives:
+> - `install.sh` users: `~/.rapid-mlx/bin/pip install 'rapid-mlx[vision]'`
+> - `pip` users: `pip install 'rapid-mlx[vision]'` (in the same venv)
+> - `brew` users: `$(brew --prefix)/opt/rapid-mlx/libexec/bin/pip install 'rapid-mlx[vision]'`
 
 <details>
 <summary><strong>Parser auto-detection & manual overrides</strong></summary>
@@ -455,7 +463,7 @@ Vision, audio (STT/TTS), video understanding, and text embeddings — all throug
 
 **Slow first response** — Cold start is normal. Subsequent turns hit prompt cache (10-30x faster). Use `--prefill-step-size 8192` to speed up cold starts.
 
-**Server hangs after client disconnect** — Fixed in this fork. Upgrade to latest.
+**Server hangs after client disconnect** — Fixed in v0.3.0+. Upgrade to latest.
 
 </details>
 

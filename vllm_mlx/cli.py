@@ -604,9 +604,9 @@ def bench_kv_cache_command(args):
     )
     print()
     print("Usage:")
-    print("  vllm-mlx serve <model> --continuous-batching --kv-cache-quantization")
+    print("  rapid-mlx serve <model> --continuous-batching --kv-cache-quantization")
     print(
-        "  vllm-mlx serve <model> --continuous-batching --kv-cache-quantization "
+        "  rapid-mlx serve <model> --continuous-batching --kv-cache-quantization "
         "--kv-cache-quantization-bits 4"
     )
 

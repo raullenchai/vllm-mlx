@@ -54,9 +54,9 @@ if [ -z "$PYTHON" ]; then
     else
         # Download standalone Python — no Homebrew or sudo needed
         STANDALONE_DIR="${HOME}/.rapid-mlx-python"
-        PY_VERSION="3.12.11"
-        PY_BUILD="20250529"
-        PY_URL="https://github.com/indygreg/python-build-standalone/releases/download/${PY_BUILD}/cpython-${PY_VERSION}+${PY_BUILD}-aarch64-apple-darwin-install_only.tar.gz"
+        PY_VERSION="3.12.13"
+        PY_BUILD="20260320"
+        PY_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PY_BUILD}/cpython-${PY_VERSION}+${PY_BUILD}-aarch64-apple-darwin-install_only.tar.gz"
         echo "  Downloading Python ${PY_VERSION} (standalone, no sudo needed)..."
         mkdir -p "$STANDALONE_DIR"
         curl -fsSL "$PY_URL" | tar xz -C "$STANDALONE_DIR" --strip-components=1

@@ -327,6 +327,23 @@ async def lifespan(app: FastAPI):
     if _engine is not None and hasattr(_engine, "_loaded") and not _engine._loaded:
         await _engine.start()
 
+    # Warmup: generate one token to trigger Metal shader compilation.
+    # Runs here (not in CLI) so all engine types are fully started first.
+    if _engine is not None:
+        import time as _time
+
+        logger.info("Warming up (compiling Metal shaders)...")
+        _warmup_start = _time.monotonic()
+        try:
+            import mlx.core as mx
+
+            _engine.generate_warmup()
+            mx.eval(mx.zeros(1))  # Force sync
+        except Exception as e:
+            logger.debug(f"Warmup failed (non-fatal): {e}")
+        _warmup_secs = _time.monotonic() - _warmup_start
+        logger.info(f"Warmup complete ({_warmup_secs:.1f}s)")
+
     # Load persisted cache from disk (AFTER engine start — AsyncEngineCore must exist)
     if _engine is not None and hasattr(_engine, "load_cache_from_disk"):
         _load_prefix_cache_from_disk()

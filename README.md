@@ -31,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.
 source ~/.zshrc  # or restart your terminal
 
 # 2. Start serving (first run downloads the model — ~5 GB, takes a few minutes)
-rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --port 8000
+rapid-mlx serve qwen3.5-9b --port 8000
 # Wait until you see: "Ready: http://localhost:8000/v1"
 
 # 3. Test it — open a NEW terminal and run:
@@ -177,29 +177,29 @@ Model weights must fit in unified memory. If Activity Monitor shows red memory p
 
 ### Copy-paste commands
 
-Pick the one that matches your Mac:
+Pick the one that matches your Mac. Short aliases work — run `rapid-mlx models` to see all 20.
 
 ```bash
 # 16 GB — lightweight, fast
-rapid-mlx serve mlx-community/Qwen3.5-4B-MLX-4bit --port 8000
+rapid-mlx serve qwen3.5-4b --port 8000
 
 # 24 GB — best small model
-rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --port 8000
+rapid-mlx serve qwen3.5-9b --port 8000
 
 # 32 GB — solid coding model
-rapid-mlx serve mlx-community/Qwen3.5-27B-4bit --port 8000
+rapid-mlx serve qwen3.5-27b --port 8000
 
 # 64 GB — sweet spot
-rapid-mlx serve mlx-community/Qwen3.5-35B-A3B-8bit --prefill-step-size 8192 --port 8000
+rapid-mlx serve qwen3.5-35b --prefill-step-size 8192 --port 8000
 
 # 96+ GB — best model
-rapid-mlx serve nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx --kv-bits 8 --prefill-step-size 8192 --port 8000
+rapid-mlx serve qwen3.5-122b --kv-bits 8 --prefill-step-size 8192 --port 8000
 
 # Coding agent — fast MoE, great for Claude Code / Cursor
-rapid-mlx serve lmstudio-community/Qwen3-Coder-Next-MLX-4bit --prefill-step-size 8192 --port 8000
+rapid-mlx serve qwen3-coder --prefill-step-size 8192 --port 8000
 
 # Vision — image understanding (see note below)
-rapid-mlx serve mlx-community/Qwen3-VL-4B-Instruct-MLX-4bit --mllm --port 8000
+rapid-mlx serve qwen3-vl-4b --mllm --port 8000
 ```
 
 > **Vision deps:** If you used `install.sh`, install into its venv: `~/.rapid-mlx/bin/pip install 'rapid-mlx[vision]'`.

@@ -117,6 +117,9 @@ vllm-mlx = "vllm_mlx.cli:main"
 vllm-mlx-chat = "vllm_mlx.gradio_app:main"
 vllm-mlx-bench = "vllm_mlx.benchmark:main"
 
+[tool.setuptools.package-data]
+vllm_mlx = ["aliases.json"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["vllm_mlx*"]

@@ -611,14 +611,31 @@ def bench_kv_cache_command(args):
     )
 
 
+def models_command(_args):
+    """List available model aliases."""
+    from vllm_mlx.model_aliases import list_aliases
+
+    aliases = list_aliases()
+    print()
+    print("  Available model aliases")
+    print("  " + "─" * 50)
+    for short, full in sorted(aliases.items()):
+        print(f"  {short:<20} → {full}")
+    print()
+    print(f"  {len(aliases)} aliases available")
+    print("  Usage: rapid-mlx serve <alias>")
+    print()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Rapid-MLX: AI inference for Apple Silicon",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  rapid-mlx serve qwen3.5-9b --port 8000
   rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --port 8000
-  rapid-mlx bench mlx-community/Qwen3.5-4B-MLX-4bit --num-prompts 10
+  rapid-mlx models
         """,
     )
     subparsers = parser.add_subparsers(dest="command", help="Commands")
@@ -1095,7 +1112,19 @@ Examples:
         help="Quantization group size (default: 64)",
     )
 
+    # Models command
+    subparsers.add_parser("models", help="List available model aliases")
+
     args = parser.parse_args()
+
+    # Resolve model aliases before dispatch
+    if hasattr(args, "model") and args.model:
+        from vllm_mlx.model_aliases import resolve_model
+
+        resolved = resolve_model(args.model)
+        if resolved != args.model:
+            print(f"  Alias: {args.model} → {resolved}")
+            args.model = resolved
 
     if args.command == "serve":
         serve_command(args)
@@ -1105,6 +1134,8 @@ Examples:
         bench_detok_command(args)
     elif args.command == "bench-kv-cache":
         bench_kv_cache_command(args)
+    elif args.command == "models":
+        models_command(args)
     else:
         parser.print_help()
         sys.exit(1)

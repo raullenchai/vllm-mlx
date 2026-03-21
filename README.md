@@ -28,11 +28,12 @@ Drop-in OpenAI API replacement for Apple Silicon. 2-4x faster than Ollama, with 
 ```bash
 # 1. Install (one command, checks Apple Silicon + Python automatically)
 curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash
-source ~/.zshrc  # or restart your terminal
+source ~/.zshrc  # bash users: source ~/.bashrc
 
 # 2. Start serving (first run downloads the model — ~5 GB, takes a few minutes)
-rapid-mlx serve qwen3.5-9b --port 8000
-# Wait until you see: "Ready: http://localhost:8000/v1"
+rapid-mlx serve qwen3.5-9b
+# Wait until you see: "Ready: http://localhost:8000/v1" — then it's running
+# To stop: press Ctrl+C
 
 # 3. Test it — open a NEW terminal and run:
 curl http://localhost:8000/v1/chat/completions \
@@ -62,7 +63,8 @@ pip install rapid-mlx
 **From source** (for development):
 ```bash
 git clone https://github.com/raullenchai/Rapid-MLX.git
-cd Rapid-MLX && pip install -e .
+cd Rapid-MLX && python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
 ```
 
 **Vision models** (adds torch + torchvision, ~2.5 GB extra):
@@ -71,7 +73,7 @@ pip install 'rapid-mlx[vision]'
 ```
 </details>
 
-**Try it with Python:**
+**Try it with Python** (`pip install openai` first):
 
 ```python
 from openai import OpenAI
@@ -203,8 +205,10 @@ rapid-mlx serve qwen3-coder --prefill-step-size 8192 --port 8000
 rapid-mlx serve qwen3-vl-4b --mllm --port 8000
 ```
 
-> **Vision deps:** If you used `install.sh`, install into its venv: `~/.rapid-mlx/bin/pip install 'rapid-mlx[vision]'`.
-> If you used `pip install rapid-mlx`, just run `pip install 'rapid-mlx[vision]'` in the same environment.
+> **Vision deps:** Install into the same environment where rapid-mlx lives:
+> - `install.sh` users: `~/.rapid-mlx/bin/pip install 'rapid-mlx[vision]'`
+> - `pip` users: `pip install 'rapid-mlx[vision]'` (in the same venv)
+> - `brew` users: `$(brew --prefix)/opt/rapid-mlx/libexec/bin/pip install 'rapid-mlx[vision]'`
 
 <details>
 <summary><strong>Parser auto-detection & manual overrides</strong></summary>
@@ -456,7 +460,7 @@ Vision, audio (STT/TTS), video understanding, and text embeddings — all throug
 
 **Slow first response** — Cold start is normal. Subsequent turns hit prompt cache (10-30x faster). Use `--prefill-step-size 8192` to speed up cold starts.
 
-**Server hangs after client disconnect** — Fixed in this fork. Upgrade to latest.
+**Server hangs after client disconnect** — Fixed in v0.3.0+. Upgrade to latest.
 
 </details>
 

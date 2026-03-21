@@ -41,7 +41,7 @@ First run downloads the model (~5 GB) — you'll see a progress bar. Wait for `R
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"default","messages":[{"role":"user","content":"Hello!"}]}'
+  -d '{"model":"qwen3.5-9b","messages":[{"role":"user","content":"Hello!"}]}'
 ```
 You should get a JSON response with the AI's reply. To stop the server: Ctrl+C in the first terminal.
 
@@ -59,7 +59,7 @@ brew install raullenchai/rapid-mlx/rapid-mlx
 
 **pip** (use a virtual environment on macOS Sonoma+):
 ```bash
-python3 -m venv ~/.venv/rapid-mlx && source ~/.venv/rapid-mlx/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install rapid-mlx
 ```
 

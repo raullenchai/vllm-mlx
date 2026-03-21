@@ -129,7 +129,11 @@ def serve_command(args):
                     logger.info(
                         f"Auto-configured --tool-call-parser {auto_config.tool_call_parser}"
                     )
-                if not args.reasoning_parser and auto_config.reasoning_parser:
+                if (
+                    not args.reasoning_parser
+                    and not args.no_thinking
+                    and auto_config.reasoning_parser
+                ):
                     args.reasoning_parser = auto_config.reasoning_parser
                     logger.info(
                         f"Auto-configured --reasoning-parser {auto_config.reasoning_parser}"
@@ -295,6 +299,18 @@ def serve_command(args):
             print(f"Prefix cache: max_entries={args.prefix_cache_size}")
     else:
         print("Mode: Simple (maximum throughput)")
+
+    # Check port availability before loading model (avoid wasting RAM on conflict)
+    import socket
+
+    _sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        _sock.bind((args.host, args.port))
+        _sock.close()
+    except OSError:
+        print(f"\n  Error: Port {args.port} is already in use.")
+        print(f"  Try a different port: rapid-mlx serve {args.model} --port {args.port + 1}")
+        sys.exit(1)
 
     # Check disk space before downloading model
     _check_disk_space(args.model)
@@ -1025,6 +1041,16 @@ Examples:
             "Enable reasoning content extraction with specified parser. "
             "Extracts <think>...</think> tags into reasoning_content field. "
             f"Options: {', '.join(reasoning_choices)}."
+        ),
+    )
+    serve_parser.add_argument(
+        "--no-thinking",
+        action="store_true",
+        default=False,
+        help=(
+            "Disable reasoning/thinking parser even if auto-detected. "
+            "Thinking tokens will appear as regular content. "
+            "Useful for faster responses when chain-of-thought is not needed."
         ),
     )
     # GC control (Tier 0 optimization)

@@ -116,6 +116,27 @@ def serve_command(args):
         )
         sys.exit(1)
 
+    # Auto-detect parser config from model name when not explicitly set
+    if not args.tool_call_parser or not args.reasoning_parser:
+        try:
+            from .model_auto_config import detect_model_config
+
+            auto_config = detect_model_config(args.model)
+            if auto_config:
+                if not args.tool_call_parser and auto_config.tool_call_parser:
+                    args.tool_call_parser = auto_config.tool_call_parser
+                    args.enable_auto_tool_choice = True
+                    logger.info(
+                        f"Auto-configured --tool-call-parser {auto_config.tool_call_parser}"
+                    )
+                if not args.reasoning_parser and auto_config.reasoning_parser:
+                    args.reasoning_parser = auto_config.reasoning_parser
+                    logger.info(
+                        f"Auto-configured --reasoning-parser {auto_config.reasoning_parser}"
+                    )
+        except Exception as e:
+            logger.debug(f"Auto-detection failed (non-fatal): {e}")
+
     # Pass alias info to server (for /v1/models)
     server._model_alias = getattr(args, "_original_alias", None)
 
@@ -279,24 +300,35 @@ def serve_command(args):
     _check_disk_space(args.model)
 
     # Load model with unified server
-    load_model(
-        args.model,
-        use_batching=args.continuous_batching,
-        scheduler_config=scheduler_config,
-        stream_interval=args.stream_interval if args.continuous_batching else 1,
-        max_tokens=args.max_tokens,
-        force_mllm=args.mllm,
-        gpu_memory_utilization=args.gpu_memory_utilization,
-        draft_model=args.draft_model,
-        num_draft_tokens=args.num_draft_tokens,
-        prefill_step_size=args.prefill_step_size,
-        kv_bits=args.kv_bits,
-        kv_group_size=args.kv_group_size,
-        cloud_model=args.cloud_model,
-        cloud_threshold=args.cloud_threshold,
-        cloud_api_base=args.cloud_api_base,
-        cloud_api_key=args.cloud_api_key,
-    )
+    try:
+        load_model(
+            args.model,
+            use_batching=args.continuous_batching,
+            scheduler_config=scheduler_config,
+            stream_interval=args.stream_interval if args.continuous_batching else 1,
+            max_tokens=args.max_tokens,
+            force_mllm=args.mllm,
+            gpu_memory_utilization=args.gpu_memory_utilization,
+            draft_model=args.draft_model,
+            num_draft_tokens=args.num_draft_tokens,
+            prefill_step_size=args.prefill_step_size,
+            kv_bits=args.kv_bits,
+            kv_group_size=args.kv_group_size,
+            cloud_model=args.cloud_model,
+            cloud_threshold=args.cloud_threshold,
+            cloud_api_base=args.cloud_api_base,
+            cloud_api_key=args.cloud_api_key,
+        )
+    except Exception as e:
+        # Show clean error instead of raw traceback
+        error_msg = str(e)
+        if "404" in error_msg or "not found" in error_msg.lower():
+            print(f"\n  Error: Model '{args.model}' not found.")
+            print("  Run `rapid-mlx models` to see available aliases,")
+            print("  or use a full HuggingFace path like: mlx-community/Qwen3.5-9B-4bit")
+        else:
+            print(f"\n  Error loading model: {error_msg}")
+        sys.exit(1)
 
     # Start server
     # Note: Metal shader warmup runs in the FastAPI lifespan hook (server.py)

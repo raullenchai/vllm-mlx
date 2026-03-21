@@ -1693,6 +1693,13 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     """
     engine = get_engine()
 
+    # Validate messages is non-empty
+    if not request.messages:
+        raise HTTPException(
+            status_code=400,
+            detail="messages must not be empty",
+        )
+
     # Validate top_logprobs range (OpenAI spec: 0-20)
     if request.top_logprobs is not None and (
         request.top_logprobs < 0 or request.top_logprobs > 20

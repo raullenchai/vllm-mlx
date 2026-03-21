@@ -28,25 +28,28 @@ Drop-in OpenAI API replacement for Apple Silicon. 2-4x faster than Ollama, 100% 
 ```bash
 # 1. Install (one command, checks Apple Silicon + Python automatically)
 curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash
+source ~/.zshrc  # or restart your terminal
 
-# 2. Pick a model and start serving (parsers auto-detected from model name)
+# 2. Pick a model and start serving (first run downloads ~5 GB)
 rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --port 8000
 
-# 3. Use with any OpenAI-compatible app
-OPENAI_BASE_URL=http://localhost:8000/v1 claude
+# 3. Test it — in a new terminal:
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"default","messages":[{"role":"user","content":"Hello!"}]}'
 ```
 
 That's it — you now have an AI server on `localhost:8000`. Works with Claude Code, Cursor, Aider, Open WebUI, or any app that speaks the OpenAI API.
 
 <details>
-<summary>All install methods</summary>
+<summary>Other install methods</summary>
 
-**Homebrew** (recommended for macOS users):
+**Homebrew:**
 ```bash
 brew install raullenchai/rapid-mlx/rapid-mlx
 ```
 
-**pip**:
+**pip** (into an existing virtualenv):
 ```bash
 pip install git+https://github.com/raullenchai/Rapid-MLX.git
 ```
@@ -55,6 +58,11 @@ pip install git+https://github.com/raullenchai/Rapid-MLX.git
 ```bash
 git clone https://github.com/raullenchai/Rapid-MLX.git
 cd Rapid-MLX && pip install -e .
+```
+
+**Vision models** (adds torch + torchvision, ~2.5 GB extra):
+```bash
+pip install 'vllm-mlx[vision] @ git+https://github.com/raullenchai/Rapid-MLX.git'
 ```
 </details>
 
@@ -183,7 +191,7 @@ rapid-mlx serve nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx --kv-bits 8 --prefil
 # Coding agent — fast MoE, great for Claude Code / Cursor
 rapid-mlx serve lmstudio-community/Qwen3-Coder-Next-MLX-4bit --prefill-step-size 8192 --port 8000
 
-# Vision — image understanding
+# Vision — image understanding (requires: pip install 'vllm-mlx[vision]')
 rapid-mlx serve mlx-community/Qwen3-VL-4B-Instruct-MLX-4bit --mllm --port 8000
 ```
 

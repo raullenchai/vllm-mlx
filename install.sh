@@ -79,7 +79,7 @@ if [ -d "$INSTALL_DIR" ]; then
 else
     echo ""
     echo "  Installing to $INSTALL_DIR ..."
-    echo "  (This may take a few minutes — MLX and dependencies need to compile)"
+    echo "  (This takes about a minute)"
     echo ""
     "$PYTHON" -m venv "$INSTALL_DIR"
     "$INSTALL_DIR/bin/pip" install --upgrade pip -q
@@ -97,6 +97,12 @@ done
 # Create rapid-mlx aliases pointing to vllm-mlx commands
 if [ -f "$INSTALL_DIR/bin/vllm-mlx" ]; then
     ln -sf "$INSTALL_DIR/bin/vllm-mlx" "$BIN_DIR/rapid-mlx"
+fi
+if [ -f "$INSTALL_DIR/bin/vllm-mlx-chat" ]; then
+    ln -sf "$INSTALL_DIR/bin/vllm-mlx-chat" "$BIN_DIR/rapid-mlx-chat"
+fi
+if [ -f "$INSTALL_DIR/bin/vllm-mlx-bench" ]; then
+    ln -sf "$INSTALL_DIR/bin/vllm-mlx-bench" "$BIN_DIR/rapid-mlx-bench"
 fi
 
 # Also symlink python so rapid-mlx serve can find dependencies
@@ -144,7 +150,7 @@ echo "  To upgrade later:"
 echo "    curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash"
 echo ""
 echo "  To uninstall:"
-echo "    rm -rf $INSTALL_DIR && rm -f $BIN_DIR/rapid-mlx $BIN_DIR/vllm-mlx $BIN_DIR/vllm-mlx-chat $BIN_DIR/vllm-mlx-bench $BIN_DIR/rapid-mlx-python"
+echo "    rm -rf $INSTALL_DIR && rm -f $BIN_DIR/rapid-mlx $BIN_DIR/rapid-mlx-chat $BIN_DIR/rapid-mlx-bench $BIN_DIR/vllm-mlx $BIN_DIR/vllm-mlx-chat $BIN_DIR/vllm-mlx-bench $BIN_DIR/rapid-mlx-python"
 echo ""
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo "  NOTE: Restart your terminal or run: export PATH=\"\$HOME/.local/bin:\$PATH\""

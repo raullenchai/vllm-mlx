@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vllm-mlx"
 version = "0.3.0"
-description = "vLLM-like inference for Apple Silicon - GPU-accelerated Text, Image, Video & Audio on Mac"
+description = "Rapid-MLX — AI inference for Apple Silicon. Drop-in OpenAI API, 2-4x faster than Ollama."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
@@ -28,41 +28,46 @@ classifiers = [
 ]
 
 dependencies = [
+    # Core — these are all you need for `rapid-mlx serve <text-model>`
     "mlx>=0.29.0",
-    "mlx-lm>=0.30.5",  # GLM-4 models require 0.30.5+ (new attention layers)
-    "mlx-vlm>=0.1.0",  # VLM support
-    "transformers>=5.0.0",  # mlx-lm 0.30.5+ requires transformers 5.0 (rc3 bug fixed in stable)
+    "mlx-lm>=0.30.5",
+    "transformers>=5.0.0",
     "tokenizers>=0.19.0",
     "huggingface-hub>=0.23.0",
     "numpy>=1.24.0",
     "pillow>=10.0.0",
     "tqdm>=4.66.0",
     "pyyaml>=6.0",
-    "gradio>=4.0.0",
     "requests>=2.28.0",
     "tabulate>=0.9.0",
-    # Video processing for VLM
-    "opencv-python>=4.8.0",
-    # Vision processor (required for transformers AutoProcessor)
-    "torchvision>=0.18.0",
-    # Resource monitoring
     "psutil>=5.9.0",
-    # Server
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0",
-    # MCP (Model Context Protocol) support
     "mcp>=1.0.0",
-    # JSON Schema validation for structured output
     "jsonschema>=4.0.0",
-    # pytz is required by gradio but not declared as a dependency
-    # See: https://github.com/waybarrios/vllm-mlx/issues/23
-    "pytz>=2024.1",
-    # Note: mlx-audio moved to optional [audio] deps due to mlx-lm version conflict
-    # See: https://github.com/waybarrios/vllm-mlx/issues/19
-    "mlx-embeddings>=0.0.5"
 ]
 
 [project.optional-dependencies]
+# Vision models (Qwen-VL, etc.) — adds ~2.5 GB
+vision = [
+    "mlx-vlm>=0.1.0",
+    "opencv-python>=4.8.0",
+    "torch>=2.3.0",
+    "torchvision>=0.18.0",
+]
+# Embedding endpoint
+embeddings = [
+    "mlx-embeddings>=0.0.5",
+]
+# Gradio chat UI
+chat = [
+    "gradio>=4.0.0",
+    "pytz>=2024.1",
+]
+# All extras — matches pre-0.3.1 behavior
+all = [
+    "vllm-mlx[vision,chat,embeddings]",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
@@ -72,10 +77,6 @@ dev = [
 ]
 vllm = [
     "vllm>=0.4.0",
-]
-vision = [
-    "torch>=2.3.0",
-    "torchvision>=0.18.0",
 ]
 # Guided decoding with outlines for structured JSON output
 guided = [
@@ -103,9 +104,9 @@ audio = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/vllm-mlx/vllm-mlx"
-Documentation = "https://github.com/vllm-mlx/vllm-mlx#readme"
-Repository = "https://github.com/vllm-mlx/vllm-mlx"
+Homepage = "https://github.com/raullenchai/Rapid-MLX"
+Documentation = "https://github.com/raullenchai/Rapid-MLX#readme"
+Repository = "https://github.com/raullenchai/Rapid-MLX"
 
 [project.entry-points."vllm.platform_plugins"]
 mlx = "vllm_mlx.plugin:mlx_platform_plugin"

@@ -101,47 +101,34 @@ def serve_command(args):
     else:
         server._reasoning_parser = None
 
-    # Security summary at startup
-    print("=" * 60)
-    print("SECURITY CONFIGURATION")
-    print("=" * 60)
-    if args.api_key:
-        print("  Authentication: ENABLED (API key required)")
-    else:
-        print("  Authentication: DISABLED - Use --api-key to enable")
-    if args.rate_limit > 0:
-        print(f"  Rate limiting: ENABLED ({args.rate_limit} req/min)")
-    else:
-        print("  Rate limiting: DISABLED - Use --rate-limit to enable")
-    print(f"  Request timeout: {args.timeout}s")
+    # Startup summary
+    print()
+    print("  Rapid-MLX")
+    print("  ─────────")
+    features = []
     if args.enable_auto_tool_choice:
         bias_info = (
             " + logits bias" if getattr(args, "enable_tool_logits_bias", False) else ""
         )
-        print(f"  Tool calling: ENABLED (parser: {args.tool_call_parser}{bias_info})")
-    else:
-        print("  Tool calling: Use --enable-auto-tool-choice to enable")
+        features.append(f"tools: {args.tool_call_parser}{bias_info}")
     if args.reasoning_parser:
-        print(f"  Reasoning: ENABLED (parser: {args.reasoning_parser})")
-    else:
-        print("  Reasoning: Use --reasoning-parser to enable")
-    print(f"  GC control: {'ENABLED' if gc_control else 'DISABLED'}")
-    if args.pin_system_prompt:
-        print("  Pin system prompt: ENABLED")
+        features.append(f"reasoning: {args.reasoning_parser}")
+    if args.api_key:
+        features.append("auth: on")
+    if args.rate_limit > 0:
+        features.append(f"rate-limit: {args.rate_limit}/min")
     if args.cloud_model:
-        print(
-            f"  Cloud routing: ENABLED (model: {args.cloud_model}, threshold: {args.cloud_threshold} tokens)"
-        )
-    else:
-        print("  Cloud routing: DISABLED - Use --cloud-model to enable")
-    print("=" * 60)
+        features.append(f"cloud: {args.cloud_model}")
+    if gc_control:
+        features.append("gc-control")
+    if args.pin_system_prompt:
+        features.append("pin-system-prompt")
+    if features:
+        print(f"  Features: {', '.join(features)}")
 
-    print(f"Loading model: {args.model}")
-    print(f"Default max tokens: {args.max_tokens}")
+    print(f"  Model: {args.model}")
     if args.draft_model:
-        print("Speculative decoding: ENABLED")
-        print(f"  Draft model: {args.draft_model}")
-        print(f"  Draft tokens: {args.num_draft_tokens}")
+        print(f"  Speculative: {args.draft_model} ({args.num_draft_tokens} draft tokens)")
     # Store MCP config path for FastAPI startup
     if args.mcp_config:
         print(f"MCP config: {args.mcp_config}")
@@ -234,7 +221,10 @@ def serve_command(args):
     )
 
     # Start server
-    print(f"Starting server at http://{args.host}:{args.port}")
+    print()
+    print(f"  Ready: http://localhost:{args.port}/v1")
+    print(f"  Docs:  http://localhost:{args.port}/docs")
+    print()
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 
@@ -622,12 +612,12 @@ def bench_kv_cache_command(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="vllm-mlx: Apple Silicon MLX backend for vLLM",
+        description="Rapid-MLX: AI inference for Apple Silicon",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000
-  vllm-mlx bench mlx-community/Llama-3.2-1B-Instruct-4bit --num-prompts 10
+  rapid-mlx serve mlx-community/Qwen3.5-9B-4bit --port 8000
+  rapid-mlx bench mlx-community/Qwen3.5-4B-MLX-4bit --num-prompts 10
         """,
     )
     subparsers = parser.add_subparsers(dest="command", help="Commands")

@@ -41,7 +41,10 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None  # Only needed for video benchmarks
 import numpy as np
 import requests
 from PIL import Image

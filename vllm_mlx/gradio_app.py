@@ -20,7 +20,12 @@ import argparse
 import base64
 from pathlib import Path
 
-import gradio as gr
+try:
+    import gradio as gr
+except ImportError:
+    print("Error: gradio is required for the chat UI.")
+    print("Install it with: pip install 'vllm-mlx[chat]'")
+    raise SystemExit(1)
 import requests
 
 

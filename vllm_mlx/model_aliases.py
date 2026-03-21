@@ -20,10 +20,13 @@ def resolve_model(name: str) -> str:
     """Resolve a model alias to its full HuggingFace path.
 
     If name contains '/' it's already a full path — pass through.
+    If a local file/directory with the name exists, prefer that.
     If name matches an alias, return the mapped HF path.
-    Otherwise return unchanged (could be a local path).
+    Otherwise return unchanged.
     """
     if "/" in name:
+        return name
+    if os.path.exists(name):
         return name
     aliases = _load()
     return aliases.get(name, name)

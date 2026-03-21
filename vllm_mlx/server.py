@@ -181,6 +181,7 @@ _cloud_router = None  # CloudRouter instance when --cloud-model is set
 
 # GC control (Tier 0 optimization)
 _gc_control: bool = True  # Disable GC during generation to avoid latency spikes
+_no_thinking: bool = False  # --no-thinking: force enable_thinking=False in chat template
 
 # Pinned prefix cache (Tier 0 optimization)
 _pin_system_prompt: bool = False  # Auto-pin system prompt prefix cache blocks
@@ -1856,6 +1857,8 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # Pass through enable_thinking if explicitly set by the client
     if request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = request.enable_thinking
+    elif _no_thinking:
+        chat_kwargs["enable_thinking"] = False
 
     # Cloud routing: offload large-context requests to cloud LLM
     if _cloud_router and not engine.is_mllm and hasattr(engine, "build_prompt"):
@@ -2205,6 +2208,8 @@ async def create_anthropic_message(
         chat_kwargs["tools"] = convert_tools_for_template(openai_request.tools)
     if openai_request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = openai_request.enable_thinking
+    elif _no_thinking:
+        chat_kwargs["enable_thinking"] = False
 
     start_time = time.perf_counter()
     timeout = _default_timeout
@@ -2366,6 +2371,8 @@ async def _stream_anthropic_messages(
         chat_kwargs["tools"] = convert_tools_for_template(openai_request.tools)
     if openai_request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = openai_request.enable_thinking
+    elif _no_thinking:
+        chat_kwargs["enable_thinking"] = False
 
     # Emit message_start
     message_start = {

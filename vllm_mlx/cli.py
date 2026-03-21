@@ -156,6 +156,9 @@ def serve_command(args):
     gc_control = args.gc_control and not args.no_gc_control
     server._gc_control = gc_control
 
+    # Configure --no-thinking: suppress chain-of-thought in chat template
+    server._no_thinking = args.no_thinking
+
     # Configure system prompt pinning
     server._pin_system_prompt = args.pin_system_prompt
 

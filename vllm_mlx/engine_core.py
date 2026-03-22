@@ -251,7 +251,9 @@ class EngineCore:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Engine loop error: {e}")
+                import traceback
+
+                logger.error(f"Engine loop error: {e}\n{traceback.format_exc()}")
                 await asyncio.sleep(0.1)
 
     async def add_request(

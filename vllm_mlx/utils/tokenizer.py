@@ -51,26 +51,25 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
         return _load_with_tokenizer_fallback(model_name)
 
     try:
-        return load(model_name, tokenizer_config=tokenizer_config)
+        model, tokenizer = load(model_name, tokenizer_config=tokenizer_config)
     except ValueError as e:
         # Fallback for models with non-standard tokenizers
         if "TokenizersBackend" in str(e) or "Tokenizer class" in str(e):
             logger.warning(f"Standard tokenizer loading failed, using fallback: {e}")
             return _load_with_tokenizer_fallback(model_name)
-        # Fallback for vision-text models loaded as text-only (e.g., Qwen3.5).
-        # The weight files contain vision tower params that mlx-lm's text model
-        # doesn't define. Retry with strict=False to discard extra weights.
+        # Fallback for models with extra weights (e.g., vision tower, MTP layers).
+        # Retry with strict=False to discard extra weights.
         if "parameters not in model" in str(e):
             logger.warning(
-                "Model has extra weights (likely vision tower), "
-                "retrying with strict=False to load as text-only."
+                f"Extra parameters found (e.g., vision tower / MTP weights), "
+                f"retrying with strict=False: {e}"
             )
             return _load_strict_false(model_name, tokenizer_config)
         raise
 
 
 def _load_strict_false(model_name: str, tokenizer_config: dict = None):
-    """Load model with strict=False to discard extra weights (e.g., vision tower)."""
+    """Load model with strict=False to discard extra weights (e.g., vision tower, MTP)."""
     from mlx_lm.utils import load_model, load_tokenizer
 
     local_path = Path(model_name)
@@ -87,7 +86,48 @@ def _load_strict_false(model_name: str, tokenizer_config: dict = None):
         tokenizer_config or {},
         eos_token_ids=config.get("eos_token_id", None),
     )
+    # Inject MTP support if model has MTP config + weights
+    _try_inject_mtp(model, model_path, config)
     return model, tokenizer
+
+
+def _try_inject_mtp(model, model_path, config):
+    """Inject MTP support if model has MTP config + weights."""
+    if config.get("num_nextn_predict_layers", 0) > 0:
+        from ..patches.qwen3_next_mtp import inject_mtp_support
+
+        inject_mtp_support(model, model_path, config)
+
+
+def _try_inject_mtp_post_load(model, model_name):
+    """Check if MTP weights exist but were stripped by sanitize(), and inject."""
+    import json
+
+    from mlx_lm.utils import _download
+
+    model_path = _download(model_name)
+    config_path = Path(model_path) / "config.json"
+    if not config_path.exists():
+        return
+    with open(config_path) as f:
+        config = json.load(f)
+    # Also check text_config for nested configs
+    num_mtp = config.get("num_nextn_predict_layers", 0)
+    if num_mtp == 0:
+        text_config = config.get("text_config", {})
+        num_mtp = text_config.get("num_nextn_predict_layers", 0)
+    if num_mtp > 0 and getattr(model, "mtp", None) is None:
+        mtp_file = Path(model_path) / "model-mtp.safetensors"
+        if mtp_file.exists():
+            logger.info(
+                f"[MTP] Found MTP config (layers={num_mtp}) and weights, injecting..."
+            )
+            _try_inject_mtp(model, model_path, config)
+        else:
+            logger.info(
+                f"[MTP] Config has num_nextn_predict_layers={num_mtp} "
+                "but model-mtp.safetensors not found, skipping MTP."
+            )
 
 
 def _load_with_tokenizer_fallback(model_name: str):

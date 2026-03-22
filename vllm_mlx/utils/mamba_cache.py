@@ -208,8 +208,17 @@ _patched = False
 
 
 def ensure_mamba_support():
-    """Ensure MambaCache batching support is enabled."""
+    """Ensure MambaCache batching support is enabled.
+
+    NOTE: Disabled for mlx-lm >= 0.30.6 where ArraysCache natively supports
+    all batch operations (extract, merge, filter, prepare).  The old patch
+    replaced ArraysCache with BatchMambaCache, which broke hybrid models
+    (Qwen3.5) that mix ArraysCache + KVCache layers.
+    """
     global _patched
     if not _patched:
-        patch_mlx_lm_for_mamba()
+        logger.info(
+            "[MambaCache] Skipping _make_cache patch — "
+            "mlx-lm ArraysCache has native batching support"
+        )
         _patched = True

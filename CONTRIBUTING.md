@@ -8,9 +8,10 @@ Thanks for your interest! Here's how to get started.
 # Clone and install in dev mode
 git clone https://github.com/raullenchai/Rapid-MLX.git
 cd Rapid-MLX
-python3.12 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
+pip install pytest ruff        # dev tools for testing and linting
 
 # Start a dev server
 rapid-mlx serve qwen3.5-4b --port 8000
@@ -22,13 +23,17 @@ rapid-mlx serve qwen3.5-4b --port 8000
 
 ```bash
 # Run all unit tests (no model needed)
-python3.12 -m pytest tests/ -x -q
+python3 -m pytest tests/ -x -q
 
 # Run a specific test file
-python3.12 -m pytest tests/test_tool_calling.py -v
+python3 -m pytest tests/test_tool_calling.py -v
+
+# Lint and format
+ruff check .
+ruff format --check .
 ```
 
-Most tests run without a model. Tests that require a running server are in `tests/test_event_loop.py` — start a server first if you want to run those.
+Most tests run without a model. Tests in `tests/test_event_loop.py` require a running server — start one first if you want to run those.
 
 ## Pull Request Workflow
 

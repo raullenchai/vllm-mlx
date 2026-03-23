@@ -20,10 +20,29 @@ body:
     validations:
       required: true
   - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "e.g., Sequoia 15.3 (Apple menu → About This Mac)"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "e.g., 3.12.4 (run: python3 --version)"
+  - type: input
     id: model
     attributes:
       label: Model
       placeholder: "e.g., qwen3.5-4b or mlx-community/Qwen3.5-4B-MLX-4bit"
+    validations:
+      required: true
+  - type: input
+    id: serve_command
+    attributes:
+      label: Full serve command
+      placeholder: "e.g., rapid-mlx serve qwen3.5-4b --port 8000 --no-thinking"
     validations:
       required: true
   - type: textarea

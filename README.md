@@ -110,7 +110,7 @@ pip install 'rapid-mlx[vision]'
 
 ```python
 from openai import OpenAI
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="not-needed")
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="not-needed")  # any value works, no real key needed
 
 response = client.chat.completions.create(
     model="default",
@@ -134,19 +134,25 @@ print(response.choices[0].message.content)
 | [OpenCode](https://github.com/opencode-ai/opencode) | Verified | JSON config |
 | [LangChain](https://langchain.com) | Compatible | Standard OpenAI client |
 | [Anthropic SDK](https://docs.anthropic.com/en/docs/sdks) | Compatible | Via `/v1/messages` endpoint |
-| Any OpenAI SDK client | Compatible | Drop-in `base_url` swap |
+| Any OpenAI-compatible app | Compatible | Just change the server address to `http://localhost:8000/v1` |
 
-<details>
-<summary><strong>Client setup instructions</strong></summary>
+**Quick setup for popular apps:**
+
+**Cursor:** Settings → Models → Add Model:
+```
+OpenAI API Base:  http://localhost:8000/v1
+API Key:          not-needed
+Model name:       default          (or qwen3.5-9b — either works)
+```
+Cursor's agent/composer mode uses tool calls automatically — Rapid-MLX handles them natively with Qwen3.5 models, no extra flags needed.
 
 **Claude Code:**
 ```bash
 OPENAI_BASE_URL=http://localhost:8000/v1 claude
-# Or add to ~/.claude/settings.json:
-# { "env": { "OPENAI_BASE_URL": "http://localhost:8000/v1" } }
 ```
 
-**Cursor:** Settings > Models > OpenAI API Base → `http://localhost:8000/v1`
+<details>
+<summary><strong>More client setup instructions</strong></summary>
 
 **Continue.dev** (`~/.continue/config.yaml`):
 ```yaml
@@ -511,7 +517,7 @@ Vision, audio (STT/TTS), video understanding, and text embeddings — all throug
 
 **Tool calls as plain text** — Set the correct `--tool-call-parser` for your model. Even without it, Rapid-MLX auto-recovers most cases.
 
-**Slow first response** — Cold start is normal. Subsequent turns hit prompt cache (10-30x faster). Use `--prefill-step-size 8192` to speed up cold starts.
+**Slow first response** — Two different causes: (1) Qwen3.5 models reason before answering — add `--no-thinking` to skip reasoning for faster responses, or (2) cold start on long prompts — add `--prefill-step-size 8192` to speed up processing. Subsequent turns hit prompt cache and are 10-30x faster.
 
 **Server hangs after client disconnect** — Fixed in v0.3.0+. Upgrade to latest.
 

@@ -514,9 +514,15 @@ Vision, audio (STT/TTS), video understanding, and text embeddings — all throug
 
 ## Contributing
 
-Issues and PRs welcome at [github.com/raullenchai/Rapid-MLX](https://github.com/raullenchai/Rapid-MLX).
+Issues and PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup and guidelines.
 
 We need community data — hardware benchmarks, client verifications, model reports. If you test a model on your Mac, [open an issue](https://github.com/raullenchai/Rapid-MLX/issues/new) with your hardware, model, decode speed, and what worked.
+
+### Contributors
+
+<a href="https://github.com/raullenchai/Rapid-MLX/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=raullenchai/Rapid-MLX" />
+</a>
 
 ## License
 

@@ -1378,7 +1378,11 @@ class SimpleEngine(BaseEngine):
                 for stop_seq in stop:
                     idx = accumulated_text.find(stop_seq)
                     if idx != -1:
+                        # Trim both accumulated and new_text so SSE streams
+                        # never emit the stop sequence or anything after it.
+                        overshoot = len(accumulated_text) - idx
                         accumulated_text = accumulated_text[:idx]
+                        new_text = new_text[: max(0, len(new_text) - overshoot)]
                         stop_hit = True
                         break
 

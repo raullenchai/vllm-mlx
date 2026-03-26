@@ -127,6 +127,9 @@ logger = logging.getLogger(__name__)
 _engine: BaseEngine | None = None
 _model_name: str | None = None
 _model_alias: str | None = None  # Short alias used to start the model (if any)
+_model_path: str | None = (
+    None  # Actual model path (for cache dir, not affected by --served-model-name)
+)
 _default_max_tokens: int = 32768
 _default_timeout: float = 300.0  # Default request timeout in seconds (5 minutes)
 _default_temperature: float | None = None  # Set via --default-temperature
@@ -300,11 +303,14 @@ def _save_prefix_cache_to_disk() -> None:
 
 
 def _get_cache_dir() -> str:
-    """Get cache persistence directory based on model name."""
-    # Use global _model_name which is always a string, set during load_model()
-    model_name = _model_name if _model_name else "default"
+    """Get cache persistence directory based on actual model path."""
+    # Use _model_path (actual model path) not _model_name (which may be overridden
+    # by --served-model-name). This ensures cache is shared regardless of served name.
+    model_name = (
+        _model_path if _model_path else (_model_name if _model_name else "default")
+    )
     logger.info(
-        f"[_get_cache_dir] _model_name={_model_name!r} type={type(_model_name)}"
+        f"[_get_cache_dir] _model_path={_model_path!r} type={type(_model_path)}"
     )
     # Sanitize model name for filesystem
     safe_name = str(model_name).replace("/", "--").replace("\\", "--")
@@ -476,6 +482,16 @@ def get_engine() -> BaseEngine:
     if _engine is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     return _engine
+
+
+def _validate_model_name(request_model: str) -> None:
+    """Validate that the request model name matches the served model."""
+    if _model_name and request_model != _model_name:
+        raise HTTPException(
+            status_code=404,
+            detail=f"The model `{request_model}` does not exist. "
+            f"Available model: `{_model_name}`",
+        )
 
 
 def _parse_tool_calls_with_parser(
@@ -688,6 +704,12 @@ def load_model(
     cloud_threshold: int = 20000,
     cloud_api_base: str | None = None,
     cloud_api_key: str | None = None,
+    served_model_name: str | None = None,
+    mtp: bool = False,
+    specprefill_enabled: bool = False,
+    specprefill_threshold: int = 8192,
+    specprefill_keep_pct: float = 0.3,
+    specprefill_draft_model: str = None,
 ):
     """
     Load a model (auto-detects MLLM vs LLM).
@@ -706,16 +728,23 @@ def load_model(
         prefill_step_size: Tokens to process per prefill chunk (default: 2048)
         kv_bits: KV cache quantization bits (None=no quantization, 4 or 8)
         kv_group_size: Group size for KV cache quantization (default: 64)
+        mtp: Enable native MTP speculative decoding (SimpleEngine only)
+        specprefill_enabled: Enable SpecPrefill (SimpleEngine only)
+        specprefill_threshold: Minimum suffix tokens to trigger SpecPrefill (default: 8192)
+        specprefill_keep_pct: Fraction of tokens to keep (default: 0.3)
+        specprefill_draft_model: Path to small draft model for SpecPrefill scoring
     """
     global \
         _engine, \
         _model_name, \
+        _model_path, \
         _default_max_tokens, \
         _tool_parser_instance, \
         _cloud_router
 
     _default_max_tokens = max_tokens
-    _model_name = model_name
+    _model_path = model_name
+    _model_name = served_model_name or model_name
     # Reset tool parser instance when model is reloaded (tokenizer may change)
     _tool_parser_instance = None
 
@@ -781,6 +810,11 @@ def load_model(
             prefill_step_size=prefill_step_size,
             kv_bits=kv_bits,
             kv_group_size=kv_group_size,
+            mtp=mtp,
+            specprefill_enabled=specprefill_enabled,
+            specprefill_threshold=specprefill_threshold,
+            specprefill_keep_pct=specprefill_keep_pct,
+            specprefill_draft_model=specprefill_draft_model,
         )
         # Start SimpleEngine synchronously (no background loop)
         # Use new_event_loop() for Python 3.10+ compatibility (get_event_loop() is deprecated)
@@ -1580,6 +1614,7 @@ async def _wait_with_disconnect(
 )
 async def create_completion(request: CompletionRequest, raw_request: Request):
     """Create a text completion."""
+    _validate_model_name(request.model)
     engine = get_engine()
 
     # Validate model name matches loaded model
@@ -1711,6 +1746,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     }
     ```
     """
+    _validate_model_name(request.model)
     engine = get_engine()
 
     # Validate messages is non-empty
@@ -1826,6 +1862,23 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
         )
 
     has_media = bool(images or videos)
+    if engine.is_mllm and not has_media:
+        # MLLM extracts media from messages directly, so images/videos are
+        # always empty. Check message content for video/image types instead.
+        for msg in request.messages:
+            content = msg.content if hasattr(msg, "content") else msg.get("content", "")
+            if isinstance(content, list):
+                for item in content:
+                    item_type = (
+                        item.type
+                        if hasattr(item, "type")
+                        else (item.get("type", "") if isinstance(item, dict) else "")
+                    )
+                    if item_type in ("image_url", "image", "video", "video_url"):
+                        has_media = True
+                        break
+            if has_media:
+                break
 
     # Normalize "developer" role to "system" for models that don't support it.
     # OpenAI's API uses "developer" as a newer alias for "system", but most
@@ -1907,6 +1960,12 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
             chat_kwargs["video_fps"] = request.video_fps
         if request.video_max_frames:
             chat_kwargs["video_max_frames"] = request.video_max_frames
+
+    # SpecPrefill: per-request overrides
+    if request.specprefill is not None:
+        chat_kwargs["specprefill"] = request.specprefill
+    if request.specprefill_keep_pct is not None:
+        chat_kwargs["specprefill_keep_pct"] = request.specprefill_keep_pct
 
     # Add tools if provided
     if request.tools:
@@ -2248,6 +2307,8 @@ async def create_anthropic_message(
     # Parse the raw body to handle Anthropic request format
     body = await request.json()
     anthropic_request = AnthropicRequest(**body)
+
+    _validate_model_name(anthropic_request.model)
 
     # --- Detailed request logging ---
     n_msgs = len(anthropic_request.messages)

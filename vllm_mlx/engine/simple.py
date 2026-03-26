@@ -532,6 +532,7 @@ class SimpleEngine(BaseEngine):
                 max_tokens,
                 temperature,
                 top_p,
+                stop=stop,
                 tools=template_tools,
                 **kwargs,
             ):
@@ -708,6 +709,7 @@ class SimpleEngine(BaseEngine):
                 max_tokens,
                 temperature,
                 top_p,
+                stop=stop,
                 tools=template_tools,
                 **kwargs,
             ):
@@ -972,6 +974,7 @@ class SimpleEngine(BaseEngine):
         max_tokens: int,
         temperature: float,
         top_p: float,
+        stop: list[str] | None = None,
         tools: list | None = None,
         **kwargs,
     ) -> AsyncIterator[GenerationOutput]:
@@ -1369,8 +1372,18 @@ class SimpleEngine(BaseEngine):
             new_text = resp.text if hasattr(resp, "text") else str(resp)
             accumulated_text += new_text
 
+            # Check stop sequences (mlx_lm doesn't handle these natively)
+            stop_hit = False
+            if stop:
+                for stop_seq in stop:
+                    idx = accumulated_text.find(stop_seq)
+                    if idx != -1:
+                        accumulated_text = accumulated_text[:idx]
+                        stop_hit = True
+                        break
+
             is_last = i == len(all_resps) - 1
-            finished = is_last or token_count >= max_tokens
+            finished = stop_hit or is_last or token_count >= max_tokens
 
             yield GenerationOutput(
                 text=accumulated_text,

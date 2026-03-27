@@ -2181,7 +2181,7 @@ async def create_anthropic_message(
         chat_kwargs["tools"] = convert_tools_for_template(openai_request.tools)
     if openai_request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = openai_request.enable_thinking
-    if openai_request.think_budget:
+    if openai_request.think_budget is not None:
         chat_kwargs["think_budget"] = openai_request.think_budget
 
     start_time = time.perf_counter()
@@ -2342,7 +2342,7 @@ async def _stream_anthropic_messages(
         chat_kwargs["tools"] = convert_tools_for_template(openai_request.tools)
     if openai_request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = openai_request.enable_thinking
-    if openai_request.think_budget:
+    if openai_request.think_budget is not None:
         chat_kwargs["think_budget"] = openai_request.think_budget
 
     # Emit message_start

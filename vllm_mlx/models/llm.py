@@ -176,6 +176,8 @@ class MLXLanguageModel:
         top_p: float = 0.9,
         repetition_penalty: float = 1.0,
         stop: list[str] | None = None,
+        think_budget: int = 0,
+        **kwargs,
     ) -> GenerationOutput:
         """
         Generate text from a prompt.
@@ -187,6 +189,8 @@ class MLXLanguageModel:
             top_p: Top-p (nucleus) sampling parameter
             repetition_penalty: Penalty for repeating tokens
             stop: List of stop sequences
+            think_budget: Max tokens inside <think>...</think>; 0 = no limit
+            **kwargs: Additional parameters (ignored)
 
         Returns:
             GenerationOutput with generated text and tokens
@@ -205,6 +209,7 @@ class MLXLanguageModel:
             temperature=temperature,
             top_p=top_p,
             stop=stop,
+            think_budget=think_budget,
         ):
             output_text += chunk.text
             if chunk.finished:
@@ -688,16 +693,23 @@ class MLXLanguageModel:
                     if _in_think:
                         _think_tokens += 1
                         if _think_tokens >= _think_budget:
-                            # Budget exceeded — inject </think> to end reasoning
+                            # Budget exceeded — stop generation entirely.
+                            # We cannot reliably inject </think> without
+                            # feeding it back into the model's decoding state,
+                            # so we terminate and let the caller handle it.
                             _think_budget_hit = True
                             _in_think = False
-                            close_tag = "</think>"
-                            new_text += close_tag
-                            accumulated_text += close_tag
                             logger.info(
                                 f"Think budget reached ({_think_budget} tokens), "
-                                f"injecting </think>"
+                                f"stopping generation"
                             )
+                            yield StreamingOutput(
+                                text=new_text,
+                                token=token_id,
+                                finished=True,
+                                finish_reason="think_budget",
+                            )
+                            return
 
                 # Check for stop sequences
                 should_stop = False

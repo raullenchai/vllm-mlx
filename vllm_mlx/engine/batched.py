@@ -627,18 +627,26 @@ class BatchedEngine(BaseEngine):
         all_images = (images or []) + extracted_images
         all_videos = (videos or []) + extracted_videos
 
-        # Extract enable_thinking before passing kwargs downstream
+        # Extract enable_thinking and think_budget before passing kwargs downstream
         enable_thinking = kwargs.pop("enable_thinking", None)
+        think_budget = kwargs.pop("think_budget", None)
+
+        # think_budget=0 explicitly disables thinking (TTC baseline)
+        if think_budget is not None and think_budget == 0:
+            enable_thinking = False
 
         # Convert tools for template
         template_tools = convert_tools_for_template(tools) if tools else None
 
         # Apply chat template
+        template_kwargs: dict = {"enable_thinking": enable_thinking}
+        if think_budget:
+            template_kwargs["think_budget"] = think_budget
         prompt = self._apply_chat_template(
             messages,
             template_tools,
             num_images=len(all_images),
-            enable_thinking=enable_thinking,
+            **template_kwargs,
         )
 
         return await self.generate(
@@ -742,18 +750,26 @@ class BatchedEngine(BaseEngine):
         all_images = (images or []) + extracted_images
         all_videos = (videos or []) + extracted_videos
 
-        # Extract enable_thinking before passing kwargs downstream
+        # Extract enable_thinking and think_budget before passing kwargs downstream
         enable_thinking = kwargs.pop("enable_thinking", None)
+        think_budget = kwargs.pop("think_budget", None)
+
+        # think_budget=0 explicitly disables thinking (TTC baseline)
+        if think_budget is not None and think_budget == 0:
+            enable_thinking = False
 
         # Convert tools for template
         template_tools = convert_tools_for_template(tools) if tools else None
 
         # Apply chat template
+        template_kwargs: dict = {"enable_thinking": enable_thinking}
+        if think_budget:
+            template_kwargs["think_budget"] = think_budget
         prompt = self._apply_chat_template(
             messages,
             template_tools,
             num_images=len(all_images),
-            enable_thinking=enable_thinking,
+            **template_kwargs,
         )
 
         # Compute prefix boundary for cache

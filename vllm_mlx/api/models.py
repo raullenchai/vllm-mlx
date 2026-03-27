@@ -207,6 +207,10 @@ class ChatCompletionRequest(BaseModel):
     timeout: float | None = None
     # Thinking/reasoning control (Qwen3 style).  None = server default.
     enable_thinking: bool | None = None
+    # Maximum number of tokens the model may generate inside <think>...</think>.
+    # When the budget is reached, thinking is terminated and the model proceeds
+    # to generate the answer.  None or 0 = no limit.
+    think_budget: int | None = None
 
 
 class AssistantMessage(BaseModel):

@@ -1829,6 +1829,10 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = request.enable_thinking
 
+    # Pass through think_budget if set (limits reasoning tokens)
+    if request.think_budget:
+        chat_kwargs["think_budget"] = request.think_budget
+
     # Cloud routing: offload large-context requests to cloud LLM
     if _cloud_router and not engine.is_mllm and hasattr(engine, "build_prompt"):
         try:
@@ -2177,6 +2181,8 @@ async def create_anthropic_message(
         chat_kwargs["tools"] = convert_tools_for_template(openai_request.tools)
     if openai_request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = openai_request.enable_thinking
+    if openai_request.think_budget:
+        chat_kwargs["think_budget"] = openai_request.think_budget
 
     start_time = time.perf_counter()
     timeout = _default_timeout
@@ -2336,6 +2342,8 @@ async def _stream_anthropic_messages(
         chat_kwargs["tools"] = convert_tools_for_template(openai_request.tools)
     if openai_request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = openai_request.enable_thinking
+    if openai_request.think_budget:
+        chat_kwargs["think_budget"] = openai_request.think_budget
 
     # Emit message_start
     message_start = {

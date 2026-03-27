@@ -511,6 +511,8 @@ class MLXLanguageModel:
         top_p: float = 0.9,
         repetition_penalty: float = 1.0,
         stop: list[str] | None = None,
+        think_budget: int = 0,
+        **kwargs,
     ) -> Iterator[StreamingOutput]:
         """
         Stream text generation token by token with KV cache reuse.
@@ -527,6 +529,8 @@ class MLXLanguageModel:
             top_p: Top-p (nucleus) sampling parameter
             repetition_penalty: Penalty for repeating tokens
             stop: List of stop sequences
+            think_budget: Max tokens inside <think>...</think>; 0 = no limit
+            **kwargs: Additional parameters (ignored)
 
         Yields:
             StreamingOutput for each generated token
@@ -581,6 +585,18 @@ class MLXLanguageModel:
         # control tokens (e.g. Harmony's <|channel|>, <|call|>) that tool
         # parsers need. Also handles multi-byte chars (emoji, CJK) safely.
         decoder = IncrementalDecoder(self.tokenizer, skip_special_tokens=False)
+
+        # Think budget tracking: count tokens inside <think>...</think>
+        _think_budget = think_budget or 0
+        _in_think = False
+        _think_tokens = 0
+        _think_budget_hit = False
+        if _think_budget > 0:
+            # Pre-compute the </think> token IDs for budget enforcement
+            _end_think_ids = self.tokenizer.encode("</think>", add_special_tokens=False)
+            if not _end_think_ids:
+                logger.warning("Could not encode '</think>' — think_budget disabled")
+                _think_budget = 0
 
         # Build generation kwargs
         gen_kwargs = {
@@ -662,6 +678,26 @@ class MLXLanguageModel:
                 token_id = response.token if hasattr(response, "token") else 0
                 new_text = decoder.add_token(token_id)
                 accumulated_text += new_text
+
+                # Think budget enforcement: track <think>/</think> boundaries
+                if _think_budget > 0 and not _think_budget_hit:
+                    if not _in_think and "<think>" in accumulated_text:
+                        _in_think = True
+                    if _in_think and "</think>" in accumulated_text:
+                        _in_think = False  # thinking ended naturally
+                    if _in_think:
+                        _think_tokens += 1
+                        if _think_tokens >= _think_budget:
+                            # Budget exceeded — inject </think> to end reasoning
+                            _think_budget_hit = True
+                            _in_think = False
+                            close_tag = "</think>"
+                            new_text += close_tag
+                            accumulated_text += close_tag
+                            logger.info(
+                                f"Think budget reached ({_think_budget} tokens), "
+                                f"injecting </think>"
+                            )
 
                 # Check for stop sequences
                 should_stop = False

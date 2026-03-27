@@ -349,16 +349,19 @@ class SimpleEngine(BaseEngine):
                 # For LLM, build prompt with enable_thinking support,
                 # then generate directly.
                 enable_thinking_val = kwargs.get("enable_thinking")
+                think_budget_val = kwargs.get("think_budget")
                 kwargs_copy = kwargs.copy()
                 kwargs_copy.pop("enable_thinking", None)
+                kwargs_copy.pop("think_budget", None)
+                build_kwargs: dict = {}
+                if enable_thinking_val is not None:
+                    build_kwargs["enable_thinking"] = enable_thinking_val
+                if think_budget_val:
+                    build_kwargs["think_budget"] = think_budget_val
                 prompt = self.build_prompt(
                     messages,
                     tools=tools,
-                    **(
-                        {"enable_thinking": enable_thinking_val}
-                        if enable_thinking_val is not None
-                        else {}
-                    ),
+                    **build_kwargs,
                 )
                 # Run in thread pool to allow asyncio timeout to work
                 output = await asyncio.to_thread(
@@ -426,6 +429,7 @@ class SimpleEngine(BaseEngine):
 
         template_tools = convert_tools_for_template(tools) if tools else None
         enable_thinking = kwargs.get("enable_thinking")
+        think_budget = kwargs.get("think_budget")
 
         return shared_apply_chat_template(
             self._model.tokenizer,
@@ -433,6 +437,7 @@ class SimpleEngine(BaseEngine):
             tools=template_tools,
             enable_thinking=enable_thinking,
             model_name=self._model_name,
+            think_budget=think_budget,
         )
 
     async def stream_chat(
@@ -516,12 +521,14 @@ class SimpleEngine(BaseEngine):
 
         # For LLM, apply chat template and stream
         enable_thinking = kwargs.get("enable_thinking")
+        think_budget = kwargs.get("think_budget")
         prompt = shared_apply_chat_template(
             self._model.tokenizer,
             messages,
             tools=template_tools,
             enable_thinking=enable_thinking,
             model_name=self._model_name,
+            think_budget=think_budget,
         )
 
         # Stream generate

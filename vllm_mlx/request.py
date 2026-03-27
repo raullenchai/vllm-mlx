@@ -60,6 +60,7 @@ class SamplingParams:
     repetition_penalty: float = 1.0
     stop: list[str] | None = None
     stop_token_ids: list[int] | None = None
+    think_budget: int = 0  # Max thinking tokens; 0 = unlimited
 
     def __post_init__(self):
         if self.stop is None:

@@ -46,15 +46,33 @@ class ReasoningParser(ABC):
         Output: reasoning="Let me solve this step by step...", content="The answer is 42."
     """
 
-    def __init__(self, tokenizer: Any | None = None):
+    def __init__(self, tokenizer: Any | None = None, think_budget: int = 0):
         """
         Initialize parser with optional tokenizer.
 
         Args:
             tokenizer: Optional tokenizer for token-based parsing. For vllm-mlx,
                       text-based parsing is sufficient, so this is optional.
+            think_budget: Maximum number of reasoning tokens allowed.
+                0 = unlimited (default).
         """
         self.tokenizer = tokenizer
+        self.think_budget = think_budget
+        self._reasoning_token_count = 0
+
+    def count_reasoning_token(self) -> None:
+        """Increment the reasoning token counter."""
+        self._reasoning_token_count += 1
+
+    def is_budget_exceeded(self) -> bool:
+        """Check if the reasoning token budget has been exceeded.
+
+        Returns:
+            True if think_budget > 0 and reasoning tokens >= think_budget.
+        """
+        if self.think_budget <= 0:
+            return False
+        return self._reasoning_token_count >= self.think_budget
 
     @abstractmethod
     def extract_reasoning(
@@ -107,7 +125,7 @@ class ReasoningParser(ABC):
         Override in subclasses if stateful parsing is needed.
         This is intentionally a default no-op implementation.
         """
-        pass
+        self._reasoning_token_count = 0
 
     def finalize_streaming(  # noqa: B027
         self, accumulated_text: str

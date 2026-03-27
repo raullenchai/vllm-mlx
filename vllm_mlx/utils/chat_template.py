@@ -17,6 +17,7 @@ def apply_chat_template(
     tools: list[dict] | None = None,
     enable_thinking: bool | None = None,
     model_name: str = "",
+    think_budget: int | None = None,
 ) -> str:
     """Apply a chat template to messages with consistent fallback behavior.
 
@@ -34,6 +35,8 @@ def apply_chat_template(
             - None: auto-detect (True except for coder models)
         model_name: Model name string, used for auto-detection of
             ``enable_thinking`` when set to None.
+        think_budget: Maximum thinking tokens.  Passed to the template if
+            the template supports a ``think_budget`` parameter.
 
     Returns:
         The formatted prompt string.  Falls back to a plain
@@ -53,6 +56,8 @@ def apply_chat_template(
         "add_generation_prompt": True,
         "enable_thinking": enable_thinking,
     }
+    if think_budget:
+        template_kwargs["think_budget"] = think_budget
     if tools:
         template_kwargs["tools"] = tools
 
@@ -61,6 +66,6 @@ def apply_chat_template(
     except TypeError as e:
         # Some templates don't support tools/enable_thinking; retry without them.
         logger.debug("Chat template TypeError, retrying without extras: %s", e)
-        for key in ["tools", "enable_thinking"]:
+        for key in ["tools", "enable_thinking", "think_budget"]:
             template_kwargs.pop(key, None)
         return template_applicator.apply_chat_template(messages, **template_kwargs)

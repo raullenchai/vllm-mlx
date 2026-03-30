@@ -369,7 +369,7 @@ class SimpleEngine(BaseEngine):
             ):
                 prompt_tokens = (
                     chunk.prompt_tokens
-                    if hasattr(chunk, "prompt_tokens")
+                    if hasattr(chunk, "prompt_tokens") and chunk.prompt_tokens
                     else prompt_tokens
                 )
                 completion_tokens += 1
@@ -382,6 +382,9 @@ class SimpleEngine(BaseEngine):
                 finish_reason = None
                 if finished:
                     finish_reason = getattr(chunk, "finish_reason", "stop")
+                    # Ensure prompt_tokens is populated before final yield
+                    if prompt_tokens == 0:
+                        prompt_tokens = len(self._model.tokenizer.encode(prompt))
 
                 yield GenerationOutput(
                     text=accumulated_text,
@@ -472,9 +475,28 @@ class SimpleEngine(BaseEngine):
                     **kwargs,
                 )
                 text = clean_output_text(output.text)
+                # Count prompt tokens from the full templated prompt
+                prompt_token_count = 0
+                if hasattr(self._model, "tokenizer"):
+                    tokenizer = self._model.tokenizer
+                    if hasattr(tokenizer, "apply_chat_template"):
+                        try:
+                            template_kwargs = {
+                                "tokenize": True,
+                                "add_generation_prompt": True,
+                            }
+                            if template_tools:
+                                template_kwargs["tools"] = template_tools
+                            prompt_ids = tokenizer.apply_chat_template(
+                                messages, **template_kwargs
+                            )
+                            prompt_token_count = len(prompt_ids)
+                        except (TypeError, Exception):
+                            pass
                 return GenerationOutput(
                     text=text,
                     tokens=output.tokens,
+                    prompt_tokens=prompt_token_count,
                     completion_tokens=len(output.tokens),
                     finish_reason=output.finish_reason,
                 )

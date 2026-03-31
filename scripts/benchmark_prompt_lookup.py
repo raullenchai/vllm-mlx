@@ -17,6 +17,7 @@ No server needed. Runs at the model layer directly.
 
 import argparse
 import gc
+import logging
 import time
 from dataclasses import dataclass
 
@@ -265,7 +266,20 @@ def main():
         default=None,
         help="Run only these prompt names (default: all)",
     )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)",
+    )
     args = parser.parse_args()
+    
+    # Configure logging
+    numeric_level = getattr(logging, args.log_level.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError(f"Invalid log level: {args.log_level}")
+    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - %(message)s')
 
     # Load model once
     print(f"Loading model: {args.model}")

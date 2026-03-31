@@ -7,7 +7,9 @@ Tests: math reasoning, coding, creative writing, complex tool calls, multi-turn.
 Measures quality + speed for each task category.
 """
 
+import argparse
 import json
+import logging
 import time
 
 import httpx
@@ -151,6 +153,22 @@ def print_result(r, check_fn=None):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Real-world task benchmark")
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)",
+    )
+    args = parser.parse_args()
+    
+    # Configure logging
+    numeric_level = getattr(logging, args.log_level.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError(f"Invalid log level: {args.log_level}")
+    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - %(message)s')
+    
     print("=" * 90)
     print("  Qwen3.5-397B Real-World Task Benchmark")
     print("=" * 90)

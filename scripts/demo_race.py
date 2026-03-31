@@ -10,8 +10,10 @@ Usage:
     python3 scripts/demo_race.py
 """
 
+import argparse
 import asyncio
 import json
+import logging
 import sys
 import time
 
@@ -311,6 +313,22 @@ async def check_engines():
 
 
 async def main():
+    parser = argparse.ArgumentParser(description="Side-by-side speed comparison")
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)",
+    )
+    args = parser.parse_args()
+    
+    # Configure logging
+    numeric_level = getattr(logging, args.log_level.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError(f"Invalid log level: {args.log_level}")
+    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - %(message)s')
+    
     print(f"\n{BOLD}Checking engines...{RESET}")
     if not await check_engines():
         print(f"\n{BOLD}Please start both engines:{RESET}")

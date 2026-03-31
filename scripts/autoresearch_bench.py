@@ -17,6 +17,7 @@ Usage:
 """
 import argparse
 import json
+import logging
 import statistics
 import sys
 import time
@@ -302,7 +303,20 @@ if __name__ == "__main__":
     parser.add_argument("--runs", type=int, default=3, help="Runs per metric")
     parser.add_argument("--json", action="store_true", help="Output JSON only")
     parser.add_argument("--label", type=str, default="", help="Label for this run")
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)",
+    )
     args = parser.parse_args()
+    
+    # Configure logging
+    numeric_level = getattr(logging, args.log_level.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError(f"Invalid log level: {args.log_level}")
+    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - %(message)s')
 
     # Quick server health check
     try:

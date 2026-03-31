@@ -9,7 +9,9 @@ Sends identical requests to measure:
 
 Outputs TSV-compatible metrics for perfup-results.tsv.
 """
+import argparse
 import json
+import logging
 import statistics
 import time
 import urllib.request
@@ -69,7 +71,13 @@ def stream_request(messages, max_tokens=500):
     return ttft, tps, token_count
 
 
-def run_benchmark(n_runs=3):
+def run_benchmark(n_runs=3, log_level="INFO"):
+    # Configure logging
+    numeric_level = getattr(logging, log_level.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError(f"Invalid log level: {log_level}")
+    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - %(message)s')
+    
     messages_simple = [
         {"role": "system", "content": SYSTEM_MSG},
         {"role": "user", "content": USER_MSG},
@@ -135,4 +143,19 @@ def run_benchmark(n_runs=3):
 
 
 if __name__ == "__main__":
-    run_benchmark()
+    parser = argparse.ArgumentParser(description="Benchmark cache performance")
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)",
+    )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=3,
+        help="Number of runs for cached measurements",
+    )
+    args = parser.parse_args()
+    run_benchmark(n_runs=args.runs, log_level=args.log_level)

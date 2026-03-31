@@ -121,7 +121,10 @@ from .engine import (
 )
 from .tool_parsers import ToolParserManager
 
-logging.basicConfig(level=logging.INFO)
+import logging
+import sys
+
+# Global logger will be configured after parsing arguments
 logger = logging.getLogger(__name__)
 
 # Global engine instance
@@ -3238,6 +3241,13 @@ Examples:
         """,
     )
     parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)",
+    )
+    parser.add_argument(
         "--model",
         type=str,
         default="mlx-community/Llama-3.2-3B-Instruct-4bit",
@@ -3413,6 +3423,13 @@ Examples:
     )
 
     args = parser.parse_args()
+
+    # Configure logging
+    numeric_level = getattr(logging, args.log_level.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError(f"Invalid log level: {args.log_level}")
+    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger.setLevel(numeric_level)
 
     # Set global configuration
     global _api_key, _default_timeout, _rate_limiter

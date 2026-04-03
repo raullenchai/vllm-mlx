@@ -104,6 +104,8 @@ from .api.tool_calling import (
 )
 from .api.utils import (
     SPECIAL_TOKENS_PATTERN,
+    StreamingThinkRouter,
+    StreamingToolCallFilter,
     clean_output_text,
     extract_json_from_response,
     extract_multimodal_content,
@@ -2522,6 +2524,59 @@ async def count_anthropic_tokens(request: Request):
     return {"input_tokens": total_tokens}
 
 
+def _emit_content_pieces(
+    pieces: list[tuple[str, str]],
+    current_block_type: str | None,
+    block_index: int,
+) -> tuple[list[str], str | None, int]:
+    """Emit Anthropic SSE events for content pieces from the think router.
+
+    Handles block type transitions (thinking <-> text), emitting
+    content_block_start/stop/delta events as needed.
+
+    Args:
+        pieces: List of (block_type, text) from StreamingThinkRouter
+        current_block_type: Current open block type, or None
+        block_index: Current block index
+
+    Returns:
+        Tuple of (events, updated_block_type, updated_block_index)
+    """
+    events = []
+    for block_type, text in pieces:
+        if block_type != current_block_type:
+            # Close previous block if open
+            if current_block_type is not None:
+                events.append(
+                    f"event: content_block_stop\ndata: "
+                    f"{json.dumps({'type': 'content_block_stop', 'index': block_index})}\n\n"
+                )
+                block_index += 1
+            # Start new block
+            current_block_type = block_type
+            content_block = (
+                {"type": block_type, "text": ""}
+                if block_type == "text"
+                else {"type": block_type, "thinking": ""}
+            )
+            events.append(
+                f"event: content_block_start\ndata: "
+                f"{json.dumps({'type': 'content_block_start', 'index': block_index, 'content_block': content_block})}\n\n"
+            )
+        # Emit delta
+        delta_key = "thinking" if block_type == "thinking" else "text"
+        delta_type = "thinking_delta" if block_type == "thinking" else "text_delta"
+        delta_event = {
+            "type": "content_block_delta",
+            "index": block_index,
+            "delta": {"type": delta_type, delta_key: text},
+        }
+        events.append(
+            f"event: content_block_delta\ndata: {json.dumps(delta_event)}\n\n"
+        )
+    return events, current_block_type, block_index
+
+
 async def _stream_anthropic_messages(
     engine: BaseEngine,
     openai_request: ChatCompletionRequest,
@@ -2575,18 +2630,29 @@ async def _stream_anthropic_messages(
     }
     yield f"event: message_start\ndata: {json.dumps(message_start)}\n\n"
 
-    # Emit content_block_start for text
-    content_block_start = {
-        "type": "content_block_start",
-        "index": 0,
-        "content_block": {"type": "text", "text": ""},
-    }
-    yield f"event: content_block_start\ndata: {json.dumps(content_block_start)}\n\n"
-
-    # Stream content deltas — use reasoning parser to strip think tags
+    # Stream pipeline: raw text → tool call filter → think router → emit
+    # - Tool call filter strips tool call markup (emitted as structured blocks later)
+    # - Think router separates <think> content into Anthropic thinking blocks
     accumulated_text = ""
     accumulated_raw = ""
+    tool_filter = StreamingToolCallFilter()
+    # Detect if the model's chat template injects <think> into the
+    # generation prompt. If so, the model starts in thinking mode and
+    # the opening tag never appears in the output stream.
+    _tokenizer = engine.tokenizer if hasattr(engine, "tokenizer") else None
+    _chat_template = ""
+    if _tokenizer and hasattr(_tokenizer, "chat_template"):
+        _chat_template = _tokenizer.chat_template or ""
+    _starts_thinking = (
+        "<think>" in _chat_template and "add_generation_prompt" in _chat_template
+    )
+    think_router = StreamingThinkRouter(start_in_thinking=_starts_thinking)
+    prompt_tokens = 0
     completion_tokens = 0
+
+    # Track which content blocks we've started
+    current_block_type = None  # "thinking" or "text"
+    block_index = 0
 
     # Reset reasoning parser state for this stream
     if _reasoning_parser:
@@ -2596,10 +2662,14 @@ async def _stream_anthropic_messages(
         delta_text = output.new_text
 
         # Track token counts
+        if hasattr(output, "prompt_tokens") and output.prompt_tokens:
+            prompt_tokens = output.prompt_tokens
         if hasattr(output, "completion_tokens") and output.completion_tokens:
             completion_tokens = output.completion_tokens
 
         if delta_text:
+            # Accumulate raw text BEFORE special token cleaning for tool parsing
+            accumulated_text += delta_text
             content = None
 
             # Use reasoning parser to separate reasoning from content
@@ -2621,13 +2691,39 @@ async def _stream_anthropic_messages(
                 content = strip_special_tokens(content)
 
             if content:
-                accumulated_text += content
-                delta_event = {
-                    "type": "content_block_delta",
-                    "index": 0,
-                    "delta": {"type": "text_delta", "text": content},
-                }
-                yield f"event: content_block_delta\ndata: {json.dumps(delta_event)}\n\n"
+                # Stage 1: strip tool call markup
+                filtered = tool_filter.process(content)
+                if not filtered:
+                    continue
+                # Stage 2: route thinking vs text
+                pieces = think_router.process(filtered)
+                events, current_block_type, block_index = _emit_content_pieces(
+                    pieces, current_block_type, block_index
+                )
+                for event in events:
+                    yield event
+
+    # Flush remaining from both filters
+    remaining = tool_filter.flush()
+    if remaining:
+        events, current_block_type, block_index = _emit_content_pieces(
+            think_router.process(remaining), current_block_type, block_index
+        )
+        for event in events:
+            yield event
+
+    flush_pieces = think_router.flush()
+    if flush_pieces:
+        events, current_block_type, block_index = _emit_content_pieces(
+            flush_pieces, current_block_type, block_index
+        )
+        for event in events:
+            yield event
+
+    # Close final content block
+    if current_block_type is not None:
+        yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': block_index})}\n\n"
+        block_index += 1
 
     # Handle reasoning parser finalization (e.g. no-tag correction)
     if _reasoning_parser and accumulated_raw:
@@ -2653,13 +2749,10 @@ async def _stream_anthropic_messages(
     # Check for tool calls in accumulated text
     _, tool_calls = _parse_tool_calls_with_parser(accumulated_text, openai_request)
 
-    # Emit content_block_stop for text block
-    yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': 0})}\n\n"
-
     # If there are tool calls, emit tool_use blocks
     if tool_calls:
         for i, tc in enumerate(tool_calls):
-            tool_index = i + 1
+            tool_index = block_index + i
             try:
                 tool_input = json.loads(tc.function.arguments)
             except (json.JSONDecodeError, AttributeError):
@@ -2697,7 +2790,7 @@ async def _stream_anthropic_messages(
     message_delta = {
         "type": "message_delta",
         "delta": {"stop_reason": stop_reason, "stop_sequence": None},
-        "usage": {"output_tokens": completion_tokens},
+        "usage": {"input_tokens": prompt_tokens, "output_tokens": completion_tokens},
     }
     yield f"event: message_delta\ndata: {json.dumps(message_delta)}\n\n"
 
@@ -2705,7 +2798,7 @@ async def _stream_anthropic_messages(
     elapsed = time.perf_counter() - start_time
     tokens_per_sec = completion_tokens / elapsed if elapsed > 0 else 0
     logger.info(
-        f"Anthropic messages (stream): {completion_tokens} tokens in {elapsed:.2f}s ({tokens_per_sec:.1f} tok/s)"
+        f"Anthropic messages (stream): prompt={prompt_tokens} + completion={completion_tokens} tokens in {elapsed:.2f}s ({tokens_per_sec:.1f} tok/s)"
     )
 
     # Emit message_stop

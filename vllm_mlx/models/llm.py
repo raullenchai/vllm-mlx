@@ -589,6 +589,9 @@ class MLXLanguageModel:
         # Create sampler with parameters
         sampler = self._create_sampler(temperature, top_p)
 
+        # Count prompt tokens once upfront
+        num_prompt_tokens = len(self.tokenizer.encode(prompt))
+
         token_count = 0
         accumulated_text = ""
         # Use IncrementalDecoder with skip_special_tokens=False to preserve

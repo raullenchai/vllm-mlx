@@ -52,6 +52,7 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
 
     try:
         model, tokenizer = load(model_name, tokenizer_config=tokenizer_config)
+        return model, tokenizer
     except ValueError as e:
         # Fallback for models with non-standard tokenizers
         if "TokenizersBackend" in str(e) or "Tokenizer class" in str(e):

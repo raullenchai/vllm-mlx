@@ -744,6 +744,18 @@ class SimpleEngine(BaseEngine):
                         chunk = await asyncio.to_thread(next, sync_gen)
                     except StopIteration:
                         break
+                    except Exception as e:
+                        # Some VLM models (e.g. Gemma 4) raise during
+                        # generator cleanup after generation completes.
+                        # If we already have output, treat as finished.
+                        if token_count > 0:
+                            logger.warning(
+                                "MLLM stream_chat error after %d tokens "
+                                "(likely post-generation cleanup): %s",
+                                token_count, e,
+                            )
+                            break
+                        raise
 
                     token_count += 1
                     new_text = chunk.text if hasattr(chunk, "text") else str(chunk)

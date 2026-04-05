@@ -21,6 +21,7 @@ SPECIAL_TOKENS_PATTERN = re.compile(
     r"<\|end\|>|<\|eot_id\|>|<\|eom_id\|>|<\|python_tag\|>|"
     r"<\|start_header_id\|>|<\|end_header_id\|>|"
     r"<\|channel\|>|<\|message\|>|<\|start\|>|<\|return\|>|<\|call\|>|<\|constrain\|>|"
+    r"<\|turn>|<turn\|>|"
     r"</s>|<s>|<pad>|\[PAD\]|\[SEP\]|\[CLS\]|"
     r"\[e~\[|\]~b\][a-z]*|\]~!b\["
 )
@@ -123,8 +124,14 @@ def clean_output_text(text: str) -> str:
     return text
 
 
-# Pattern to match <think>...</think> blocks
-THINK_PATTERN = re.compile(r"<think>[\s\S]*?</think>\s*", re.DOTALL)
+# Pattern to match thinking blocks:
+# - <think>...</think> (Qwen, DeepSeek, etc.)
+# - <|channel>thought\n...<channel|> (Gemma 4)
+THINK_PATTERN = re.compile(
+    r"<think>[\s\S]*?</think>\s*"
+    r"|<\|channel>thought\n[\s\S]*?<channel\|>\s*",
+    re.DOTALL,
+)
 
 
 def strip_thinking_tags(text: str) -> str:

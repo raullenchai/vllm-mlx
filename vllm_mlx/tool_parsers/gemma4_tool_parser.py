@@ -61,6 +61,7 @@ class Gemma4ToolParser(ToolParser):
 
     def reset(self):
         """Reset state for a new request."""
+        super().reset()
         self._emitted_tool_count = 0
 
     def extract_tool_calls(

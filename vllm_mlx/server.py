@@ -387,6 +387,18 @@ app = FastAPI(
 security = HTTPBearer(auto_error=False)
 
 
+@app.exception_handler(Exception)
+async def _global_exception_handler(request: Request, exc: Exception):
+    """Catch unhandled exceptions so they return JSON 500 instead of killing
+    the connection. This keeps the server alive for subsequent requests."""
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    from starlette.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"message": str(exc), "type": type(exc).__name__}},
+    )
+
+
 class RateLimiter:
     """Simple in-memory rate limiter using sliding window."""
 

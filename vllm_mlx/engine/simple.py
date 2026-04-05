@@ -555,16 +555,20 @@ class SimpleEngine(BaseEngine):
             if self._is_mllm:
                 # For MLLM with media, use the chat method which handles images/videos
                 # Run in thread pool to allow asyncio timeout to work
-                output = await asyncio.to_thread(
-                    self._model.chat,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    stop=stop,
-                    tools=template_tools,
-                    **kwargs,
-                )
+                try:
+                    output = await asyncio.to_thread(
+                        self._model.chat,
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                        stop=stop,
+                        tools=template_tools,
+                        **kwargs,
+                    )
+                except Exception as e:
+                    logger.error("MLLM chat() failed: %s", e, exc_info=True)
+                    raise
                 return GenerationOutput(
                     text=output.text,
                     prompt_tokens=output.prompt_tokens,

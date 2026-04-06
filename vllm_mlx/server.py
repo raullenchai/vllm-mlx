@@ -110,6 +110,7 @@ from .api.utils import (
     extract_json_from_response,
     extract_multimodal_content,
     is_mllm_model,  # noqa: F401
+    sanitize_output,
     strip_special_tokens,
     strip_thinking_tags,
 )
@@ -2907,6 +2908,11 @@ async def stream_chat_completion(
             no finish_reason), this avoids constructing Pydantic objects and
             calling model_dump_json().
             """
+            # Final sanitizer: last-mile defense against markup leakage
+            if field == "content":
+                text = sanitize_output(text)
+                if not text:
+                    return ""  # suppressed entirely
             escaped = json.dumps(text)  # Handles escaping
             return f'{_sse_prefix}"{field}":{escaped}{_sse_suffix}'
 
@@ -3069,7 +3075,7 @@ async def stream_chat_completion(
                     model=_model_name or request.model,
                     choices=[ChatCompletionChunkChoice(
                         delta=ChatCompletionChunkDelta(
-                            content=content if content else None,
+                            content=sanitize_output(content) if content else None,
                             reasoning=reasoning if reasoning else None,
                         ),
                         finish_reason=finish_reason,
@@ -3215,7 +3221,7 @@ async def stream_chat_completion(
                     choices=[
                         ChatCompletionChunkChoice(
                             delta=ChatCompletionChunkDelta(
-                                content=content if content else None,
+                                content=sanitize_output(content) if content else None,
                                 reasoning=reasoning if reasoning else None,
                             ),
                             finish_reason=finish_reason,

@@ -71,6 +71,7 @@ from .utils import (
     extract_multimodal_content,
     is_mllm_model,
     is_vlm_model,
+    sanitize_output,
     strip_special_tokens,
 )
 
@@ -119,6 +120,7 @@ __all__ = [
     "extract_multimodal_content",
     "MLLM_PATTERNS",
     "SPECIAL_TOKENS_PATTERN",
+    "sanitize_output",
     "strip_special_tokens",
     "StreamingToolCallFilter",
     "StreamingThinkRouter",

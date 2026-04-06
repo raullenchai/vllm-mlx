@@ -2998,7 +2998,7 @@ async def stream_chat_completion(
 
                 # Tool call parsing on content
                 if tool_parser and content:
-                    if not tool_markup_possible and "<" not in content:
+                    if not tool_markup_possible and "<" not in content and "[" not in content:
                         tool_accumulated_text += content
                     else:
                         if not tool_markup_possible:
@@ -3117,7 +3117,7 @@ async def stream_chat_completion(
 
                 # Tool call parsing on content portion
                 if tool_parser and content:
-                    if not tool_markup_possible and "<" not in content:
+                    if not tool_markup_possible and "<" not in content and "[" not in content:
                         tool_accumulated_text += content
                     else:
                         if not tool_markup_possible:

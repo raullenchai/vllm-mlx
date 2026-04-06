@@ -18,6 +18,7 @@ Available parsers:
 - xlam: Salesforce xLAM models
 - functionary/meetkai: MeetKai Functionary models
 - glm47/glm4: GLM-4.7 and GLM-4.7-Flash models
+- gemma4/gemma: Google Gemma 4 models (<|tool_call>call:name{...}<tool_call|> format)
 - harmony/gpt-oss: GPT-OSS models (Harmony format with channels)
 - seed_oss/seed/gpt_oss: Seed-OSS / GPT-OSS models (XML format)
 - deepseek_v31/deepseek_r1_0528: DeepSeek V3.1 / R1-0528 models
@@ -51,6 +52,7 @@ from .auto_tool_parser import AutoToolParser
 from .deepseek_tool_parser import DeepSeekToolParser
 from .deepseekv31_tool_parser import DeepSeekV31ToolParser
 from .functionary_tool_parser import FunctionaryToolParser
+from .gemma4_tool_parser import Gemma4ToolParser
 from .glm47_tool_parser import Glm47ToolParser
 from .granite_tool_parser import GraniteToolParser
 from .harmony_tool_parser import HarmonyToolParser
@@ -82,6 +84,7 @@ __all__ = [
     "NemotronToolParser",
     "xLAMToolParser",
     "FunctionaryToolParser",
+    "Gemma4ToolParser",
     "Glm47ToolParser",
     "HarmonyToolParser",
     "MiniMaxToolParser",

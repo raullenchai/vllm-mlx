@@ -16,6 +16,7 @@ from .abstract_tool_parser import (
     ToolParser,
     ToolParserManager,
 )
+from .gemma4_tool_parser import GEMMA4_TOOL_CALL_PATTERN, _parse_gemma4_args
 
 
 def generate_tool_id() -> str:
@@ -113,7 +114,28 @@ class AutoToolParser(ToolParser):
                     content=content if content else None,
                 )
 
-        # 2. Try Qwen bracket pattern
+        # 2. Try Gemma 4 format: <|tool_call>call:name{args}<tool_call|>
+        gemma4_matches = GEMMA4_TOOL_CALL_PATTERN.findall(model_output)
+        for func_name, args_block in gemma4_matches:
+            arguments = _parse_gemma4_args(args_block)
+            tool_calls.append(
+                {
+                    "id": generate_tool_id(),
+                    "name": func_name.strip(),
+                    "arguments": json.dumps(arguments, ensure_ascii=False),
+                }
+            )
+
+        if gemma4_matches:
+            cleaned_text = GEMMA4_TOOL_CALL_PATTERN.sub("", cleaned_text).strip()
+            if tool_calls:
+                return ExtractedToolCallInformation(
+                    tools_called=True,
+                    tool_calls=tool_calls,
+                    content=cleaned_text if cleaned_text else None,
+                )
+
+        # 3. Try Qwen bracket pattern
         bracket_matches = self.QWEN_BRACKET_PATTERN.findall(model_output)
         for name, args_str in bracket_matches:
             try:

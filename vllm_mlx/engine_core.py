@@ -154,11 +154,17 @@ class EngineCore:
         stream_interval = self.config.stream_interval
         use_simple_streaming = stream_interval == 1
 
-        # Emergency memory pressure threshold — dynamic based on gpu_memory_utilization
-        # Uses a 5% gap above the soft limit (capped at 99%) to allow temporary spikes.
+        # Emergency memory pressure threshold — dynamic based on gpu_memory_utilization.
+        # Uses Metal's max recommended working set when available, falling back to
+        # device memory. Applies a 5% gap above the soft limit (capped at 99%).
         _gpu_mem_util = self.config.gpu_memory_utilization
         try:
-            _device_mem = mx.device_info().get("memory_size", 200 * 1024 * 1024 * 1024)
+            _device_info = mx.device_info()
+            _max_recommended = _device_info.get(
+                "max_recommended_working_set_size",
+                _device_info.get("memory_size", 0),
+            )
+            _device_mem = _max_recommended if _max_recommended > 0 else 200 * 1024 * 1024 * 1024
             _memory_pressure_threshold = int(
                 _device_mem * min(_gpu_mem_util + 0.05, 0.99)
             )
@@ -250,7 +256,9 @@ class EngineCore:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Engine loop error: {e}")
+                import traceback
+
+                logger.error(f"Engine loop error: {e}\n{traceback.format_exc()}")
                 await asyncio.sleep(0.1)
 
     async def add_request(

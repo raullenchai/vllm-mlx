@@ -3,9 +3,12 @@
 Utility functions for text processing and model detection.
 """
 
+import logging
 import re
 
 from .models import Message
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Special Token Patterns
@@ -201,6 +204,224 @@ def extract_json_from_response(text: str) -> str:
 
 
 # =============================================================================
+# Streaming Tool Call Filter
+# =============================================================================
+
+# Safety cap for tool call buffer (bytes). If a tool call block never closes,
+# the buffer is capped to prevent unbounded memory growth. In practice, the
+# buffer is bounded by max_tokens (~100KB at 32768 tokens), but this cap
+# protects against pathological cases.
+_MAX_TOOL_BUFFER_BYTES = 1_048_576  # 1 MB
+
+# Tags that delimit tool call blocks in streaming output.
+# Content inside these tags should be suppressed during streaming because
+# it will be re-emitted as structured tool_use blocks after parsing.
+_TOOL_CALL_TAGS = [
+    ("<minimax:tool_call>", "</minimax:tool_call>"),
+    ("<tool_call>", "</tool_call>"),
+    ("<function=", "</function>"),
+    ("[TOOL_CALL]", "[/TOOL_CALL]"),
+    ("[Calling tool", "]\n"),  # Qwen3 bracket-style: [Calling tool: func({...})]\n
+]
+
+
+class StreamingToolCallFilter:
+    """Buffer streaming text to suppress tool call markup.
+
+    Tool call XML (e.g. <minimax:tool_call>...</minimax:tool_call>) arrives
+    split across multiple streaming deltas. This filter detects entry into a
+    tool call block, suppresses all output until the block closes, and emits
+    only non-tool-call text.
+
+    The full unfiltered text is still accumulated separately for tool call
+    parsing at stream end.
+    """
+
+    def __init__(self):
+        self._buffer = ""
+        self._in_block = False
+        self._close_tag = ""
+        # Longest open tag - used to determine how much buffer to hold back
+        self._max_open_len = max(len(t[0]) for t in _TOOL_CALL_TAGS)
+
+    def process(self, delta: str) -> str:
+        """Process a streaming delta. Returns text to emit (may be empty)."""
+        self._buffer += delta
+
+        if self._in_block:
+            return self._consume_block()
+        else:
+            return self._scan_for_open()
+
+    def _scan_for_open(self) -> str:
+        """Scan buffer for tool call open tags. Emit safe text."""
+        # Check for complete open tags
+        for open_tag, close_tag in _TOOL_CALL_TAGS:
+            idx = self._buffer.find(open_tag)
+            if idx >= 0:
+                # Found an open tag - emit text before it, enter block mode
+                emit = self._buffer[:idx]
+                self._buffer = self._buffer[idx + len(open_tag) :]
+                self._in_block = True
+                self._close_tag = close_tag
+                # Process remainder in case close tag is already in buffer
+                after = self._consume_block()
+                return emit + after
+
+        # No complete open tag found. Check if buffer ends with a partial
+        # match of any open tag - hold that back to avoid emitting a fragment.
+        hold_back = 0
+        for open_tag, _ in _TOOL_CALL_TAGS:
+            for prefix_len in range(min(len(open_tag), len(self._buffer)), 0, -1):
+                if self._buffer.endswith(open_tag[:prefix_len]):
+                    hold_back = max(hold_back, prefix_len)
+                    break
+
+        if hold_back > 0:
+            emit = self._buffer[:-hold_back]
+            self._buffer = self._buffer[-hold_back:]
+            return emit
+
+        # No partial match - safe to emit everything
+        emit = self._buffer
+        self._buffer = ""
+        return emit
+
+    def _consume_block(self) -> str:
+        """Consume content inside a tool call block. Returns empty string
+        unless the block closes and there's text after it."""
+        idx = self._buffer.find(self._close_tag)
+        if idx >= 0:
+            # Block closed - discard content up to and including close tag
+            self._buffer = self._buffer[idx + len(self._close_tag) :]
+            self._in_block = False
+            self._close_tag = ""
+            # Process remainder - might have more text or another tool call
+            if self._buffer:
+                return self._scan_for_open()
+            return ""
+        # Still inside block - suppress everything but cap buffer size
+        if len(self._buffer) > _MAX_TOOL_BUFFER_BYTES:
+            logger.warning(
+                f"Tool call buffer exceeded {_MAX_TOOL_BUFFER_BYTES} bytes, "
+                f"discarding and exiting block"
+            )
+            self._buffer = ""
+            self._in_block = False
+            self._close_tag = ""
+        return ""
+
+    def flush(self) -> str:
+        """Flush remaining buffer at end of stream."""
+        if self._in_block:
+            # Unterminated tool call block - discard
+            self._buffer = ""
+            self._in_block = False
+            return ""
+        emit = self._buffer
+        self._buffer = ""
+        return emit
+
+
+# =============================================================================
+# Streaming Think Block Router
+# =============================================================================
+
+
+class StreamingThinkRouter:
+    """Route <think>...</think> content to separate Anthropic thinking blocks.
+
+    Instead of emitting thinking content as plain text (where it's
+    indistinguishable from the response), this router yields tagged
+    pieces that the streaming handler can emit as proper Anthropic
+    content block types.
+
+    Each call to process() returns a list of (block_type, text) tuples:
+    - ("thinking", text) for content inside <think>...</think>
+    - ("text", text) for content outside think blocks
+
+    Args:
+        start_in_thinking: If True, assume the model starts in thinking
+            mode (e.g. MiniMax adds <think> to the generation prompt,
+            so the tag never appears in the output stream).
+    """
+
+    def __init__(self, start_in_thinking: bool = False):
+        self._buffer = ""
+        self._in_think = start_in_thinking
+
+    def process(self, delta: str) -> list[tuple[str, str]]:
+        """Process a delta. Returns list of (block_type, text) pieces."""
+        self._buffer += delta
+        pieces = []
+        self._extract_pieces(pieces)
+        return pieces
+
+    def _extract_pieces(self, pieces: list[tuple[str, str]]) -> None:
+        """Extract all complete pieces from the buffer."""
+        while True:
+            if self._in_think:
+                idx = self._buffer.find("</think>")
+                if idx >= 0:
+                    # Emit thinking content, exit think mode
+                    thinking = self._buffer[:idx]
+                    self._buffer = self._buffer[idx + len("</think>") :]
+                    self._in_think = False
+                    if thinking:
+                        pieces.append(("thinking", thinking))
+                    continue  # Process remainder
+                else:
+                    # Check for partial close tag at end
+                    for plen in range(min(len("</think>"), len(self._buffer)), 0, -1):
+                        if self._buffer.endswith("</think>"[:plen]):
+                            # Hold back partial match
+                            emit = self._buffer[:-plen]
+                            self._buffer = self._buffer[-plen:]
+                            if emit:
+                                pieces.append(("thinking", emit))
+                            return
+                    # No partial match - emit all as thinking
+                    if self._buffer:
+                        pieces.append(("thinking", self._buffer))
+                        self._buffer = ""
+                    return
+            else:
+                idx = self._buffer.find("<think>")
+                if idx >= 0:
+                    # Emit text before tag, enter think mode
+                    before = self._buffer[:idx]
+                    self._buffer = self._buffer[idx + len("<think>") :]
+                    self._in_think = True
+                    if before:
+                        pieces.append(("text", before))
+                    continue  # Process remainder
+                else:
+                    # Check for partial open tag at end
+                    for plen in range(min(len("<think>"), len(self._buffer)), 0, -1):
+                        if self._buffer.endswith("<think>"[:plen]):
+                            emit = self._buffer[:-plen]
+                            self._buffer = self._buffer[-plen:]
+                            if emit:
+                                pieces.append(("text", emit))
+                            return
+                    # No partial match - emit all as text
+                    if self._buffer:
+                        pieces.append(("text", self._buffer))
+                        self._buffer = ""
+                    return
+
+    def flush(self) -> list[tuple[str, str]]:
+        """Flush remaining buffer at end of stream."""
+        pieces = []
+        if self._buffer:
+            block_type = "thinking" if self._in_think else "text"
+            pieces.append((block_type, self._buffer))
+            self._buffer = ""
+        self._in_think = False
+        return pieces
+
+
+# =============================================================================
 # Model Detection
 # =============================================================================
 
@@ -267,9 +488,9 @@ def _content_to_text(content) -> str:
         parts = []
         for item in content:
             if hasattr(item, "model_dump"):
-                item = item.model_dump()
+                item = item.model_dump(exclude_none=True)
             elif hasattr(item, "dict"):
-                item = item.dict()
+                item = {k: v for k, v in item.dict().items() if v is not None}
             if isinstance(item, dict) and item.get("type") == "text":
                 parts.append(item.get("text", ""))
         return "\n".join(parts)
@@ -412,9 +633,9 @@ def extract_multimodal_content(
             for item in content:
                 # Handle both Pydantic models and dicts
                 if hasattr(item, "model_dump"):
-                    item = item.model_dump()
+                    item = item.model_dump(exclude_none=True)
                 elif hasattr(item, "dict"):
-                    item = item.dict()
+                    item = {k: v for k, v in item.dict().items() if v is not None}
 
                 item_type = item.get("type", "")
 

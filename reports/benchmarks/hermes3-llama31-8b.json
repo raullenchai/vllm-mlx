@@ -1,30 +1,30 @@
 [
   {
     "engine": "Rapid-MLX",
-    "model": "default",
+    "model": "/Volumes/Extreme SSD/LMStudio-Models/mlx-community/Hermes-3-Llama-3.1-8B-4bit",
     "short_decode_tps": {
-      "mean": 124.08034651519463,
-      "median": 124.36739745875063,
-      "min": 123.39537136101775,
-      "max": 124.4782707258155
+      "mean": 123.8564234267494,
+      "median": 123.42606066686089,
+      "min": 123.31491031465332,
+      "max": 124.82829929873398
     },
     "short_prefill_tps": {
-      "median": 247.71035750769664
+      "median": 190.87991603464098
     },
     "long_decode_tps": {
-      "mean": 122.80223356011224,
-      "median": 122.77578368076514,
-      "min": 122.77411550738096,
-      "max": 122.85680149219063
+      "mean": 123.22420766220122,
+      "median": 122.97184960224764,
+      "min": 122.68944338901483,
+      "max": 124.0113299953412
     },
     "long_prefill_tps": {
-      "median": 1351.9491427231967
+      "median": 980.9118874888566
     },
-    "ttft_cold_s": 0.3690061660017818,
-    "ttft_cached_s": 0.08006683352869004,
-    "multi_turn_ttft_cold_s": 0.23345162498299032,
-    "multi_turn_ttft_cached_s": 0.0775428750202991,
-    "peak_ram_mb": 4711.265625,
+    "ttft_cold_s": 0.14250754201202653,
+    "ttft_cached_s": 0.10385847950237803,
+    "multi_turn_ttft_cold_s": 0.19274274999042973,
+    "multi_turn_ttft_cached_s": 0.10551808349555358,
+    "peak_ram_mb": 4940.90625,
     "tool_call_rate": 0.0,
     "recovery_rate": 0.0,
     "leak_rate": 0.0,

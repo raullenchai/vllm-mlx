@@ -62,6 +62,7 @@ class MLXLanguageModel:
         prefill_step_size: int = 2048,
         kv_bits: int | None = None,
         kv_group_size: int = 64,
+        mtp: bool = False,
     ):
         """
         Initialize the MLX language model.
@@ -75,6 +76,7 @@ class MLXLanguageModel:
             prefill_step_size: Tokens to process per prefill chunk (default: 2048)
             kv_bits: KV cache quantization bits (None=no quantization, 4 or 8)
             kv_group_size: Group size for KV cache quantization (default: 64)
+            mtp: Enable native MTP speculative decoding (model must have MTP head)
         """
         self.model_name = model_name
         self.tokenizer_name = tokenizer_name or model_name
@@ -84,6 +86,8 @@ class MLXLanguageModel:
         self.prefill_step_size = prefill_step_size
         self.kv_bits = kv_bits
         self.kv_group_size = kv_group_size
+        self._mtp = mtp
+
         self.model = None
         self.tokenizer = None
         self.draft_model = None
@@ -585,6 +589,9 @@ class MLXLanguageModel:
         # Create sampler with parameters
         sampler = self._create_sampler(temperature, top_p)
 
+        # Count prompt tokens once upfront
+        num_prompt_tokens = len(self.tokenizer.encode(prompt))
+
         token_count = 0
         accumulated_text = ""
         # Use IncrementalDecoder with skip_special_tokens=False to preserve
@@ -599,6 +606,10 @@ class MLXLanguageModel:
             "prompt_cache": self._prompt_cache,
             "prefill_step_size": self.prefill_step_size,
         }
+
+        # Native MTP speculative decoding
+        if self._mtp:
+            gen_kwargs["mtp"] = True
 
         # KV cache quantization reduces memory pressure for long prompts
         if self.kv_bits is not None:

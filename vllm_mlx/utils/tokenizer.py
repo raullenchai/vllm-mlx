@@ -50,23 +50,97 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
         )
         return _load_with_tokenizer_fallback(model_name)
 
+    # Gemma 4: mlx-lm doesn't support it yet, load via our text-only wrapper
+    from ..models.gemma4_text import is_gemma4_model
+
+    if is_gemma4_model(model_name):
+        from ..models.gemma4_text import load_gemma4_text
+
+        logger.info("Gemma 4 detected — loading as text-only via LLM path")
+        return load_gemma4_text(model_name, tokenizer_config)
+
     try:
-        return load(model_name, tokenizer_config=tokenizer_config)
+        model, tokenizer = load(model_name, tokenizer_config=tokenizer_config)
+        return model, tokenizer
     except ValueError as e:
         # Fallback for models with non-standard tokenizers
         if "TokenizersBackend" in str(e) or "Tokenizer class" in str(e):
             logger.warning(f"Standard tokenizer loading failed, using fallback: {e}")
             return _load_with_tokenizer_fallback(model_name)
-        # Fallback for multimodal models loaded as text-only (skip vision weights)
+        # Fallback for models with extra/missing weights (e.g., vision tower, MTP layers).
+        # Retry with strict=False to discard extra weights.
         elif "parameters not in model" in str(e) or (
             "Missing" in str(e) and "parameters" in str(e)
         ):
             logger.warning(
-                f"Model has extra/missing parameters (likely VLM weights), retrying with strict=False: {e}"
+                f"Model has extra/missing parameters (likely VLM / MTP weights), "
+                f"retrying with strict=False: {e}"
             )
-            return _load_non_strict(model_name, tokenizer_config)
+            return _load_strict_false(model_name, tokenizer_config)
         else:
             raise
+
+
+def _load_strict_false(model_name: str, tokenizer_config: dict = None):
+    """Load model with strict=False to discard extra weights (e.g., vision tower, MTP)."""
+    from mlx_lm.utils import load_model, load_tokenizer
+
+    local_path = Path(model_name)
+    if local_path.is_dir():
+        model_path = local_path
+    else:
+        from huggingface_hub import snapshot_download
+
+        model_path = Path(snapshot_download(model_name))
+
+    model, config = load_model(model_path, strict=False)
+    tokenizer = load_tokenizer(
+        model_path,
+        tokenizer_config or {},
+        eos_token_ids=config.get("eos_token_id", None),
+    )
+    # Inject MTP support if model has MTP config + weights
+    _try_inject_mtp(model, model_path, config)
+    return model, tokenizer
+
+
+def _try_inject_mtp(model, model_path, config):
+    """Inject MTP support if model has MTP config + weights."""
+    if config.get("num_nextn_predict_layers", 0) > 0:
+        from ..patches.qwen3_next_mtp import inject_mtp_support
+
+        inject_mtp_support(model, model_path, config)
+
+
+def _try_inject_mtp_post_load(model, model_name):
+    """Check if MTP weights exist but were stripped by sanitize(), and inject."""
+    import json
+
+    from mlx_lm.utils import _download
+
+    model_path = _download(model_name)
+    config_path = Path(model_path) / "config.json"
+    if not config_path.exists():
+        return
+    with open(config_path) as f:
+        config = json.load(f)
+    # Also check text_config for nested configs
+    num_mtp = config.get("num_nextn_predict_layers", 0)
+    if num_mtp == 0:
+        text_config = config.get("text_config", {})
+        num_mtp = text_config.get("num_nextn_predict_layers", 0)
+    if num_mtp > 0 and getattr(model, "mtp", None) is None:
+        mtp_file = Path(model_path) / "model-mtp.safetensors"
+        if mtp_file.exists():
+            logger.info(
+                f"[MTP] Found MTP config (layers={num_mtp}) and weights, injecting..."
+            )
+            _try_inject_mtp(model, model_path, config)
+        else:
+            logger.info(
+                f"[MTP] Config has num_nextn_predict_layers={num_mtp} "
+                "but model-mtp.safetensors not found, skipping MTP."
+            )
 
 
 def _load_non_strict(model_name: str, tokenizer_config: dict = None):

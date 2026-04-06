@@ -299,11 +299,12 @@ All 17 parsers include automatic recovery — if a quantized model outputs broke
 | **GPT-OSS 20B** | **127** tok/s · 100% tools | 79 (mlx-lm serve) | **1.6x** |
 | **Qwen3.5-9B** | **108** tok/s | 46 (Ollama) | **2.3x** |
 | **Kimi-Linear-48B** | **94** tok/s · 100% tools | — (only engine) | — |
+| 🆕 **Gemma 4 26B-A4B** | **94** tok/s · 100% tools | — (day-0, only engine) | — |
+| 🆕 **Gemma 4 E4B** | **83** tok/s · 100% tools | — (day-0, only engine) | — |
 | **Qwen3.5-35B-A3B** | **83** tok/s · 100% tools | 75 (oMLX) | **1.1x** |
 | **Qwen3-Coder 80B** | **74** tok/s · 100% tools | 69 (mlx-lm serve) | **1.1x** |
-| 🆕 **Gemma 4 26B-A4B** | **71** tok/s · 100% tools | — (day-0, only engine) | — |
 | **Qwen3.5-122B** | **44** tok/s · 100% tools | 43 (mlx-lm serve) | ~1.0x |
-| 🆕 **Gemma 4 31B** | **32** tok/s · 100% tools | 6.1 (mlx-vlm) | **5.2x** |
+| 🆕 **Gemma 4 31B** | **31** tok/s · 100% tools | 10.9 (mlx-vlm bf16) | **2.8x** |
 
 *Full benchmark data with all models, TTFT tables, DeltaNet snapshots, and engine comparison below.*
 
@@ -327,8 +328,9 @@ Prompt cache keeps multi-turn conversations fast. For standard transformers, KV 
 | Qwen3-Coder-Next 80B | **0.16s** | 0.27s | 1.7x |
 | GPT-OSS 20B | **0.16s** | 0.27s | 1.7x |
 | Qwen3.5-9B | **0.22s** | 0.26s | 1.2x |
-| 🆕 Gemma 4 31B | **0.24s** | 0.87s (mlx-vlm) | **3.6x** |
-| 🆕 Gemma 4 26B-A4B | **0.24s** | — (day-0) | — |
+| 🆕 Gemma 4 E4B | **0.25s** | — (day-0) | — |
+| 🆕 Gemma 4 26B-A4B | **0.25s** | — (day-0) | — |
+| 🆕 Gemma 4 31B | **0.34s** | 0.57s (mlx-vlm bf16) | **1.7x** |
 
 **DeltaNet state snapshots (hybrid RNN + attention):**
 
@@ -387,8 +389,9 @@ Qwen3.5 uses Gated DeltaNet (75% RNN) + full attention (25% KV). Other engines r
 
 | Model | Quant | RAM | Decode | Tools | Code | Reason | General | Avg |
 |-------|-------|-----|--------|-------|------|--------|---------|-----|
-| 🆕 Gemma 4 26B-A4B | 4bit | 16.0 GB | 71 t/s | **100%** | — | — | — | — |
-| 🆕 Gemma 4 31B | 4bit | 17.0 GB | 32 t/s | **100%** | — | — | — | — |
+| 🆕 Gemma 4 26B-A4B | 4bit | 14.4 GB | 94 t/s | **100%** | — | — | — | — |
+| 🆕 Gemma 4 E4B | 4bit | 6.4 GB | 83 t/s | **100%** | — | — | — | — |
+| 🆕 Gemma 4 31B | 4bit | 17.0 GB | 31 t/s | **100%** | — | — | — | — |
 | Qwen3.5-122B-A10B | 8bit | 129.8 GB | 44 t/s | 87% | **90%** | **90%** | **90%** | **89%** |
 | Qwen3.5-122B-A10B | mxfp4 | 65.0 GB | 57 t/s | **90%** | **90%** | 80% | **90%** | 88% |
 | Qwen3.5-35B-A3B | 8bit | 36.9 GB | 83 t/s | **90%** | **90%** | 80% | 80% | 85% |

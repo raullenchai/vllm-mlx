@@ -1,0 +1,34 @@
+[
+  {
+    "engine": "Rapid-MLX",
+    "model": "/Volumes/Extreme SSD/mlx-models/gemma-4-26b-a4b-it-4bit",
+    "short_decode_tps": {
+      "mean": 93.50428102826129,
+      "median": 93.50265550606807,
+      "min": 93.4432179957722,
+      "max": 93.5669695829436
+    },
+    "short_prefill_tps": {
+      "median": 106.92056546597657
+    },
+    "long_decode_tps": {
+      "mean": 91.71984739529294,
+      "median": 91.61799587262657,
+      "min": 91.60980853135261,
+      "max": 91.93173778189964
+    },
+    "long_prefill_tps": {
+      "median": 428.7568829995776
+    },
+    "ttft_cold_s": 0.6815890420111828,
+    "ttft_cached_s": 0.2520326875091996,
+    "multi_turn_ttft_cold_s": 0.3641231249785051,
+    "multi_turn_ttft_cached_s": 0.24933749952469952,
+    "peak_ram_mb": 14694.515625,
+    "tool_call_rate": 1.0,
+    "recovery_rate": 1.0,
+    "leak_rate": 0.0,
+    "vision": true,
+    "audio": false
+  }
+]

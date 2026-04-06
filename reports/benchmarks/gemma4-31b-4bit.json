@@ -3,28 +3,28 @@
     "engine": "Rapid-MLX",
     "model": "/Volumes/Extreme SSD/mlx-models/gemma-4-31b-it-4bit-local",
     "short_decode_tps": {
-      "mean": 32.19169622471489,
-      "median": 32.166331456573374,
-      "min": 32.13613401632047,
-      "max": 32.27262320125083
+      "mean": 30.95082479762765,
+      "median": 30.946153637297147,
+      "min": 30.944848593927137,
+      "max": 30.961472161658662
     },
     "short_prefill_tps": {
-      "median": 109.57834812029841
+      "median": 79.4990675408711
     },
     "long_decode_tps": {
-      "mean": 31.309888759158717,
-      "median": 31.308867764804013,
-      "min": 31.28126440183702,
-      "max": 31.339534110835114
+      "mean": 30.125622383860364,
+      "median": 30.115429706295696,
+      "min": 30.10639846055238,
+      "max": 30.155038984733018
     },
     "long_prefill_tps": {
-      "median": 430.3248177918129
+      "median": 317.17300925311315
     },
-    "ttft_cold_s": 0.7731460829963908,
-    "ttft_cached_s": 0.24268060398753732,
-    "multi_turn_ttft_cold_s": 0.6326516249973793,
-    "multi_turn_ttft_cached_s": 0.24634527099260595,
-    "peak_ram_mb": 17358.875,
+    "ttft_cold_s": 8.996710957959294,
+    "ttft_cached_s": 0.33854766649892554,
+    "multi_turn_ttft_cold_s": 0.743279958027415,
+    "multi_turn_ttft_cached_s": 0.3432280624983832,
+    "peak_ram_mb": 17372.0625,
     "tool_call_rate": 1.0,
     "recovery_rate": 1.0,
     "leak_rate": 0.0,

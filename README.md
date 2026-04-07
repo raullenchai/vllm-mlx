@@ -20,9 +20,9 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/docs/assets/demo.gif" alt="Rapid-MLX vs Ollama — 2.4x faster on Qwen3.5-9B" width="800">
+  <img src="https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/docs/assets/demo.gif" alt="Rapid-MLX demo — install, serve Gemma 4, chat, tool calling" width="700">
   <br>
-  <em>Same model (Qwen3.5-9B), same Mac, head-to-head. Rapid-MLX: 79 tok/s vs Ollama: 33 tok/s.</em>
+  <em>pip install → serve Gemma 4 26B → chat + tool calling → works with PydanticAI, LangChain, Aider, and more.</em>
 </p>
 
 | | Your Mac | Model | Speed (tok/s = words/sec) | What works |

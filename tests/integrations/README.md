@@ -5,9 +5,9 @@ End-to-end tests that exercise Rapid-MLX from a real client library.
 These are **not** run as part of `pytest tests/` because they need:
 
 1. A running Rapid-MLX server on `http://localhost:8000`
-2. A loaded model (Gemma 4 26B by default — see each test's `MODEL_ID`)
+2. A loaded model (see each test's `MODEL_ID`)
 3. The client library installed (varies per test)
-4. For `test_librechat_docker.py`: Docker + a temporary LibreChat stack
+4. For Docker tests: Docker running
 
 ## Running
 
@@ -15,7 +15,7 @@ Start the server first:
 
 ```bash
 rapid-mlx serve "/path/to/your/mlx-model" \
-    --tool-call-parser gemma4 --enable-auto-tool-choice
+    --tool-call-parser hermes --enable-auto-tool-choice
 ```
 
 Then run any test:
@@ -26,27 +26,48 @@ python3 tests/integrations/test_pydantic_ai_full.py
 python3 tests/integrations/test_smolagents_full.py
 python3 tests/integrations/test_langchain.py
 python3 tests/integrations/test_anthropic_sdk.py
+python3 tests/integrations/test_openwebui.py
 
 # CLI integrations
 bash tests/integrations/test_aider.sh
 
-# Docker E2E (LibreChat)
+# Docker E2E
 python3 tests/integrations/test_librechat_docker.py
 ```
 
-`test_librechat_docker.py` assumes a `docker-compose.yml` and `librechat.yaml`
-on `http://localhost:3081` — see the test docstring for the setup it expects.
+## Test coverage matrix
 
-## Coverage matrix
-
-| Test | Plain | Stream | Tool call | Multi-tool | Structured | Notes |
+| Test | Plain | Stream | Tool | Multi-tool | Structured | Notes |
 |---|---|---|---|---|---|---|
-| `test_pydantic_ai_full.py` | ✓ | ✓ | ✓ | ✓ | ✓ | + multi-turn |
-| `test_smolagents_full.py` | ✓ | — | ✓ | ✓ | — | CodeAgent + ToolCallingAgent |
-| `test_langchain.py` | ✓ | ✓ | ✓ | ✓ | ✓ | + system prompt |
-| `test_anthropic_sdk.py` | ✓ | ✓ | ✓ | — | — | `/v1/messages` endpoint |
-| `test_aider.sh` | — | — | — | — | — | Edit-and-write workflow |
-| `test_librechat_docker.py` | — | — | — | — | — | Container, auth, model fetch |
+| `test_pydantic_ai_full.py` | x | x | x | x | x | + multi-turn |
+| `test_smolagents_full.py` | x | — | x | x | — | CodeAgent + ToolCallingAgent |
+| `test_langchain.py` | x | x | x | x | x | + system prompt |
+| `test_anthropic_sdk.py` | x | x | x | — | — | `/v1/messages` endpoint |
+| `test_openwebui.py` | — | x | — | — | — | Docker: register, login, models, chat |
+| `test_aider.sh` | — | — | — | — | — | CLI edit-and-write workflow |
+| `test_librechat_docker.py` | — | — | — | — | — | Docker: register, login, endpoints, models |
 
-The model used by these tests is hard-coded to a local path. Edit the
-`MODEL_ID` constant in each script if you're running a different model.
+## Verified model matrix
+
+All tests verified against two models:
+
+| Suite | Gemma 4 26B (4bit) | Qwen3.5 122B-A10B (mxfp4) |
+|---|---|---|
+| PydanticAI (6 tests) | 6/6 | 6/6 |
+| LangChain (4 tests) | 4/4 | 3/4 (*) |
+| Anthropic SDK (3 tests) | 3/3 | 2/3 (*) |
+| smolagents (4 tests) | 4/4 | 2/2 |
+| Aider CLI | PASS | PASS |
+| LibreChat Docker (4 tests) | 4/4 | 4/4 |
+| Open WebUI Docker (4 tests) | — | 3/4 (*) |
+
+(*) Known Qwen3.5 thinking mode edge cases:
+- LangChain `with_structured_output()` overrides max_tokens to None; thinking
+  burns the token budget before producing JSON. Workaround: `--max-tokens 8192`.
+- Anthropic streaming: thinking content is consumed by reasoning parser; final
+  answer arrives in 1 chunk instead of many. Functionally correct.
+- Open WebUI non-streaming chat with `max_tokens=50`: thinking exhausts the
+  budget. Increase max_tokens.
+
+The model path is hard-coded in each test's `MODEL_ID` constant. Edit it to
+match your local model path.

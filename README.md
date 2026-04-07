@@ -47,56 +47,53 @@
 
 ## Quick Start
 
-**Step 1 — Install:**
+**Step 1 — Install** (pick one):
+
 ```bash
+# Homebrew (recommended)
+brew install raullenchai/rapid-mlx/rapid-mlx
+
+# pip
+pip install rapid-mlx
+
+# Or one-liner with auto-setup
 curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash
 ```
-Then close and reopen your terminal. (This makes the `rapid-mlx` command available.)
 
-**Step 2 — Start the server:**
+**Step 2 — Serve a model:**
 ```bash
-rapid-mlx serve qwen3.5-9b
+rapid-mlx serve gemma-4-26b
 ```
-First run downloads the model (~5 GB) — you'll see a progress bar. Wait for `Ready: http://localhost:8000/v1`.
+First run downloads the model (~14 GB) — you'll see a progress bar. Wait for `Ready: http://localhost:8000/v1`.
 
-**Step 3 — Test it** (open a **second** terminal tab):
+**Step 3 — Chat** (open a **second** terminal tab):
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"qwen3.5-9b","messages":[{"role":"user","content":"Say hello"}]}'
+  -d '{"model":"default","messages":[{"role":"user","content":"Say hello"}]}'
 ```
-You should get a JSON response with the AI's reply. To stop the server: Ctrl+C in the first terminal.
 
-That's it — you now have an AI server on `localhost:8000`. Next: scroll down to [**Choose Your Model**](#choose-your-model) to pick the best model for your Mac, or see [**Works With**](#works-with) to connect Claude Code, Cursor, or other apps.
+That's it — you now have an OpenAI-compatible AI server on `localhost:8000`. Point any app at `http://localhost:8000/v1` and it just works.
 
-> **Tip:** If you get "Connection refused", the server is still loading. Wait for the "Ready" message.
->
-> **Tip:** Qwen3.5 models reason through problems before answering — the first response may take 10-30 seconds. This is normal. For instant responses, add `--no-thinking` to the serve command.
+> **Tip:** Run `rapid-mlx models` to see all available model aliases. For a smaller/faster model, try `rapid-mlx serve qwen3.5-9b` (~5 GB).
 
 <details>
-<summary>Other install methods</summary>
-
-**Homebrew:**
-```bash
-brew install raullenchai/rapid-mlx/rapid-mlx
-```
-
-**pip** (use a virtual environment on macOS Sonoma+):
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install rapid-mlx
-```
+<summary>More install options</summary>
 
 **From source** (for development):
 ```bash
 git clone https://github.com/raullenchai/Rapid-MLX.git
-cd Rapid-MLX && python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
+cd Rapid-MLX && pip install -e .
 ```
 
 **Vision models** (adds torch + torchvision, ~2.5 GB extra):
 ```bash
 pip install 'rapid-mlx[vision]'
+```
+
+**Audio** (TTS/STT via mlx-audio):
+```bash
+pip install 'rapid-mlx[audio]'
 ```
 </details>
 

@@ -23,23 +23,50 @@ GEMMA4_TOOL_PATTERN = re.compile(
     r"<\|tool_call>call:(\w+)\{(.*?)\}<tool_call\|>", re.DOTALL
 )
 
-# Match key-value pairs inside {}: key:<|"|>value<|"|>
-GEMMA4_KV_PATTERN = re.compile(
-    r'(\w+):<\|"\|>(.*?)<\|"\|>', re.DOTALL
-)
+# Match a quoted-string value: <|"|>...<|"|>
+GEMMA4_QUOTED_VAL_PATTERN = re.compile(r'<\|"\|>(.*?)<\|"\|>', re.DOTALL)
+# Match a bare key:value pair (key, then anything up to , or end-of-string)
+GEMMA4_KV_BARE_PATTERN = re.compile(r"(\w+)\s*:\s*([^,]+?)(?=\s*,|\s*$)")
 
 
 def _parse_gemma4_args(args_str: str) -> dict[str, Any]:
-    """Parse Gemma 4's key:<|"|>value<|"|> format into a dict."""
-    result = {}
-    for match in GEMMA4_KV_PATTERN.finditer(args_str):
-        key = match.group(1)
-        value = match.group(2)
-        # Try to parse as JSON value (number, bool, etc.)
+    """Parse Gemma 4's argument format into a dict.
+
+    Gemma 4 uses two value styles inside the {...} block:
+      - String values are wrapped in quote tokens:  key:<|"|>value<|"|>
+      - Numeric / bool / null values are bare:      key:3   key:true   key:null
+
+    Strategy: replace each quoted string with a placeholder, run a generic
+    bare-KV parser over the result, then restore placeholders before
+    returning. This lets a single pass handle mixed-type arg dicts.
+    """
+    # Step 1: stash quoted string values so they can't confuse the bare parser
+    stashed: list[str] = []
+
+    def _stash(m: re.Match) -> str:
+        stashed.append(m.group(1))
+        return f"__Q{len(stashed) - 1}__"
+
+    cleaned = GEMMA4_QUOTED_VAL_PATTERN.sub(_stash, args_str)
+
+    # Step 2: bare KV parse
+    result: dict[str, Any] = {}
+    for kv in GEMMA4_KV_BARE_PATTERN.finditer(cleaned):
+        key = kv.group(1)
+        raw_val = kv.group(2).strip()
+        # Restore stashed string
+        if raw_val.startswith("__Q") and raw_val.endswith("__"):
+            try:
+                idx = int(raw_val[3:-2])
+                result[key] = stashed[idx]
+                continue
+            except (ValueError, IndexError):
+                pass
+        # Try to parse as JSON literal (int, float, bool, null)
         try:
-            result[key] = json.loads(value)
+            result[key] = json.loads(raw_val)
         except (json.JSONDecodeError, ValueError):
-            result[key] = value
+            result[key] = raw_val
     return result
 
 

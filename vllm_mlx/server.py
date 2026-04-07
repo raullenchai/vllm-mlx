@@ -2251,9 +2251,13 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     final_content = None
     if cleaned_text:
         final_content = strip_thinking_tags(clean_output_text(cleaned_text))
+        # Final catch-all sanitizer — strips any leftover tool-call /
+        # channel markup that escaped the parsers (e.g. Gemma 4 token-level
+        # routing artifacts when stream=False bypasses the streaming filters).
+        final_content = sanitize_output(final_content)
         # If JSON mode requested, extract JSON from reasoning text
         # (e.g., Qwen3 reasoning mode: "Let me think... {json}")
-        if response_format:
+        if response_format and final_content:
             final_content = extract_json_from_response(final_content)
 
     # Build logprobs for response if requested

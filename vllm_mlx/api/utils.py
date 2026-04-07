@@ -54,14 +54,19 @@ def strip_special_tokens(text: str) -> str:
 # =============================================================================
 
 _FINAL_SANITIZER = re.compile(
+    # Full Gemma 4 tool call (greedy body): <|tool_call>call:name{...}<tool_call|>
+    # MUST be listed BEFORE the bare-token strippers, otherwise the inner
+    # `call:name{...}` body would be left orphaned in content.
+    r"<\|tool_call>.*?<tool_call\|>"
     # Any <|...> or <...|> token (Gemma 4 asymmetric: <|channel>, <tool_call|>, etc.)
-    r"<\|[a-z_\"]+>|<[a-z_\"]+\|>"
+    r"|<\|[a-z_\"]+>|<[a-z_\"]+\|>"
     # Any <|...|> token (symmetric: <|im_end|>, <|channel|>, etc.)
     r"|<\|[a-z_]+\|>"
     # [Calling tool:...] or [Calling tool="..."]
     r"|\[Calling\s+tool[=:][^\]]*\]"
     # Stray closing tags
-    r"|</think>|</tool_call>"
+    r"|</think>|</tool_call>",
+    re.DOTALL,
 )
 
 
@@ -78,7 +83,8 @@ def sanitize_output(text: str) -> str:
         return text
     for ch in text:
         if ch in _SPECIAL_TOKEN_CHARS:
-            return _FINAL_SANITIZER.sub("", text).strip()
+            cleaned = _FINAL_SANITIZER.sub("", text).strip()
+            return cleaned or None  # collapse empty to None
     return text
 
 

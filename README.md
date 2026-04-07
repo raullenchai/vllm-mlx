@@ -119,16 +119,19 @@ print(response.choices[0].message.content)
 
 | Client | Status | Notes |
 |--------|--------|-------|
-| [Claude Code](https://claude.ai/claude-code) | Verified | Env var config, streaming tools |
-| [Cursor](https://cursor.com) | Verified | Settings UI config |
-| [Aider](https://aider.chat) | Verified | Code editing agent |
-| [Open WebUI](https://github.com/open-webui/open-webui) | Verified | Self-hosted ChatGPT UI, Docker one-liner |
-| [Continue.dev](https://continue.dev) | Verified | YAML config, VS Code + JetBrains |
-| [OpenClaw](https://github.com/nicepkg/openclaw) | Verified | 14 tools, multi-round, streaming |
-| [OpenCode](https://github.com/opencode-ai/opencode) | Verified | JSON config |
-| [LangChain](https://langchain.com) | Compatible | Standard OpenAI client |
-| [Anthropic SDK](https://docs.anthropic.com/en/docs/sdks) | Compatible | Via `/v1/messages` endpoint |
-| Any OpenAI-compatible app | Compatible | Just change the server address to `http://localhost:8000/v1` |
+| [PydanticAI](https://ai.pydantic.dev) | Tested | Typed agents, streaming, structured output, multi-tool ([test](tests/integrations/test_pydantic_ai_full.py)) |
+| [smolagents](https://github.com/huggingface/smolagents) | Tested | CodeAgent + ToolCallingAgent + multi-tool ([test](tests/integrations/test_smolagents_full.py)) |
+| [LibreChat](https://librechat.ai) | Tested | Docker E2E (register, login, fetch models) ([test](tests/integrations/test_librechat_docker.py)) |
+| [LangChain](https://langchain.com) | Tested | `ChatOpenAI`, tools, streaming ([test](tests/integrations/test_langchain.py)) |
+| [Anthropic SDK](https://docs.anthropic.com/en/docs/sdks) | Tested | Native `/v1/messages` endpoint ([test](tests/integrations/test_anthropic_sdk.py)) |
+| [Aider](https://aider.chat) | Tested | CLI edit-and-commit workflow ([test](tests/integrations/test_aider.sh)) |
+| [OpenCode](https://github.com/sst/opencode) | Compatible (manual) | `opencode.json` provider config; agent loop behavior is model-sensitive |
+| [OpenClaw](https://github.com/nicepkg/openclaw) | Compatible (manual) | 14 tools, multi-round, streaming; setup wizard required |
+| [Open WebUI](https://github.com/open-webui/open-webui) | Compatible (manual) | Docker one-liner; auth-gated UI, no automation harness |
+| [Claude Code](https://claude.ai/claude-code) | Compatible (manual) | `OPENAI_BASE_URL=...` env var; not in automated suite |
+| [Cursor](https://cursor.com) | Compatible (manual) | Settings UI config; closed-source GUI, not automatable |
+| [Continue.dev](https://continue.dev) | Compatible (manual) | VS Code/JetBrains extension; no automation harness |
+| Any OpenAI-compatible app | Compatible | Point at `http://localhost:8000/v1` |
 
 **Quick setup for popular apps:**
 
@@ -191,6 +194,49 @@ docker run -d -p 3000:8080 \
     }
   }
 }
+```
+
+**PydanticAI** (`pip install pydantic-ai`):
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+
+model = OpenAIChatModel(
+    model_name="default",
+    provider=OpenAIProvider(
+        base_url="http://localhost:8000/v1",
+        api_key="not-needed",
+    ),
+)
+agent = Agent(model)
+print(agent.run_sync("What is 2+2?").output)
+```
+
+**smolagents** (`pip install smolagents`):
+```python
+from smolagents import CodeAgent, OpenAIServerModel
+
+model = OpenAIServerModel(
+    model_id="default",
+    api_base="http://localhost:8000/v1",
+    api_key="not-needed",
+)
+agent = CodeAgent(tools=[], model=model)
+agent.run("What is 5 multiplied by 7?")
+```
+
+**LibreChat** (`librechat.yaml`, under `endpoints.custom`):
+```yaml
+- name: "Rapid-MLX"
+  apiKey: "rapid-mlx"
+  baseURL: "http://localhost:8000/v1/"
+  models:
+    default: ["default"]
+    fetch: true
+  titleConvo: true
+  titleModel: "current_model"
+  modelDisplayLabel: "Rapid-MLX"
 ```
 
 **Anthropic SDK** (`pip install anthropic`):

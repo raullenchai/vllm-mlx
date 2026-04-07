@@ -127,7 +127,7 @@ print(response.choices[0].message.content)
 | [Aider](https://aider.chat) | Tested | CLI edit-and-commit workflow ([test](tests/integrations/test_aider.sh)) |
 | [OpenCode](https://github.com/sst/opencode) | Compatible (manual) | `opencode.json` provider config; agent loop behavior is model-sensitive |
 | [OpenClaw](https://github.com/nicepkg/openclaw) | Compatible (manual) | 14 tools, multi-round, streaming; setup wizard required |
-| [Open WebUI](https://github.com/open-webui/open-webui) | Compatible (manual) | Docker one-liner; auth-gated UI, no automation harness |
+| [Open WebUI](https://github.com/open-webui/open-webui) | Tested | Docker E2E (register, login, model fetch, streaming chat) ([test](tests/integrations/test_openwebui.py)) |
 | [Claude Code](https://claude.ai/claude-code) | Compatible (manual) | `OPENAI_BASE_URL=...` env var; not in automated suite |
 | [Cursor](https://cursor.com) | Compatible (manual) | Settings UI config; closed-source GUI, not automatable |
 | [Continue.dev](https://continue.dev) | Compatible (manual) | VS Code/JetBrains extension; no automation harness |

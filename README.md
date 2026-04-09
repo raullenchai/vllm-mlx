@@ -124,6 +124,8 @@ print(response.choices[0].message.content)
 | [Aider](https://aider.chat) | Tested | CLI edit-and-commit workflow ([test](tests/integrations/test_aider.sh)) |
 | [OpenCode](https://github.com/sst/opencode) | Compatible (manual) | `opencode.json` provider config; agent loop behavior is model-sensitive |
 | [Claw Code](https://github.com/ultraworkers/claw-code) | Tested | Prompt, code gen, tool calling (read_file) — both OpenAI & Anthropic endpoints |
+| [OpenClaude](https://github.com/Gitlawb/openclaude) | Tested | `CLAUDE_CODE_USE_OPENAI=1` + `OPENAI_BASE_URL`; prompt, tool calling |
+| [Goose](https://github.com/block/goose) | Tested | Ollama provider via `OLLAMA_HOST`; prompt, shell tool use |
 | [OpenClaw](https://github.com/nicepkg/openclaw) | Compatible (manual) | 14 tools, multi-round, streaming; setup wizard required |
 | [Open WebUI](https://github.com/open-webui/open-webui) | Tested | Docker E2E (register, login, model fetch, streaming chat) ([test](tests/integrations/test_openwebui.py)) |
 | [Claude Code](https://claude.ai/claude-code) | Compatible (manual) | `OPENAI_BASE_URL=...` env var; not in automated suite |
@@ -146,6 +148,18 @@ Cursor's agent/composer mode uses tool calls automatically — Rapid-MLX handles
 export OPENAI_BASE_URL=http://localhost:8000/v1
 export OPENAI_API_KEY=not-needed
 claw --model "openai/default" prompt "summarize this repo"
+```
+
+**OpenClaude:**
+```bash
+CLAUDE_CODE_USE_OPENAI=1 OPENAI_BASE_URL=http://localhost:8000/v1 \
+OPENAI_API_KEY=not-needed OPENAI_MODEL=default openclaude -p "hello"
+```
+
+**Goose:**
+```bash
+GOOSE_PROVIDER=ollama OLLAMA_HOST=http://localhost:8000 \
+GOOSE_MODEL=default goose run --text "hello"
 ```
 
 **Claude Code:**

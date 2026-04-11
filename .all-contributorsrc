@@ -1,0 +1,12 @@
+{
+  "projectName": "Rapid-MLX",
+  "projectOwner": "raullenchai",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": ["README.md"],
+  "imageSize": 50,
+  "commit": false,
+  "commitConvention": "none",
+  "contributorsPerLine": 8,
+  "skipCi": true
+}

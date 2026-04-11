@@ -611,9 +611,16 @@ Vision, audio (STT/TTS), video understanding, and text embeddings — all throug
 
 ## Contributing
 
-Issues and PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup and guidelines.
+We welcome contributions of all sizes! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and guidelines.
 
-We need community data — hardware benchmarks, client verifications, model reports. If you test a model on your Mac, [open an issue](https://github.com/raullenchai/Rapid-MLX/issues/new) with your hardware, model, decode speed, and what worked.
+**Easy first contributions** (no model download needed):
+- [Add a model alias](https://github.com/raullenchai/Rapid-MLX/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — map a short name to a HuggingFace model ID
+- [Request model support](https://github.com/raullenchai/Rapid-MLX/issues/new?template=model_support.yml) — tell us which model you want
+
+**Testing contributions** (needs a Mac with Apple Silicon):
+- Benchmark a model and share results
+- Test with your favorite AI client (Cursor, Aider, LangChain, etc.)
+- [Report a bug](https://github.com/raullenchai/Rapid-MLX/issues/new?template=bug_report.yml)
 
 ### Contributors
 

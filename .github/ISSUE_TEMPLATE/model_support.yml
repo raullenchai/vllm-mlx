@@ -1,0 +1,52 @@
+name: Model Support Request
+description: Request support for a new model
+labels: ["enhancement", "model-support"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for requesting a new model! This helps us prioritize which models to add next.
+  - type: input
+    id: model_name
+    attributes:
+      label: Model name
+      placeholder: "e.g. Llama 4 Scout 17B"
+    validations:
+      required: true
+  - type: input
+    id: hf_id
+    attributes:
+      label: HuggingFace model ID (MLX version)
+      placeholder: "e.g. mlx-community/Llama-4-Scout-17B-4bit"
+    validations:
+      required: true
+  - type: dropdown
+    id: tested
+    attributes:
+      label: Have you tested it with Rapid-MLX?
+      options:
+        - "Yes — works with manual path"
+        - "Yes — but has issues"
+        - "No — haven't tried yet"
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      placeholder: |
+        If tested, share:
+        - What --tool-call-parser / --reasoning-parser flags worked?
+        - Any issues (tag leaks, broken tool calls, crashes)?
+        - Benchmark numbers (tok/s, TTFT)?
+  - type: input
+    id: ram
+    attributes:
+      label: Model size (RAM needed)
+      placeholder: "e.g. 10 GB (4bit)"
+  - type: checkboxes
+    id: willing
+    attributes:
+      label: Willing to contribute?
+      options:
+        - label: I can submit a PR to add alias + parser config

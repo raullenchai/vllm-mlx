@@ -133,6 +133,14 @@ class OutputRouter:
                          m.tool_start, m.tool_end):
             return None
 
+        # === Think tags (Qwen3/DeepSeek style): <think> / </think> ===
+        if token_id == m.think_start:
+            self.state = RouterState.THINKING
+            return None  # suppress <think>
+        if token_id == m.think_end:
+            self.state = RouterState.CONTENT
+            return None  # suppress </think>
+
         # === Channel start: transition to AWAITING_CHANNEL_TYPE ===
         if token_id == m.channel_start:
             self.state = RouterState.AWAITING_CHANNEL_TYPE
@@ -253,8 +261,19 @@ class OutputRouter:
             return cls(token_map, tokenizer)
 
         # Qwen/DeepSeek detection: look for <think> and </think>
-        # TODO: implement when migrating existing parsers
-        # if "<think>" in vocab and "</think>" in vocab:
-        #     ...
+        if "<think>" in vocab and "</think>" in vocab:
+            token_map = TokenMap(
+                think_start=vocab["<think>"],
+                think_end=vocab["</think>"],
+                bos=vocab.get("<|endoftext|>") or vocab.get("<bos>"),
+                eos=vocab.get("<|im_end|>") or vocab.get("<|endoftext|>") or vocab.get("<eos>"),
+                pad=vocab.get("<|endoftext|>") or vocab.get("<pad>"),
+            )
+            logger.info(
+                "[OutputRouter] Qwen3/think-tag format detected: "
+                "think_start=%d, think_end=%d",
+                token_map.think_start, token_map.think_end,
+            )
+            return cls(token_map, tokenizer)
 
         return None  # unsupported model format

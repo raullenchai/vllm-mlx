@@ -20,7 +20,7 @@ models:
 streaming:
   extra_tool_tags: []
   suppress_patterns: []
-  max_tools: 15
+  max_tools: 0  # Cline uses XML text parsing, not OpenAI FC
 
 testing:
   binary: null  # VS Code extension, no CLI

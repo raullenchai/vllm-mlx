@@ -653,7 +653,7 @@ class AgentTestRunner:
                 tests.append("streaming_tool_call")
 
         streaming = self.profile.get_streaming_for_version(self.agent_version)
-        if streaming.max_tools and streaming.max_tools > 10:
+        if streaming.max_tools and streaming.max_tools > 10 and self.profile.needs_function_calling:
             tests.append("many_tools")
 
         if streaming.extra_tool_tags:

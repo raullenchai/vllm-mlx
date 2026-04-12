@@ -136,11 +136,11 @@ Tested with `rapid-mlx agents <name> --test`. Format: `base/total + specific/tot
 
 | | Qwen3.5 4B | Qwen3.5 9B | Qwen3.5 27B | Qwen3.5 35B-A3B | Qwopus 27B | Gemma 4 26B | DeepSeek-R1 32B |
 |---|---|---|---|---|---|---|---|
-| **Hermes Agent** | 9/9 + 15/15 | 9/9 + 15/15 | — | 9/9 + 15/15 | 9/9 + 15/15 | 11/11 + 20/20 | — |
-| **PydanticAI** | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 4/6 ⚠️ | — |
-| **LangChain** | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 4/6 ⚠️ | — |
-| **smolagents** | 5/5 + 4/4 | 5/5 + 4/4 | 5/5 + 4/4 | 5/5 + 4/4 | 5/5 + 4/4 | 5/5 + 4/4 | — |
-| **OpenClaude** (Anthropic SDK) | 9/9 + 5/5 | 9/9 + 5/5 | 9/9 + 5/5 | 9/9 + 5/5 | 9/9 + 5/5 | 9/9 + 4/5 ⚠️ | — |
+| **Hermes Agent** | 9/9 + 15/15 | 9/9 + 15/15 | — | 9/9 + 15/15 | 11/11 ✅ | 11/11 + 20/20 | 6/11 ⚠️ |
+| **PydanticAI** | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 ✅ | 9/9 + 4/6 ⚠️ | 3/6 ⚠️ |
+| **LangChain** | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 ✅ | 9/9 + 4/6 ⚠️ | 4/6 ⚠️ |
+| **smolagents** | 5/5 + 4/4 | 5/5 + 4/4 | 5/5 + 4/4 | 5/5 + 4/4 | 5/5 + 4/4 ✅ | 5/5 + 4/4 | 4/4 ✅ |
+| **OpenClaude** (Anthropic SDK) | 9/9 + 5/5 | 9/9 + 5/5 | 9/9 + 5/5 | 9/9 + 5/5 | 9/9 + 5/5 ✅ | 9/9 + 4/5 ⚠️ | 2/5 ⚠️ |
 
 <details>
 <summary>How to read this table</summary>
@@ -151,7 +151,7 @@ Tested with `rapid-mlx agents <name> --test`. Format: `base/total + specific/tot
 - Run `rapid-mlx agents <name> --test` to reproduce these results on your machine
 </details>
 
-> **Qwen3.5 family** has the best tool calling across all sizes (73-90% on our 30-scenario eval). **Qwopus** (Claude Opus-distilled Qwen3.5) is excellent for reasoning + tools. **Gemma 4** works great with Hermes — we are the only backend with native Gemma 4 tool calling. Run `rapid-mlx agents` to see all supported agents and setup guides.
+> **Qwen3.5 family** has the best tool calling across all sizes (73-90% on our 30-scenario eval). **Qwopus 27B** (Claude Opus-distilled Qwen3.5) is the sweet spot — 100% pass rate across all frameworks with strong reasoning. **Gemma 4** works great with Hermes — we are the only backend with native Gemma 4 tool calling. **DeepSeek-R1-32B** excels at reasoning but has weak function calling — use smolagents (text-based) instead of FC-dependent frameworks. Run `rapid-mlx agents` to see all supported agents and setup guides.
 
 **Quick setup for popular apps:**
 

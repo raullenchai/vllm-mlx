@@ -1,7 +1,14 @@
 """Thorough smolagents test suite against local rapid-mlx server."""
 from smolagents import CodeAgent, ToolCallingAgent, OpenAIServerModel, tool
 
-MODEL_ID = "/Volumes/Extreme SSD/mlx-models/gemma-4-26b-a4b-it-4bit"
+import os
+import httpx as _httpx
+
+_BASE = os.environ.get("RAPID_MLX_BASE_URL", "http://localhost:8000/v1")
+try:
+    MODEL_ID = _httpx.get(f"{_BASE}/models", timeout=5).json()["data"][0]["id"]
+except Exception:
+    MODEL_ID = "default"
 
 model = OpenAIServerModel(
     model_id=MODEL_ID,

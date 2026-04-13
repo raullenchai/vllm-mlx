@@ -57,7 +57,7 @@ brew install raullenchai/rapid-mlx/rapid-mlx
 pip install rapid-mlx
 
 # Or one-liner with auto-setup
-curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash
+curl -fsSL https://raullenchai.github.io/Rapid-MLX/install.sh | bash
 ```
 
 **Step 2 — Serve a model:**
@@ -114,44 +114,74 @@ print(response.choices[0].message.content)
 
 ## Works With
 
-| Client | Status | Notes |
+### Agent Harnesses (MHI-tested)
+
+| Harness | Type | Notes |
+|---------|------|-------|
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Agent | 62 tools, multi-turn ([test](tests/integrations/test_hermes.py)) |
+| [PydanticAI](https://ai.pydantic.dev) | Framework | Typed agents, structured output ([test](tests/integrations/test_pydantic_ai_full.py)) |
+| [LangChain](https://langchain.com) | Framework | `ChatOpenAI`, tools, streaming ([test](tests/integrations/test_langchain.py)) |
+| [smolagents](https://github.com/huggingface/smolagents) | Framework | CodeAgent + ToolCallingAgent ([test](tests/integrations/test_smolagents_full.py)) |
+| [OpenClaude](https://github.com/Gitlawb/openclaude) (Anthropic SDK) | Agent | `CLAUDE_CODE_USE_OPENAI=1` ([test](tests/integrations/test_anthropic_sdk.py)) |
+| [Aider](https://aider.chat) | Agent | CLI edit-and-commit, architect mode ([test](tests/integrations/test_aider.sh)) |
+| [Goose](https://github.com/block/goose) | Agent | Ollama provider via `OLLAMA_HOST` |
+| [Claw Code](https://github.com/ultraworkers/claw-code) | Agent | OpenAI & Anthropic endpoints |
+
+### UI / IDE Clients
+
+| Client | Status | Setup |
 |--------|--------|-------|
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Tested | 62 tools, tool calling, multi-turn, 20-test suite ([test](tests/integrations/test_hermes.py)) |
-| [OpenClaude](https://github.com/Gitlawb/openclaude) (Anthropic SDK) | Tested | `CLAUDE_CODE_USE_OPENAI=1`; prompt, tool calling ([test](tests/integrations/test_anthropic_sdk.py)) |
-| [PydanticAI](https://ai.pydantic.dev) | Tested | Typed agents, streaming, structured output, multi-tool ([test](tests/integrations/test_pydantic_ai_full.py)) |
-| [LangChain](https://langchain.com) | Tested | `ChatOpenAI`, tools, streaming, structured output ([test](tests/integrations/test_langchain.py)) |
-| [smolagents](https://github.com/huggingface/smolagents) | Tested | CodeAgent + ToolCallingAgent + multi-tool ([test](tests/integrations/test_smolagents_full.py)) |
-| [Aider](https://aider.chat) | Tested | CLI edit-and-commit, architect mode ([test](tests/integrations/test_aider.sh)) |
-| [Goose](https://github.com/block/goose) | Tested | Ollama provider via `OLLAMA_HOST`; prompt, shell tool use |
-| [Claw Code](https://github.com/ultraworkers/claw-code) | Tested | Prompt, code gen, tool calling — both OpenAI & Anthropic endpoints |
-| [LibreChat](https://librechat.ai) | Tested | Docker E2E ([test](tests/integrations/test_librechat_docker.py)) |
-| [Open WebUI](https://github.com/open-webui/open-webui) | Tested | Docker E2E ([test](tests/integrations/test_openwebui.py)) |
-| [Cursor](https://cursor.com) | Compatible | Settings UI config |
-| [Continue.dev](https://continue.dev) | Compatible | VS Code/JetBrains extension |
+| [Cursor](https://cursor.com) | Compatible | Settings → OpenAI Base URL |
+| [Continue.dev](https://continue.dev) | Compatible | VS Code / JetBrains extension |
+| [LibreChat](https://librechat.ai) | Tested | Docker ([test](tests/integrations/test_librechat_docker.py)) |
+| [Open WebUI](https://github.com/open-webui/open-webui) | Tested | Docker ([test](tests/integrations/test_openwebui.py)) |
 | Any OpenAI-compatible app | Compatible | Point at `http://localhost:8000/v1` |
 
-### Agent × Model Compatibility Matrix
+### Model-Harness Index (MHI)
 
-Tested with `rapid-mlx agents <name> --test`. Format: `base/total + specific/total`.
+MHI measures how well a model works with a specific agent harness. It combines three dimensions:
 
-| | Qwen3.5 4B | Qwen3.5 9B | Qwen3.5 27B | Qwen3.5 35B-A3B | Qwopus 27B | Gemma 4 26B | DeepSeek-R1 32B |
-|---|---|---|---|---|---|---|---|
-| **Hermes Agent** | 9/9 + 15/15 | 9/9 + 15/15 | — | 9/9 + 15/15 | 11/11 ✅ | 11/11 + 20/20 | 6/11 ⚠️ |
-| **PydanticAI** | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 ✅ | 9/9 + 4/6 ⚠️ | 3/6 ⚠️ |
-| **LangChain** | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 | 9/9 + 6/6 ✅ | 9/9 + 4/6 ⚠️ | 4/6 ⚠️ |
-| **smolagents** | 5/5 + 4/4 | 5/5 + 4/4 | 5/5 + 4/4 | 5/5 + 4/4 | 5/5 + 4/4 ✅ | 5/5 + 4/4 | 4/4 ✅ |
-| **OpenClaude** (Anthropic SDK) | 9/9 + 5/5 | 9/9 + 5/5 | 9/9 + 5/5 | 9/9 + 5/5 | 9/9 + 5/5 ✅ | 9/9 + 4/5 ⚠️ | 2/5 ⚠️ |
+| Dimension | Weight | What it measures | Source |
+|---|---|---|---|
+| **Tool Calling** | 50% | Can the model+harness execute function calls correctly? | `rapid-mlx agents --test` |
+| **HumanEval** | 30% | Can the model generate correct code? | [HumanEval](https://github.com/openai/human-eval) (10 tasks) |
+| **MMLU** | 20% | Does the harness degrade base knowledge? | [tinyMMLU](https://huggingface.co/datasets/tinyBenchmarks/tinyMMLU) (10 tasks) |
+
+**MHI = 0.50 × ToolCalling + 0.30 × HumanEval + 0.20 × MMLU** (scale 0-100)
+
+| Model + Harness | Tool Calling | HumanEval | MMLU | **MHI** |
+|---|---|---|---|---|
+| **Qwopus 27B** + Hermes | 100% | 80% | 90% | **92** |
+| **Qwopus 27B** + PydanticAI | 100% | 80% | 90% | **92** |
+| **Qwopus 27B** + LangChain | 100% | 80% | 90% | **92** |
+| **Qwopus 27B** + smolagents | 100% | 80% | 90% | **92** |
+| **Qwopus 27B** + Anthropic SDK | 100% | 80% | 90% | **92** |
+| **Llama 3.3 70B** + smolagents | 100% | 50% | 90% | **83** |
+| **Qwen3.5 27B** + Hermes | 100% | 40% | 100% | **82** |
+| **Qwen3.5 27B** + PydanticAI | 100% | 40% | 100% | **82** |
+| **Qwen3.5 27B** + LangChain | 100% | 40% | 100% | **82** |
+| **DeepSeek-R1 32B** + smolagents | 100% | 30% | 100% | **79** |
+| **Llama 3.3 70B** + PydanticAI | 67% | 50% | 90% | **67** |
+| **Llama 3.3 70B** + LangChain | 67% | 50% | 90% | **67** |
+| **Gemma 4 26B** + Hermes | 100% | 0% | 60% | **62** |
+| **Gemma 4 26B** + smolagents | 100% | 0% | 60% | **62** |
+| **DeepSeek-R1 32B** + Hermes | 55% | 30% | 100% | **57** |
+| **Llama 3.3 70B** + Hermes | 45% | 50% | 90% | **56** |
+| **DeepSeek-R1 32B** + PydanticAI | 50% | 30% | 100% | **54** |
+| **Gemma 4 26B** + Anthropic SDK | 80% | 0% | 60% | **52** |
+| **DeepSeek-R1 32B** + Anthropic SDK | 40% | 30% | 100% | **49** |
+| **Gemma 4 26B** + PydanticAI | 67% | 0% | 60% | **45** |
 
 <details>
-<summary>How to read this table</summary>
+<summary>How MHI works</summary>
 
-- **Format**: `base/total + specific/total` — base tests are our standard API test suite (tool calling, streaming, no-leak stress test); specific tests are framework-native tests (e.g. PydanticAI structured output, LangChain `with_structured_output`)
-- **⚠️** = mostly works, minor edge cases. Gemma 4's ⚠️ is due to structured output limitations (model wraps JSON in markdown) and multi-tool chaining — the model works well for single tool calls and streaming
-- **—** = not yet tested
-- Run `rapid-mlx agents <name> --test` to reproduce these results on your machine
+- **Tool Calling** scores come from `rapid-mlx agents <harness> --test`, which runs real tool call scenarios (single, multi-turn, parallel, streaming, stress test) through each harness
+- **HumanEval** and **MMLU** are model-level baselines (same for all harnesses of the same model) — they verify the model's raw coding and knowledge capability
+- A model that scores 100% on tool calling but 0% on HumanEval may be great for simple agent tasks but will struggle with coding agents like Aider
+- Run `python3 scripts/mhi_eval.py --label "your-model+harness"` to compute MHI on your own setup
 </details>
 
-> **Qwen3.5 family** has the best tool calling across all sizes (73-90% on our 30-scenario eval). **Qwopus 27B** (Claude Opus-distilled Qwen3.5) is the sweet spot — 100% pass rate across all frameworks with strong reasoning. **Gemma 4** works great with Hermes — we are the only backend with native Gemma 4 tool calling. **DeepSeek-R1-32B** excels at reasoning but has weak function calling — use smolagents (text-based) instead of FC-dependent frameworks. Run `rapid-mlx agents` to see all supported agents and setup guides.
+> **Qwopus 27B** = MHI 92 across all harnesses — the best agentic model for local use. **Qwen3.5 27B** is a close second (MHI 82) with perfect MMLU. **DeepSeek-R1** and **Llama 70B** perform much better with smolagents (text-based) than FC-dependent frameworks. Run `rapid-mlx agents` to see all supported agents and setup guides.
 
 **Quick setup for popular apps:**
 

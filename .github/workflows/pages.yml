@@ -1,0 +1,26 @@
+name: Sync install.sh to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: [install.sh]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare pages directory
+        run: |
+          mkdir -p _pages
+          cp install.sh _pages/
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_pages
+          publish_branch: gh-pages

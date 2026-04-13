@@ -1,6 +1,6 @@
 #!/bin/bash
 # Rapid-MLX installer — AI inference for Apple Silicon
-# Usage: curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash
+# Usage: curl -fsSL https://raullenchai.github.io/Rapid-MLX/install.sh | bash
 #        curl ... | bash -s 0.4.3          # specific version
 #        curl ... | bash -s latest         # latest from GitHub (pre-release)
 set -euo pipefail
@@ -231,7 +231,7 @@ echo "    rapid-mlx-chat                                    # built-in chat"
 echo "    OPENAI_BASE_URL=http://localhost:8000/v1 claude    # Claude Code"
 echo "    OPENAI_BASE_URL=http://localhost:8000/v1 aider     # Aider"
 echo ""
-dim "Upgrade:    curl -fsSL https://raw.githubusercontent.com/raullenchai/Rapid-MLX/main/install.sh | bash"
+dim "Upgrade:    curl -fsSL https://raullenchai.github.io/Rapid-MLX/install.sh | bash"
 dim "Uninstall:  rm -rf ~/.rapid-mlx ~/.local/bin/rapid-mlx* ~/.local/bin/vllm-mlx*"
 echo ""
 

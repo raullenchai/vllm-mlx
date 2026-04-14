@@ -1778,6 +1778,17 @@ async def create_completion(request: CompletionRequest, raw_request: Request):
 
     elapsed = time.perf_counter() - start_time
     tokens_per_sec = total_completion_tokens / elapsed if elapsed > 0 else 0
+
+    # NEW: Log the request details with duration and status at the end
+    prompt_preview = prompts[0][:200] if prompts else "(empty)"
+    prompt_len = sum(len(p) for p in prompts)
+    logger.info(
+        f"[REQUEST] POST /v1/completions status=200 duration={elapsed:.4f}s "
+        f"stream=False max_tokens={request.max_tokens} "
+        f"temp={request.temperature} prompt_chars={prompt_len} "
+        f"prompt_preview={prompt_preview!r}"
+    )
+
     logger.info(
         f"Completion: {total_prompt_tokens} prompt + {total_completion_tokens} completion tokens in {elapsed:.2f}s ({tokens_per_sec:.1f} tok/s)"
     )
@@ -2886,6 +2897,13 @@ async def _stream_anthropic_messages(
     # Log throughput
     elapsed = time.perf_counter() - start_time
     tokens_per_sec = completion_tokens / elapsed if elapsed > 0 else 0
+
+    # NEW: Log the streaming request details with final duration
+    logger.info(
+        f"[REQUEST] POST /v1/messages (anthropic) status=200 duration={elapsed:.4f}s "
+        f"stream=True model={_model_name or anthropic_request.model!r} "
+        f"prompt_tokens={prompt_tokens} completion_tokens={completion_tokens}"
+    )
     logger.info(
         f"Anthropic messages (stream): prompt={prompt_tokens} + completion={completion_tokens} tokens in {elapsed:.2f}s ({tokens_per_sec:.1f} tok/s)"
     )
@@ -3509,6 +3527,13 @@ async def stream_chat_completion(
         # Log throughput
         elapsed = time.perf_counter() - start_time
         tokens_per_sec = completion_tokens / elapsed if elapsed > 0 else 0
+
+        # NEW: Log the streaming request details with final duration
+        logger.info(
+            f"[REQUEST] POST /v1/chat/completions status=200 duration={elapsed:.4f}s "
+            f"stream=True model={request.model or _model_name!r} "
+            f"prompt_tokens={prompt_tokens} completion_tokens={completion_tokens}"
+        )
         logger.info(
             f"Chat completion (stream): {completion_tokens} tokens in {elapsed:.2f}s ({tokens_per_sec:.1f} tok/s)"
         )

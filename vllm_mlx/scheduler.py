@@ -155,12 +155,37 @@ def _install_chunked_prefill(
     import time as _time
 
     from mlx_lm.generate import (
-        Batch,
         _left_pad_prompts,
         _make_cache,
         _merge_caches,
         _right_pad_prompts,
     )
+    # mlx-lm 0.31+ renamed Batch → GenerationBatch with different constructor
+    try:
+        from mlx_lm.generate import Batch as _Batch
+        _USE_NEW_BATCH = False
+    except ImportError:
+        from mlx_lm.generate import GenerationBatch as _Batch
+        _USE_NEW_BATCH = True
+
+    def _make_batch(model, uids, y, logprobs, max_tokens, num_tokens, prompt_cache, samplers, logits_processors, tokens):
+        if _USE_NEW_BATCH:
+            # GenerationBatch(model, uids, inputs, prompt_cache, tokens,
+            #   samplers, fallback_sampler, logits_processors, state_machines, max_tokens)
+            return _Batch(
+                model=model,
+                uids=uids,
+                inputs=y,
+                prompt_cache=prompt_cache,
+                tokens=tokens,
+                samplers=samplers,
+                fallback_sampler=lambda x: x.argmax(-1),
+                logits_processors=logits_processors,
+                state_machines=[],
+                max_tokens=max_tokens,
+            )
+        else:
+            return _Batch(uids, y, logprobs, max_tokens, num_tokens, prompt_cache, samplers, logits_processors, tokens)
 
     # Keep references to originals
     _orig_next = batch_gen._next
@@ -321,16 +346,17 @@ def _install_chunked_prefill(
                 )
                 mx.async_eval(y, logprobs)
 
-                new_batch = Batch(
-                    list(partial["uids"]),
-                    y,
-                    logprobs,
-                    list(partial["max_tokens"]),
-                    [0] * len(partial["uids"]),
-                    prompt_cache,
-                    list(partial["samplers"]),
-                    list(partial["logits_processors"]),
-                    partial["tokens"],
+                new_batch = _make_batch(
+                    model=batch_gen.model,
+                    uids=list(partial["uids"]),
+                    y=y,
+                    logprobs=logprobs,
+                    max_tokens=list(partial["max_tokens"]),
+                    num_tokens=[0] * len(partial["uids"]),
+                    prompt_cache=prompt_cache,
+                    samplers=list(partial["samplers"]),
+                    logits_processors=list(partial["logits_processors"]),
+                    tokens=partial["tokens"],
                 )
 
                 # Save prompt-only cache BEFORE merging into active batch.
@@ -1177,9 +1203,14 @@ class Scheduler:
         # Install chunked prefill when explicitly configured OR when
         # memory-aware cache is active (needed for prefix_boundary saves
         # in agentic multi-turn workloads with hybrid Mamba+Transformer models).
+        #
+        # NOTE: mlx-lm 0.31+ has native prefill_step_size support in BatchGenerator.
+        # Our _install_chunked_prefill monkey-patches the old Batch API which was
+        # removed in 0.31+. Skip the monkey-patch if the old API is unavailable.
         chunked_budget = self.config.chunked_prefill_tokens
         need_chunked = chunked_budget > 0 or self.memory_aware_cache is not None
-        if need_chunked:
+        _has_old_batch_api = hasattr(bg, '_process_prompts')
+        if need_chunked and _has_old_batch_api:
             if chunked_budget <= 0:
                 # No explicit budget — use a very large value so normal
                 # prompts pass through unchanged.  Prefix boundary splits
@@ -1201,6 +1232,13 @@ class Scheduler:
                 pending_abort_ids=self._pending_abort_ids,
                 uid_to_request_id=self.uid_to_request_id,
                 requests=self.requests,
+            )
+        elif need_chunked and not _has_old_batch_api:
+            logger.warning(
+                "[chunked_prefill] Skipped — mlx-lm 0.31+ removed the internal "
+                "Batch API. Using native prefill_step_size=%d instead. "
+                "Memory-aware cache and mid-prefill snapshots are unavailable.",
+                self.config.prefill_step_size,
             )
 
         # Install MTP if the model supports it
@@ -2259,8 +2297,15 @@ class Scheduler:
 
                 # Run generation step if we have running requests
                 if self.batch_generator is not None and self.running:
-                    responses = self.batch_generator.next()
+                    raw_next = self.batch_generator.next()
                     output.has_work = True
+
+                    # mlx-lm 0.31+ returns (prompt_responses, generation_responses) tuple
+                    # older versions return a flat list of responses
+                    if isinstance(raw_next, tuple):
+                        _, responses = raw_next
+                    else:
+                        responses = raw_next
 
                     if responses:
                         outputs, finished_ids = self._process_batch_responses(responses)

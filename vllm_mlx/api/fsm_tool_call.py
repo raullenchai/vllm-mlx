@@ -125,11 +125,11 @@ def _build_tool_call_schema(tools: list[dict]) -> str:
     for tool in tools:
         func = tool.get("function", tool)
         name = func.get("name", "")
-        if name:
+        if name and name != "__generic__":
             tool_names.append(name)
 
     if not tool_names:
-        # Fallback: any string name
+        # Generic: any string name (no enum constraint)
         name_schema: dict[str, Any] = {"type": "string"}
     elif len(tool_names) == 1:
         name_schema = {"type": "string", "const": tool_names[0]}
@@ -412,16 +412,19 @@ def create_fsm_processor(
         logger.debug("[FSM] outlines-core not installed, skipping")
         return None
 
-    if not tools:
-        return None
-
     if parser_name not in TOOL_CALL_TRIGGERS:
         logger.debug(f"[FSM] No trigger pattern for parser {parser_name!r}")
         return None
 
+    # When no tools are provided (Scheduler doesn't have per-request tools),
+    # use a generic schema: {"name": <any string>, "arguments": <any object>}
+    effective_tools = tools or [
+        {"function": {"name": "__generic__", "parameters": {"type": "object"}}}
+    ]
+
     return FSMToolCallProcessor(
         tokenizer=tokenizer,
-        tools=tools,
+        tools=effective_tools,
         parser_name=parser_name,
         cache=_fsm_cache,
     )

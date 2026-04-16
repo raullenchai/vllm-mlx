@@ -1135,7 +1135,7 @@ def _register_model() -> None:
     entry = ModelEntry(
         engine=_engine,
         model_name=_model_name,
-        model_path=_model_path or model_name,
+        model_path=_model_path or _model_name,
         aliases=aliases,
         tool_call_parser=_tool_call_parser,
         reasoning_parser=_reasoning_parser_name,

@@ -116,7 +116,12 @@ def apply_chat_template(
         ``apply_chat_template`` method.
     """
     if not hasattr(template_applicator, "apply_chat_template"):
-        # Fallback for models without apply_chat_template
+        # Fallback for models without apply_chat_template.
+        # Inject tools into the system prompt so the model still sees
+        # function schemas — same treatment as the TypeError fallback
+        # below.  Fixes #120.
+        if tools:
+            messages = _inject_tools_into_messages(messages, tools)
         prompt = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
         return prompt + "\nassistant:"
 
@@ -142,8 +147,15 @@ def apply_chat_template(
         except TypeError:
             pass
 
-        # Step 2: template also rejects tools — fall back to prompt injection
+        # Step 2: template also rejects tools — fall back to prompt injection.
+        # Restore enable_thinking: the step-1 pop removed it because we
+        # didn't know yet whether the failure was about enable_thinking
+        # or about tools.  Now we know it was tools, so re-add
+        # enable_thinking for the final retry so thinking-capable models
+        # (Qwen, DeepSeek) don't silently lose that feature.  Fixes #122.
         template_kwargs.pop("tools", None)
+        if enable_thinking is not None:
+            template_kwargs["enable_thinking"] = enable_thinking
         if tools:
             logger.info(
                 "Chat template doesn't support tools param — "
@@ -151,6 +163,15 @@ def apply_chat_template(
                 len(tools),
             )
             injected = _inject_tools_into_messages(messages, tools)
-            return template_applicator.apply_chat_template(injected, **template_kwargs)
+            try:
+                return template_applicator.apply_chat_template(
+                    injected, **template_kwargs
+                )
+            except TypeError:
+                # enable_thinking also unsupported after all — drop it
+                template_kwargs.pop("enable_thinking", None)
+                return template_applicator.apply_chat_template(
+                    injected, **template_kwargs
+                )
 
         return template_applicator.apply_chat_template(messages, **template_kwargs)

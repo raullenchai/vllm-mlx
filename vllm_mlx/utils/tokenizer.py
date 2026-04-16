@@ -61,6 +61,11 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
 
     try:
         model, tokenizer = load(model_name, tokenizer_config=tokenizer_config)
+        # mlx_lm.load() succeeds but sanitize() may have silently
+        # stripped mtp.* weights.  Check if the config declares MTP
+        # layers and the model came back without a .mtp attribute;
+        # if so, re-inject from the safetensors on disk.
+        _try_inject_mtp_post_load(model, model_name)
         return model, tokenizer
     except ValueError as e:
         # Fallback for models with non-standard tokenizers
@@ -104,11 +109,30 @@ def _load_strict_false(model_name: str, tokenizer_config: dict = None):
     return model, tokenizer
 
 
+def _read_num_mtp_layers(config: dict) -> int:
+    """Read num_nextn_predict_layers from config, checking text_config too.
+
+    Multimodal checkpoints (VLM + MTP) store this under text_config,
+    while text-only checkpoints put it at the top level.  Fixes #121.
+    """
+    n = config.get("num_nextn_predict_layers", 0)
+    if n == 0:
+        n = config.get("text_config", {}).get("num_nextn_predict_layers", 0)
+    return n
+
+
 def _try_inject_mtp(model, model_path, config):
     """Inject MTP support if model has MTP config + weights."""
-    if config.get("num_nextn_predict_layers", 0) > 0:
+    num = _read_num_mtp_layers(config)
+    if num > 0:
         from ..patches.qwen3_next_mtp import inject_mtp_support
 
+        # inject_mtp_support reads config["num_nextn_predict_layers"]
+        # directly.  For VLM checkpoints where the field lives under
+        # text_config, surface it to the top level so the injector
+        # doesn't skip with "num_nextn_predict_layers=0".
+        if config.get("num_nextn_predict_layers", 0) == 0:
+            config = {**config, "num_nextn_predict_layers": num}
         inject_mtp_support(model, model_path, config)
 
 
@@ -124,11 +148,7 @@ def _try_inject_mtp_post_load(model, model_name):
         return
     with open(config_path) as f:
         config = json.load(f)
-    # Also check text_config for nested configs
-    num_mtp = config.get("num_nextn_predict_layers", 0)
-    if num_mtp == 0:
-        text_config = config.get("text_config", {})
-        num_mtp = text_config.get("num_nextn_predict_layers", 0)
+    num_mtp = _read_num_mtp_layers(config)
     if num_mtp > 0 and getattr(model, "mtp", None) is None:
         mtp_file = Path(model_path) / "model-mtp.safetensors"
         if mtp_file.exists():

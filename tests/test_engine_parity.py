@@ -134,10 +134,24 @@ class TestApplyChatTemplate:
     def test_fallback_strips_tools_when_both_fail(
         self, mock_tokenizer, simple_messages
     ):
-        """Should fall back to prompt injection when template rejects both."""
+        """Should fall back to prompt injection when template rejects both.
+
+        After #122's fix, the retry flow restores enable_thinking
+        before the tool-injection retry (because the step-1 pop was
+        about diagnosing which param failed, not about removing
+        thinking permanently).  If the template then *also* rejects
+        enable_thinking, a final retry strips both.
+
+        The call sequence is:
+          1. {tools, enable_thinking} → TypeError (enable_thinking?)
+          2. {tools}                  → TypeError (tools!)
+          3. {enable_thinking} + injected msgs → TypeError (enable_thinking too!)
+          4. {} + injected msgs       → success
+        """
         mock_tokenizer.apply_chat_template.side_effect = [
             TypeError("unsupported keyword argument 'enable_thinking'"),
             TypeError("unsupported keyword argument 'tools'"),
+            TypeError("unsupported keyword argument 'enable_thinking'"),
             "<injected prompt>",
         ]
         result = apply_chat_template(
@@ -148,10 +162,35 @@ class TestApplyChatTemplate:
             model_name="test",
         )
         assert result == "<injected prompt>"
-        # Third call should have neither tools nor enable_thinking
+        # Fourth call should have neither tools nor enable_thinking
         _, fallback_kwargs = mock_tokenizer.apply_chat_template.call_args
         assert "tools" not in fallback_kwargs
         assert "enable_thinking" not in fallback_kwargs
+
+    def test_fallback_keeps_enable_thinking_when_only_tools_rejected(
+        self, mock_tokenizer, simple_messages
+    ):
+        """After #122: if only tools is rejected, enable_thinking
+        survives the tool-injection retry.  This is the common case
+        for Qwen/DeepSeek models whose templates support thinking
+        but don't accept tools as a kwarg."""
+        mock_tokenizer.apply_chat_template.side_effect = [
+            TypeError("unsupported keyword argument 'enable_thinking'"),
+            TypeError("unsupported keyword argument 'tools'"),
+            "<injected with thinking>",  # tools injected, enable_thinking kept
+        ]
+        result = apply_chat_template(
+            mock_tokenizer,
+            simple_messages,
+            tools=[{"type": "function", "function": {"name": "f", "parameters": {}}}],
+            enable_thinking=True,
+            model_name="test",
+        )
+        assert result == "<injected with thinking>"
+        # Third call should have enable_thinking=True (restored) but no tools
+        _, fallback_kwargs = mock_tokenizer.apply_chat_template.call_args
+        assert "tools" not in fallback_kwargs
+        assert fallback_kwargs.get("enable_thinking") is True
 
     def test_no_apply_chat_template_method(self, simple_messages):
         """Should use plain text fallback when no apply_chat_template."""

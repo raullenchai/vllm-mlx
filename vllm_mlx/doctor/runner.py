@@ -70,29 +70,37 @@ class DoctorRunner:
     def __init__(self, tier: str, run_dir: Path | None = None):
         self.tier = tier
         self.started = _dt.datetime.now()
-        self.run_dir = run_dir or self._unique_run_dir()
-        self.run_dir.mkdir(parents=True, exist_ok=True)
+        if run_dir is None:
+            self.run_dir = self._reserve_run_dir()
+        else:
+            self.run_dir = run_dir
+            self.run_dir.mkdir(parents=True, exist_ok=True)
         self.checks: list[CheckResult] = []
 
-    def _unique_run_dir(self) -> Path:
-        """Pick a run directory that does not collide with an existing one.
+    def _reserve_run_dir(self) -> Path:
+        """Atomically create and return a unique run directory.
 
-        Uses second precision plus a numeric suffix on collision so back-
-        to-back invocations of the same tier never overwrite each other's
-        artefacts (which would defeat the purpose of a regression log).
+        Uses ``mkdir(exist_ok=False)`` so concurrent same-second invocations
+        race on the filesystem — the loser gets ``FileExistsError`` and tries
+        the next suffix.  This is the only way to be safe against multiple
+        tiers launched in parallel (CI matrix, user kicking off two tiers
+        in two terminals, etc.).
         """
+        RUNS_DIR.mkdir(parents=True, exist_ok=True)
         ts = self.started.strftime("%Y-%m-%d-%H%M%S")
-        base = RUNS_DIR / f"{ts}-{self.tier}"
-        if not base.exists():
-            return base
-        # Highly unlikely (sub-second double-invocation) but cover it.
-        for i in range(1, 100):
-            candidate = RUNS_DIR / f"{ts}-{self.tier}-{i}"
-            if not candidate.exists():
+        for i in range(0, 1000):
+            suffix = "" if i == 0 else f"-{i}"
+            candidate = RUNS_DIR / f"{ts}-{self.tier}{suffix}"
+            try:
+                candidate.mkdir(parents=False, exist_ok=False)
                 return candidate
-        # Past 100 collisions, fall back to a microsecond-stamped dir
-        # rather than silently overwriting.
-        return RUNS_DIR / f"{ts}-{self.tier}-{self.started.microsecond}"
+            except FileExistsError:
+                continue
+        # Practically unreachable — 1000 collisions in one second.
+        raise RuntimeError(
+            f"Could not reserve a unique run directory under {RUNS_DIR} "
+            f"after 1000 attempts at {ts}"
+        )
 
     # ------------------------------------------------------------------
     # Check execution

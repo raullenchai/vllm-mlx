@@ -52,9 +52,7 @@ def _build_tool_injection_text(tools: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _inject_tools_into_messages(
-    messages: list[dict], tools: list[dict]
-) -> list[dict]:
+def _inject_tools_into_messages(messages: list[dict], tools: list[dict]) -> list[dict]:
     """Inject tool definitions into the system message.
 
     If the first message has role ``system``, append to its content.
@@ -153,8 +151,6 @@ def apply_chat_template(
                 len(tools),
             )
             injected = _inject_tools_into_messages(messages, tools)
-            return template_applicator.apply_chat_template(
-                injected, **template_kwargs
-            )
+            return template_applicator.apply_chat_template(injected, **template_kwargs)
 
         return template_applicator.apply_chat_template(messages, **template_kwargs)

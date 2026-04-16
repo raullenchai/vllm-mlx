@@ -1,4 +1,5 @@
 """Thorough smolagents test suite against local rapid-mlx server."""
+
 import os
 
 import httpx as _httpx
@@ -33,6 +34,7 @@ except Exception as e:
 # === 2. CodeAgent with tool ===
 print("\n=== Test 2: CodeAgent + custom tool ===")
 try:
+
     @tool
     def get_temp(city: str) -> str:
         """Returns the current temperature for a city.
@@ -54,6 +56,7 @@ except Exception as e:
 # === 3. ToolCallingAgent (uses tool_calls API instead of code) ===
 print("\n=== Test 3: ToolCallingAgent + tool ===")
 try:
+
     @tool
     def add_nums(a: int, b: int) -> int:
         """Add two integers.
@@ -76,6 +79,7 @@ except Exception as e:
 # === 4. Multi-tool ToolCallingAgent ===
 print("\n=== Test 4: ToolCallingAgent + multiple tools ===")
 try:
+
     @tool
     def square(n: int) -> int:
         """Square a number.

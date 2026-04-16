@@ -15,6 +15,7 @@ Metrics:
 Usage:
   python3.12 scripts/autoresearch_bench.py [--runs N] [--json]
 """
+
 import argparse
 import json
 import os
@@ -35,8 +36,14 @@ USER_MSG = "/no_think Explain how a hash table works. Cover collisions, load fac
 MULTI_TURN = [
     {"role": "system", "content": SYSTEM_MSG},
     {"role": "user", "content": "/no_think What is a binary search tree?"},
-    {"role": "assistant", "content": "A binary search tree (BST) is a data structure where each node has at most two children. The left child's value is less than the parent, and the right child's value is greater. This ordering property enables O(log n) search, insert, and delete operations in balanced trees."},
-    {"role": "user", "content": "/no_think Now implement one in Python with insert and search methods."},
+    {
+        "role": "assistant",
+        "content": "A binary search tree (BST) is a data structure where each node has at most two children. The left child's value is less than the parent, and the right child's value is greater. This ordering property enables O(log n) search, insert, and delete operations in balanced trees.",
+    },
+    {
+        "role": "user",
+        "content": "/no_think Now implement one in Python with insert and search methods.",
+    },
 ]
 
 TOOL_MESSAGES = [
@@ -67,9 +74,21 @@ LONG_PROMPT_MESSAGES = [
     {"role": "system", "content": "You are a knowledgeable assistant. " * 50},
 ]
 for i in range(20):
-    LONG_PROMPT_MESSAGES.append({"role": "user", "content": f"/no_think Question {i+1}: Explain concept number {i+1} in computer science briefly."})
-    LONG_PROMPT_MESSAGES.append({"role": "assistant", "content": f"Concept {i+1} is an important topic in computer science that involves understanding fundamental principles of computation, data organization, and algorithm design. It builds on prior concepts and enables more advanced techniques."})
-LONG_PROMPT_MESSAGES.append({"role": "user", "content": "/no_think Summarize all concepts in one paragraph."})
+    LONG_PROMPT_MESSAGES.append(
+        {
+            "role": "user",
+            "content": f"/no_think Question {i + 1}: Explain concept number {i + 1} in computer science briefly.",
+        }
+    )
+    LONG_PROMPT_MESSAGES.append(
+        {
+            "role": "assistant",
+            "content": f"Concept {i + 1} is an important topic in computer science that involves understanding fundamental principles of computation, data organization, and algorithm design. It builds on prior concepts and enables more advanced techniques.",
+        }
+    )
+LONG_PROMPT_MESSAGES.append(
+    {"role": "user", "content": "/no_think Summarize all concepts in one paragraph."}
+)
 
 
 def stream_request(messages, max_tokens=300, tools=None, timeout=60):
@@ -149,11 +168,16 @@ def run_suite(n_runs=3, verbose=True):
 
     # 1. Cold TTFT + Decode TPS (first request, no cache)
     log("\n[1/6] Cold TTFT + Decode TPS...")
-    msgs = [{"role": "system", "content": SYSTEM_MSG}, {"role": "user", "content": USER_MSG}]
+    msgs = [
+        {"role": "system", "content": SYSTEM_MSG},
+        {"role": "user", "content": USER_MSG},
+    ]
     r = stream_request(msgs, max_tokens=400)
     results["cold_ttft_ms"] = r["ttft_ms"]
     results["cold_tps"] = r["tps"]
-    log(f"  TTFT: {r['ttft_ms']:.0f}ms | Decode: {r['tps']:.1f} tok/s | Tokens: {r['tokens']}")
+    log(
+        f"  TTFT: {r['ttft_ms']:.0f}ms | Decode: {r['tps']:.1f} tok/s | Tokens: {r['tokens']}"
+    )
 
     # 2. Cached TTFT + steady-state Decode TPS
     log(f"\n[2/6] Cached TTFT + Decode TPS (x{n_runs})...")
@@ -163,10 +187,12 @@ def run_suite(n_runs=3, verbose=True):
         r = stream_request(msgs, max_tokens=400)
         cached_ttfts.append(r["ttft_ms"])
         cached_tps.append(r["tps"])
-        log(f"  Run {i+1}: TTFT={r['ttft_ms']:.0f}ms | Decode={r['tps']:.1f} tok/s")
+        log(f"  Run {i + 1}: TTFT={r['ttft_ms']:.0f}ms | Decode={r['tps']:.1f} tok/s")
     results["cached_ttft_ms"] = statistics.mean(cached_ttfts)
     results["decode_tps"] = statistics.mean(cached_tps)
-    results["decode_tps_stdev"] = statistics.stdev(cached_tps) if len(cached_tps) > 1 else 0
+    results["decode_tps_stdev"] = (
+        statistics.stdev(cached_tps) if len(cached_tps) > 1 else 0
+    )
 
     # 3. Multi-turn TTFT
     log(f"\n[3/6] Multi-turn TTFT (x{n_runs})...")
@@ -177,7 +203,7 @@ def run_suite(n_runs=3, verbose=True):
         r = stream_request(MULTI_TURN, max_tokens=150)
         mt_ttfts.append(r["ttft_ms"])
         mt_tps.append(r["tps"])
-        log(f"  Run {i+1}: TTFT={r['ttft_ms']:.0f}ms | Decode={r['tps']:.1f} tok/s")
+        log(f"  Run {i + 1}: TTFT={r['ttft_ms']:.0f}ms | Decode={r['tps']:.1f} tok/s")
     results["mt_ttft_ms"] = statistics.mean(mt_ttfts)
     results["mt_tps"] = statistics.mean(mt_tps)
 
@@ -192,7 +218,9 @@ def run_suite(n_runs=3, verbose=True):
             tc_success += 1
             if r.get("tc_latency_ms"):
                 tc_latencies.append(r["tc_latency_ms"])
-        log(f"  Run {i+1}: TC={'YES' if r.get('has_tool_calls') else 'NO'} | Latency={r.get('tc_latency_ms') or 0:.0f}ms")
+        log(
+            f"  Run {i + 1}: TC={'YES' if r.get('has_tool_calls') else 'NO'} | Latency={r.get('tc_latency_ms') or 0:.0f}ms"
+        )
     results["tc_latency_ms"] = statistics.mean(tc_latencies) if tc_latencies else 0
     results["tc_success_rate"] = tc_success / n_runs
 
@@ -201,7 +229,9 @@ def run_suite(n_runs=3, verbose=True):
     r = stream_request(LONG_PROMPT_MESSAGES, max_tokens=200)
     results["long_ttft_ms"] = r["ttft_ms"]
     results["long_tps"] = r["tps"]
-    log(f"  TTFT: {r['ttft_ms']:.0f}ms | Decode: {r['tps']:.1f} tok/s | Tokens: {r['tokens']}")
+    log(
+        f"  TTFT: {r['ttft_ms']:.0f}ms | Decode: {r['tps']:.1f} tok/s | Tokens: {r['tokens']}"
+    )
 
     # 6. Long prompt cached TTFT
     log(f"\n[6/6] Long prompt cached TTFT (x{n_runs})...")
@@ -209,16 +239,16 @@ def run_suite(n_runs=3, verbose=True):
     for i in range(n_runs):
         r = stream_request(LONG_PROMPT_MESSAGES, max_tokens=200)
         long_cached.append(r["ttft_ms"])
-        log(f"  Run {i+1}: TTFT={r['ttft_ms']:.0f}ms")
+        log(f"  Run {i + 1}: TTFT={r['ttft_ms']:.0f}ms")
     results["long_cached_ttft_ms"] = statistics.mean(long_cached)
 
     # Composite score: weighted combination (higher = better)
     # Weights reflect importance for user experience
     score = (
-        results["decode_tps"] * 1.0          # Primary: throughput
+        results["decode_tps"] * 1.0  # Primary: throughput
         + (1000 / max(results["cached_ttft_ms"], 1)) * 10  # Responsiveness
-        + (1000 / max(results["mt_ttft_ms"], 1)) * 5       # Multi-turn speed
-        + results["tc_success_rate"] * 20     # Tool reliability
+        + (1000 / max(results["mt_ttft_ms"], 1)) * 5  # Multi-turn speed
+        + results["tc_success_rate"] * 20  # Tool reliability
         + (1000 / max(results["long_cached_ttft_ms"], 1)) * 3  # Long context
     )
     results["composite_score"] = round(score, 1)
@@ -231,15 +261,19 @@ def print_summary(results, label=""):
     print("\n" + "=" * 65)
     print(f"BENCHMARK RESULTS {label}")
     print("=" * 65)
-    print(f"  Decode TPS:         {results['decode_tps']:.1f} tok/s (±{results.get('decode_tps_stdev', 0):.1f})")
+    print(
+        f"  Decode TPS:         {results['decode_tps']:.1f} tok/s (±{results.get('decode_tps_stdev', 0):.1f})"
+    )
     print(f"  Cold TTFT:          {results['cold_ttft_ms']:.0f} ms")
     print(f"  Cached TTFT:        {results['cached_ttft_ms']:.0f} ms")
     print(f"  Multi-turn TTFT:    {results['mt_ttft_ms']:.0f} ms")
     print(f"  Tool call latency:  {results['tc_latency_ms']:.0f} ms")
-    print(f"  Tool success rate:  {results['tc_success_rate']*100:.0f}%")
+    print(f"  Tool success rate:  {results['tc_success_rate'] * 100:.0f}%")
     print(f"  Long prompt TTFT:   {results['long_ttft_ms']:.0f} ms (cold)")
     print(f"  Long cached TTFT:   {results['long_cached_ttft_ms']:.0f} ms")
-    print(f"  Cache speedup:      {results['cold_ttft_ms']/max(results['cached_ttft_ms'],1):.1f}x")
+    print(
+        f"  Cache speedup:      {results['cold_ttft_ms'] / max(results['cached_ttft_ms'], 1):.1f}x"
+    )
     print(f"  Composite score:    {results['composite_score']:.1f}")
     print("=" * 65)
 
@@ -272,8 +306,8 @@ def compare_results(baseline, experiment, label=""):
             delta_pct = ((e - b) / b) * 100
 
         if key == "tc_success_rate":
-            b_str = f"{b*100:.0f}%"
-            e_str = f"{e*100:.0f}%"
+            b_str = f"{b * 100:.0f}%"
+            e_str = f"{e * 100:.0f}%"
         else:
             b_str = f"{b:.1f}{unit}"
             e_str = f"{e:.1f}{unit}"
@@ -294,9 +328,13 @@ def compare_results(baseline, experiment, label=""):
             indicator = "DN"
             regression = True
 
-        print(f"  {indicator} {name:20s}: {b_str:>10s} -> {e_str:>10s} ({delta_pct:+.1f}%)")
+        print(
+            f"  {indicator} {name:20s}: {b_str:>10s} -> {e_str:>10s} ({delta_pct:+.1f}%)"
+        )
 
-    verdict = "KEEP" if improved and not regression else "REVERT" if regression else "NEUTRAL"
+    verdict = (
+        "KEEP" if improved and not regression else "REVERT" if regression else "NEUTRAL"
+    )
     print(f"\n  Verdict: {verdict}")
     return improved, regression
 

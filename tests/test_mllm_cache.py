@@ -147,7 +147,9 @@ class TestImageHashing:
             # Order matters: image sequence affects vision embeddings/KV state
             hash_a = compute_images_hash([path1, path2])
             hash_b = compute_images_hash([path2, path1])
-            assert hash_a != hash_b, "Different image orders must produce different hashes"
+            assert hash_a != hash_b, (
+                "Different image orders must produce different hashes"
+            )
             # Same order is deterministic
             hash_c = compute_images_hash([path1, path2])
             assert hash_a == hash_c

@@ -1,4 +1,5 @@
 """Anthropic SDK against rapid-mlx /v1/messages endpoint."""
+
 import os
 
 import httpx as _httpx
@@ -25,7 +26,9 @@ try:
     r = client.messages.create(
         model=MODEL_ID,
         max_tokens=50,
-        messages=[{"role": "user", "content": "What is 2+2? Reply with just the number."}],
+        messages=[
+            {"role": "user", "content": "What is 2+2? Reply with just the number."}
+        ],
     )
     text = r.content[0].text
     assert "4" in text, text
@@ -94,15 +97,17 @@ try:
     r = client.messages.create(
         model=MODEL_ID,
         max_tokens=200,
-        tools=[{
-            "name": "get_weather",
-            "description": "Get the weather for a city.",
-            "input_schema": {
-                "type": "object",
-                "properties": {"city": {"type": "string"}},
-                "required": ["city"],
-            },
-        }],
+        tools=[
+            {
+                "name": "get_weather",
+                "description": "Get the weather for a city.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            }
+        ],
         messages=[{"role": "user", "content": "What's the weather in Tokyo?"}],
     )
     # Find tool_use blocks

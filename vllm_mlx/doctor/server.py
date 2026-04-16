@@ -75,9 +75,14 @@ def serve(
     serve_target = str(model_path) if model_path else model
     cmd = [
         python_executable(),
-        "-m", "vllm_mlx.cli", "serve", serve_target,
-        "--host", "127.0.0.1",
-        "--port", str(port),
+        "-m",
+        "vllm_mlx.cli",
+        "serve",
+        serve_target,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
     ]
     if extra_args:
         cmd.extend(extra_args)

@@ -21,6 +21,7 @@ from vllm_mlx.doctor.runner import (
 # Exit-code contract
 # ----------------------------------------------------------------------
 
+
 class TestExitCodeContract:
     """Documented contract: 0 = pass, 1 = regression, 2 = functional fail."""
 
@@ -75,6 +76,7 @@ class TestExitCodeContract:
 # md_cell — markdown table escaping
 # ----------------------------------------------------------------------
 
+
 class TestMdCell:
     def test_passes_through_safe_text(self):
         assert md_cell("hello world") == "hello world"
@@ -108,11 +110,13 @@ class TestMdCell:
 # Atomic run-dir reservation
 # ----------------------------------------------------------------------
 
+
 class TestRunDirReservation:
     def test_back_to_back_runs_get_distinct_dirs(self, tmp_path, monkeypatch):
         """Concurrent invocations must never share a run dir, otherwise
         report.md / result.json get clobbered."""
         from vllm_mlx.doctor import runner as runner_mod
+
         monkeypatch.setattr(runner_mod, "RUNS_DIR", tmp_path)
         r1 = DoctorRunner(tier="x")
         r2 = DoctorRunner(tier="x")
@@ -127,9 +131,11 @@ class TestRunDirReservation:
 # Report rendering smoke test (catches structural regressions)
 # ----------------------------------------------------------------------
 
+
 class TestReportRendering:
     def test_basic_report_renders_table(self, tmp_path, monkeypatch):
         from vllm_mlx.doctor import runner as runner_mod
+
         monkeypatch.setattr(runner_mod, "RUNS_DIR", tmp_path)
         r = DoctorRunner(tier="test")
 
@@ -140,6 +146,7 @@ class TestReportRendering:
                 duration_s=1.5,
                 detail="all good",
             )
+
         r.run_check("example", fake_check)
         result = r.finalize()
 
@@ -150,10 +157,14 @@ class TestReportRendering:
 
     def test_report_includes_diff_sections_when_stashed(self, tmp_path, monkeypatch):
         from vllm_mlx.doctor import runner as runner_mod
+
         monkeypatch.setattr(runner_mod, "RUNS_DIR", tmp_path)
         r = DoctorRunner(tier="test")
         r._pending_diff_sections = [  # type: ignore[attr-defined]
-            ("model-a", "| metric | base | curr | dp | s |\n| --- | --- | --- | --- | --- |\n"),
+            (
+                "model-a",
+                "| metric | base | curr | dp | s |\n| --- | --- | --- | --- | --- |\n",
+            ),
         ]
 
         # Need at least one check otherwise finalize() works fine but the
@@ -168,6 +179,7 @@ class TestReportRendering:
 
     def test_pipe_in_detail_does_not_break_table(self, tmp_path, monkeypatch):
         from vllm_mlx.doctor import runner as runner_mod
+
         monkeypatch.setattr(runner_mod, "RUNS_DIR", tmp_path)
         r = DoctorRunner(tier="test")
 
@@ -178,6 +190,7 @@ class TestReportRendering:
                 duration_s=0.1,
                 detail='Traceback: File "x.py" | line 42 | a',
             )
+
         r.run_check("weird", crashing)
         result = r.finalize()
         report = (Path(result.run_dir) / "report.md").read_text()
@@ -205,12 +218,14 @@ class TestReportRendering:
 # Boot-timeout default
 # ----------------------------------------------------------------------
 
+
 class TestDefaultBootTimeout:
     """Single generous default beats heuristics that miss models like
     'qwen3-coder' (80B, no param-count hint in alias)."""
 
     def test_default_is_generous(self):
         from vllm_mlx.doctor.cli import DEFAULT_BOOT_TIMEOUT_S
+
         # 600s is the floor for cold-loading 122B models from a slow SSD;
         # bumping below 300s would re-introduce the false-fail class
         # codex round 3 flagged.

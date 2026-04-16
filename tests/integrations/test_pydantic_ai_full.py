@@ -1,4 +1,5 @@
 """Thorough PydanticAI test suite against local rapid-mlx server."""
+
 import asyncio
 import os
 
@@ -39,13 +40,17 @@ except Exception as e:
 # === 2. Streaming ===
 print("\n=== Test 2: Streaming ===")
 try:
+
     async def stream_test():
         agent = Agent(model)
         chunks = []
-        async with agent.run_stream("Count from 1 to 5, separated by commas.") as result:
+        async with agent.run_stream(
+            "Count from 1 to 5, separated by commas."
+        ) as result:
             async for delta in result.stream_text(delta=True):
                 chunks.append(delta)
         return "".join(chunks)
+
     out = asyncio.run(stream_test())
     assert len(out) > 5, f"Too short: {out}"
     assert any(d in out for d in ["1", "2", "3"]), out
@@ -58,6 +63,7 @@ except Exception as e:
 # === 3. Structured output (BaseModel) ===
 print("\n=== Test 3: Structured output ===")
 try:
+
     class Person(BaseModel):
         name: str
         age: int

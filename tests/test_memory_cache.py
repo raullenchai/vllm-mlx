@@ -7,6 +7,7 @@ import pytest
 
 try:
     import mlx_lm  # noqa: F401
+
     _has_mlx_lm = True
 except ImportError:
     _has_mlx_lm = False
@@ -470,9 +471,7 @@ class TestCacheListTrimmability:
         config = MemoryCacheConfig(max_memory_mb=10, max_entries=10)
         return MemoryAwarePrefixCache(model, config)
 
-    @pytest.mark.skipif(
-        not _has_mlx_lm, reason="mlx_lm not available (Linux CI)"
-    )
+    @pytest.mark.skipif(not _has_mlx_lm, reason="mlx_lm not available (Linux CI)")
     def test_supersequence_trimmable_cachelist_hits(self, cache):
         """CacheList with is_trimmable()=True must allow supersequence trim, not skip."""
         # Store a longer sequence
@@ -504,9 +503,7 @@ class TestCacheListTrimmability:
         assert result is None
         assert remaining == short_tokens
 
-    @pytest.mark.skipif(
-        not _has_mlx_lm, reason="mlx_lm not available (Linux CI)"
-    )
+    @pytest.mark.skipif(not _has_mlx_lm, reason="mlx_lm not available (Linux CI)")
     def test_lcp_trimmable_cachelist_hits(self, cache):
         """CacheList with is_trimmable()=True must allow LCP trim path."""
         # Store tokens that share a prefix but diverge

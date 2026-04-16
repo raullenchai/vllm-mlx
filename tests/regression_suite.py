@@ -10,11 +10,14 @@ import urllib.request
 _PORT = os.environ.get("RAPID_MLX_PORT", "8777")
 BASE = f"http://localhost:{_PORT}"
 
+
 def api_call(path, body=None, method="GET"):
     """Make an API call, return (status_code, parsed_json_or_None)."""
     url = BASE + path
     data = json.dumps(body).encode() if body else None
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"}
+    )
     if method != "GET" and data is None:
         req.method = method
     try:
@@ -27,11 +30,14 @@ def api_call(path, body=None, method="GET"):
             body_text = ""
         return e.code, body_text
 
+
 def stream_call(path, body):
     """Make a streaming API call, return collected text and all SSE lines."""
     url = BASE + path
     data = json.dumps(body).encode()
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"}
+    )
     text = ""
     lines = []
     with urllib.request.urlopen(req) as resp:
@@ -46,17 +52,21 @@ def stream_call(path, body):
                         text += delta["content"]
     return text, lines
 
+
 def test_1():
     """Stop at newline."""
     print("=" * 60)
     print("TEST 1: Stop sequence - newline")
-    _, r = api_call("/v1/chat/completions", {
-        "model": "default",
-        "messages": [{"role": "user", "content": "Say hello then explain python"}],
-        "stop": ["\n"],
-        "max_tokens": 100,
-        "stream": False
-    })
+    _, r = api_call(
+        "/v1/chat/completions",
+        {
+            "model": "default",
+            "messages": [{"role": "user", "content": "Say hello then explain python"}],
+            "stop": ["\n"],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
     content = r["choices"][0]["message"]["content"]
     finish = r["choices"][0]["finish_reason"]
     has_newline = "\n" in content
@@ -67,17 +77,23 @@ def test_1():
     print(f"  RESULT: {'PASS' if passed else 'FAIL'}")
     return passed
 
+
 def test_2():
     """Multiple stop sequences (first match wins)."""
     print("=" * 60)
     print("TEST 2: Multiple stop sequences")
-    _, r = api_call("/v1/chat/completions", {
-        "model": "default",
-        "messages": [{"role": "user", "content": "Write: Hello World! Goodbye World!"}],
-        "stop": ["World", "!"],
-        "max_tokens": 100,
-        "stream": False
-    })
+    _, r = api_call(
+        "/v1/chat/completions",
+        {
+            "model": "default",
+            "messages": [
+                {"role": "user", "content": "Write: Hello World! Goodbye World!"}
+            ],
+            "stop": ["World", "!"],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
     content = r["choices"][0]["message"]["content"]
     finish = r["choices"][0]["finish_reason"]
     has_world = "World" in content
@@ -90,17 +106,21 @@ def test_2():
     print(f"  RESULT: {'PASS' if passed else 'FAIL'}")
     return passed
 
+
 def test_3():
     """Empty stop sequence array."""
     print("=" * 60)
     print("TEST 3: Empty stop sequence array")
-    code, r = api_call("/v1/chat/completions", {
-        "model": "default",
-        "messages": [{"role": "user", "content": "hi"}],
-        "stop": [],
-        "max_tokens": 10,
-        "stream": False
-    })
+    code, r = api_call(
+        "/v1/chat/completions",
+        {
+            "model": "default",
+            "messages": [{"role": "user", "content": "hi"}],
+            "stop": [],
+            "max_tokens": 10,
+            "stream": False,
+        },
+    )
     if code == 200:
         content = r["choices"][0]["message"]["content"]
         print(f"  OK: {content[:50]!r}")
@@ -111,17 +131,21 @@ def test_3():
     print(f"  RESULT: {'PASS' if passed else 'FAIL'}")
     return passed
 
+
 def test_4():
     """Unicode stop sequences."""
     print("=" * 60)
     print("TEST 4: Unicode stop sequences")
-    _, r = api_call("/v1/chat/completions", {
-        "model": "default",
-        "messages": [{"role": "user", "content": "Say 你好世界 then say goodbye"}],
-        "stop": ["世界"],
-        "max_tokens": 100,
-        "stream": False
-    })
+    _, r = api_call(
+        "/v1/chat/completions",
+        {
+            "model": "default",
+            "messages": [{"role": "user", "content": "Say 你好世界 then say goodbye"}],
+            "stop": ["世界"],
+            "max_tokens": 100,
+            "stream": False,
+        },
+    )
     content = r["choices"][0]["message"]["content"]
     has_stop = "世界" in content
     print(f"  Content: {content!r}")
@@ -131,17 +155,23 @@ def test_4():
     print(f"  RESULT: {'PASS' if passed else 'FAIL'}")
     return passed
 
+
 def test_5():
     """Streaming stop sequence truncation."""
     print("=" * 60)
     print("TEST 5: Streaming stop sequence truncation")
-    text, lines = stream_call("/v1/chat/completions", {
-        "model": "default",
-        "messages": [{"role": "user", "content": "Count: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10"}],
-        "stop": [", 5"],
-        "max_tokens": 100,
-        "stream": True
-    })
+    text, lines = stream_call(
+        "/v1/chat/completions",
+        {
+            "model": "default",
+            "messages": [
+                {"role": "user", "content": "Count: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10"}
+            ],
+            "stop": [", 5"],
+            "max_tokens": 100,
+            "stream": True,
+        },
+    )
     has_stop = ", 5" in text
     print(f"  Text: {text!r}")
     print(f"  Contains ', 5': {has_stop}")
@@ -149,17 +179,21 @@ def test_5():
     print(f"  RESULT: {'PASS' if passed else 'FAIL'}")
     return passed
 
+
 def test_6():
     """Completions endpoint (/v1/completions)."""
     print("=" * 60)
     print("TEST 6: Completions endpoint")
-    code, r = api_call("/v1/completions", {
-        "model": "default",
-        "prompt": "def fibonacci(n):\n    ",
-        "max_tokens": 50,
-        "stop": ["\n\n"],
-        "temperature": 0
-    })
+    code, r = api_call(
+        "/v1/completions",
+        {
+            "model": "default",
+            "prompt": "def fibonacci(n):\n    ",
+            "max_tokens": 50,
+            "stop": ["\n\n"],
+            "temperature": 0,
+        },
+    )
     print(f"  HTTP {code}")
     if code == 200:
         if isinstance(r, dict):
@@ -179,17 +213,49 @@ def test_6():
     print(f"  RESULT: {'PASS' if passed else 'FAIL (endpoint may not be implemented)'}")
     return passed
 
+
 def test_7():
     """Validation rules - all should return 400."""
     print("=" * 60)
     print("TEST 7: Validation rules")
     cases = [
-        ("max_tokens=0", {"model": "default", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 0}),
-        ("temp=-0.1", {"model": "default", "messages": [{"role": "user", "content": "hi"}], "temperature": -0.1}),
-        ("temp=2.1", {"model": "default", "messages": [{"role": "user", "content": "hi"}], "temperature": 2.1}),
-        ("n=2", {"model": "default", "messages": [{"role": "user", "content": "hi"}], "n": 2}),
+        (
+            "max_tokens=0",
+            {
+                "model": "default",
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 0,
+            },
+        ),
+        (
+            "temp=-0.1",
+            {
+                "model": "default",
+                "messages": [{"role": "user", "content": "hi"}],
+                "temperature": -0.1,
+            },
+        ),
+        (
+            "temp=2.1",
+            {
+                "model": "default",
+                "messages": [{"role": "user", "content": "hi"}],
+                "temperature": 2.1,
+            },
+        ),
+        (
+            "n=2",
+            {
+                "model": "default",
+                "messages": [{"role": "user", "content": "hi"}],
+                "n": 2,
+            },
+        ),
         ("empty messages", {"model": "default", "messages": []}),
-        ("invalid role", {"model": "default", "messages": [{"role": "foo", "content": "hi"}]}),
+        (
+            "invalid role",
+            {"model": "default", "messages": [{"role": "foo", "content": "hi"}]},
+        ),
     ]
     all_pass = True
     for name, body in cases:
@@ -200,6 +266,7 @@ def test_7():
         print(f"  {name}: HTTP {code} ({'PASS' if ok else 'FAIL - expected 400'})")
     print(f"  RESULT: {'PASS' if all_pass else 'FAIL'}")
     return all_pass
+
 
 def test_8():
     """Health endpoint."""
@@ -215,6 +282,7 @@ def test_8():
         passed = False
     print(f"  RESULT: {'PASS' if passed else 'FAIL'}")
     return passed
+
 
 def test_9():
     """Model endpoint format validation."""
@@ -243,17 +311,21 @@ def test_9():
     print(f"  RESULT: {'PASS' if all_pass else 'FAIL'}")
     return all_pass
 
+
 def test_10():
     """Streaming usage stats (stream_options)."""
     print("=" * 60)
     print("TEST 10: Streaming usage stats")
-    text, lines = stream_call("/v1/chat/completions", {
-        "model": "default",
-        "messages": [{"role": "user", "content": "hi"}],
-        "max_tokens": 10,
-        "stream": True,
-        "stream_options": {"include_usage": True}
-    })
+    text, lines = stream_call(
+        "/v1/chat/completions",
+        {
+            "model": "default",
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 10,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        },
+    )
     print(f"  Total SSE data lines: {len(lines)}")
     print("  Last 3 lines:")
     for line in lines[-3:]:
@@ -272,9 +344,24 @@ def test_10():
     print(f"  RESULT: {'PASS' if found_usage else 'FAIL'}")
     return found_usage
 
+
 if __name__ == "__main__":
     results = {}
-    for i, test_fn in enumerate([test_1, test_2, test_3, test_4, test_5, test_6, test_7, test_8, test_9, test_10], 1):
+    for i, test_fn in enumerate(
+        [
+            test_1,
+            test_2,
+            test_3,
+            test_4,
+            test_5,
+            test_6,
+            test_7,
+            test_8,
+            test_9,
+            test_10,
+        ],
+        1,
+    ):
         try:
             results[i] = test_fn()
         except Exception as e:

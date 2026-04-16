@@ -198,9 +198,8 @@ class DeepSeekV31ToolParser(ToolParser):
                 cur_tool_start_count == cur_tool_end_count
                 and cur_tool_end_count >= prev_tool_end_count
             ):
-                if (
-                    not self.prev_tool_call_arr
-                    or self.current_tool_id >= len(self.prev_tool_call_arr)
+                if not self.prev_tool_call_arr or self.current_tool_id >= len(
+                    self.prev_tool_call_arr
                 ):
                     return None
                 diff = self.prev_tool_call_arr[self.current_tool_id].get("arguments")

@@ -129,7 +129,9 @@ def _is_complete_snapshot(snap: Path) -> bool:
     return False
 
 
-def _check_alias(alias: str, repo_id: str, cache_roots: list[Path]) -> ModelAvailability:
+def _check_alias(
+    alias: str, repo_id: str, cache_roots: list[Path]
+) -> ModelAvailability:
     """Look for the model in the candidate cache roots.
 
     Two cache layouts are checked at every root:
@@ -154,8 +156,10 @@ def _check_alias(alias: str, repo_id: str, cache_roots: list[Path]) -> ModelAvai
                 for snap in snapshots.iterdir():
                     if _is_complete_snapshot(snap):
                         return ModelAvailability(
-                            alias=alias, repo_id=repo_id,
-                            available=True, path=snap,
+                            alias=alias,
+                            repo_id=repo_id,
+                            available=True,
+                            path=snap,
                         )
                     elif (snap / "config.json").exists():
                         saw_partial = True
@@ -164,8 +168,10 @@ def _check_alias(alias: str, repo_id: str, cache_roots: list[Path]) -> ModelAvai
         raw_candidate = root.joinpath(*repo_id.split("/"))
         if _is_complete_snapshot(raw_candidate):
             return ModelAvailability(
-                alias=alias, repo_id=repo_id,
-                available=True, path=raw_candidate,
+                alias=alias,
+                repo_id=repo_id,
+                available=True,
+                path=raw_candidate,
             )
         elif (raw_candidate / "config.json").exists():
             saw_partial = True
@@ -176,7 +182,10 @@ def _check_alias(alias: str, repo_id: str, cache_roots: list[Path]) -> ModelAvai
         else "not found in HF_HUB_CACHE / ~/.cache/huggingface / ~/.lmstudio"
     )
     return ModelAvailability(
-        alias=alias, repo_id=repo_id, available=False, reason=reason,
+        alias=alias,
+        repo_id=repo_id,
+        available=False,
+        reason=reason,
     )
 
 

@@ -208,9 +208,7 @@ except ImportError:
 import pytest
 
 
-@pytest.mark.skipif(
-    not _has_mistral_parser, reason="transformers not installed"
-)
+@pytest.mark.skipif(not _has_mistral_parser, reason="transformers not installed")
 class TestMistralArgsStripping:
     """Tests for [ARGS] suffix stripping in Mistral parser."""
 

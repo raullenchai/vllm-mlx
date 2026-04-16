@@ -67,6 +67,7 @@ def load_thresholds(path: Path | None = None) -> dict[str, dict[str, float]]:
 # Baseline read/write
 # ---------------------------------------------------------------------
 
+
 def safe_model_slug(model: str) -> str:
     """File-system-safe, *injective* slug for baseline filenames.
 
@@ -154,12 +155,13 @@ def save_baseline(tier: str, model: str, metrics: dict[str, float]) -> Path:
 # Comparison
 # ---------------------------------------------------------------------
 
+
 class DeltaStatus(str, Enum):
-    OK = "ok"               # within thresholds
+    OK = "ok"  # within thresholds
     REGRESSION = "regression"
     IMPROVEMENT = "improvement"
-    NEW = "new"             # metric absent in baseline
-    DROPPED = "dropped"     # metric absent in current run
+    NEW = "new"  # metric absent in baseline
+    DROPPED = "dropped"  # metric absent in current run
 
 
 @dataclass
@@ -181,7 +183,7 @@ _LOWER_IS_BETTER = {
     "mt_ttft_ms",
     "long_ttft_ms",
     "long_cached_ttft_ms",
-    "tc_latency_ms",          # tool-call latency: lower = better
+    "tc_latency_ms",  # tool-call latency: lower = better
     "peak_ram_mb",
     # legacy / alternate names retained so older baselines and
     # external bench scripts using *ttft_cold_ms* style keys also
@@ -207,14 +209,24 @@ def _classify(
 ) -> tuple[DeltaStatus, float, float]:
     """Classify (status, delta_pct, regression_threshold)."""
     cfg = thresholds.get(metric, DEFAULT_THRESHOLDS)
-    regression_pct = float(cfg.get("regression_pct", DEFAULT_THRESHOLDS["regression_pct"]))
-    improvement_pct = float(cfg.get("improvement_pct", DEFAULT_THRESHOLDS["improvement_pct"]))
+    regression_pct = float(
+        cfg.get("regression_pct", DEFAULT_THRESHOLDS["regression_pct"])
+    )
+    improvement_pct = float(
+        cfg.get("improvement_pct", DEFAULT_THRESHOLDS["improvement_pct"])
+    )
 
     if baseline == 0:
         # Avoid div-by-zero — treat any change as a status flip.
         if current == 0:
             return DeltaStatus.OK, 0.0, regression_pct
-        return DeltaStatus.IMPROVEMENT if not _is_lower_better(metric) else DeltaStatus.REGRESSION, float("inf"), regression_pct
+        return (
+            DeltaStatus.IMPROVEMENT
+            if not _is_lower_better(metric)
+            else DeltaStatus.REGRESSION,
+            float("inf"),
+            regression_pct,
+        )
 
     raw_delta_pct = (current - baseline) / baseline * 100
     # For lower-is-better metrics, invert the sign so positive delta_pct
@@ -241,7 +253,9 @@ def compare(
     enclosing CheckResult as ``Status.REGRESSION``.
     """
     deltas: list[MetricDelta] = []
-    base_metrics: dict[str, float] = (baseline or {}).get("metrics", {}) if baseline else {}
+    base_metrics: dict[str, float] = (
+        (baseline or {}).get("metrics", {}) if baseline else {}
+    )
 
     all_metrics = sorted(set(current) | set(base_metrics))
     for m in all_metrics:
@@ -249,21 +263,35 @@ def compare(
         base = base_metrics.get(m)
         if base is None:
             deltas.append(
-                MetricDelta(metric=m, baseline=None, current=cur,
-                            delta_pct=None, status=DeltaStatus.NEW)
+                MetricDelta(
+                    metric=m,
+                    baseline=None,
+                    current=cur,
+                    delta_pct=None,
+                    status=DeltaStatus.NEW,
+                )
             )
             continue
         if cur is None:
             deltas.append(
-                MetricDelta(metric=m, baseline=base, current=None,
-                            delta_pct=None, status=DeltaStatus.DROPPED)
+                MetricDelta(
+                    metric=m,
+                    baseline=base,
+                    current=None,
+                    delta_pct=None,
+                    status=DeltaStatus.DROPPED,
+                )
             )
             continue
         status, delta_pct, threshold = _classify(m, base, cur, thresholds)
         deltas.append(
             MetricDelta(
-                metric=m, baseline=base, current=cur,
-                delta_pct=delta_pct, status=status, threshold_pct=threshold,
+                metric=m,
+                baseline=base,
+                current=cur,
+                delta_pct=delta_pct,
+                status=status,
+                threshold_pct=threshold,
             )
         )
     return deltas

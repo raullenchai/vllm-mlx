@@ -261,6 +261,7 @@ def _strip_markdown_code_block(text: str) -> str:
         Text before ```json\n{...}\n``` text after
     """
     import re
+
     # Match ```json or ``` followed by content and closing ```
     pattern = re.compile(
         r"```(?:json|JSON)?\s*\n([\s\S]*?)\n\s*```",
@@ -306,7 +307,10 @@ _TOOL_CALL_TAGS: list[tuple[str, str]] = [
     ("<tool_call>", "</tool_call>"),
     ("<function=", "</function>"),
     ("[TOOL_CALL]", "[/TOOL_CALL]"),
-    ("[Calling tool", "\n"),  # Bracket-style tool calls: suppress until newline (covers both ]\n and bare \n)
+    (
+        "[Calling tool",
+        "\n",
+    ),  # Bracket-style tool calls: suppress until newline (covers both ]\n and bare \n)
 ]
 
 

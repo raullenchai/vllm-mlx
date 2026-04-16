@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 class Channel(Enum):
     """Output channel for a token."""
+
     CONTENT = auto()
     REASONING = auto()
     TOOL_CALL = auto()
@@ -47,6 +48,7 @@ class Channel(Enum):
 @dataclass
 class RouterEvent:
     """A single routed token."""
+
     channel: Channel
     token_id: int
     text: str  # decoded text for this token
@@ -55,29 +57,30 @@ class RouterEvent:
 @dataclass
 class TokenMap:
     """Special token ID mappings for a model family."""
+
     # Channel control (Gemma 4 style)
-    channel_start: int | None = None      # <|channel> = 100
-    channel_end: int | None = None        # <channel|> = 101
-    thought_word: int | None = None       # "thought" = 45518
-    content_word: int | None = None       # "content" = 3955
-    final_word: int | None = None         # "final" = 10218
+    channel_start: int | None = None  # <|channel> = 100
+    channel_end: int | None = None  # <channel|> = 101
+    thought_word: int | None = None  # "thought" = 45518
+    content_word: int | None = None  # "content" = 3955
+    final_word: int | None = None  # "final" = 10218
 
     # Turn control
-    turn_start: int | None = None         # <|turn> = 105
-    turn_end: int | None = None           # <turn|> = 106
+    turn_start: int | None = None  # <|turn> = 105
+    turn_end: int | None = None  # <turn|> = 106
 
     # Tool call (Gemma 4 style)
-    tool_call_start: int | None = None    # <|tool_call> = 48
-    tool_call_end: int | None = None      # <tool_call|> = 49
-    tool_quote: int | None = None         # <|"|> = 52
-    tool_start: int | None = None         # <|tool> = 46
-    tool_end: int | None = None           # <tool|> = 47
+    tool_call_start: int | None = None  # <|tool_call> = 48
+    tool_call_end: int | None = None  # <tool_call|> = 49
+    tool_quote: int | None = None  # <|"|> = 52
+    tool_start: int | None = None  # <|tool> = 46
+    tool_end: int | None = None  # <tool|> = 47
     tool_response_start: int | None = None  # <|tool_response> = 50
-    tool_response_end: int | None = None    # <tool_response|> = 51
+    tool_response_end: int | None = None  # <tool_response|> = 51
 
     # Think tags (Qwen/DeepSeek style) — for future migration
-    think_start: int | None = None        # <think> token ID
-    think_end: int | None = None          # </think> token ID
+    think_start: int | None = None  # <think> token ID
+    think_end: int | None = None  # </think> token ID
 
     # Standard control
     bos: int | None = None
@@ -85,13 +88,13 @@ class TokenMap:
     pad: int | None = None
 
 
-
 class RouterState(Enum):
     """State machine states."""
+
     INIT = auto()
-    THINKING = auto()           # inside thought channel
-    CONTENT = auto()            # inside content/final channel
-    TOOL_CALL = auto()          # inside tool call
+    THINKING = auto()  # inside thought channel
+    CONTENT = auto()  # inside content/final channel
+    TOOL_CALL = auto()  # inside tool call
     AWAITING_CHANNEL_TYPE = auto()  # saw <|channel>, waiting for thought/content/final
 
 
@@ -129,8 +132,12 @@ class OutputRouter:
         if token_id == m.turn_start or token_id == m.turn_end:
             return None
         # Suppress tool-related markers that may appear without proper nesting
-        if token_id in (m.tool_response_start, m.tool_response_end,
-                         m.tool_start, m.tool_end):
+        if token_id in (
+            m.tool_response_start,
+            m.tool_response_end,
+            m.tool_start,
+            m.tool_end,
+        ):
             return None
 
         # === Channel start: transition to AWAITING_CHANNEL_TYPE ===
@@ -245,10 +252,11 @@ class OutputRouter:
                 pad=vocab.get("<pad>"),
             )
             logger.info(
-                "[OutputRouter] Gemma 4 format detected: "
-                "channel=%d/%d, tool=%d/%d",
-                token_map.channel_start, token_map.channel_end,
-                token_map.tool_call_start, token_map.tool_call_end,
+                "[OutputRouter] Gemma 4 format detected: channel=%d/%d, tool=%d/%d",
+                token_map.channel_start,
+                token_map.channel_end,
+                token_map.tool_call_start,
+                token_map.tool_call_end,
             )
             return cls(token_map, tokenizer)
 

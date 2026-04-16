@@ -219,7 +219,6 @@ class DoctorRunner:
                 lines.append("")
         return "\n".join(lines) + "\n"
 
-
     def _print_summary(self, result: TierResult) -> None:
         n_pass = sum(1 for c in result.checks if c.status == Status.PASS)
         n_fail = sum(1 for c in result.checks if c.status == Status.FAIL)
@@ -255,6 +254,7 @@ def md_cell(s: str, max_len: int = 0) -> str:
 # ----------------------------------------------------------------------
 # Helpers shared by tier implementations
 # ----------------------------------------------------------------------
+
 
 def run_subprocess(
     cmd: list[str],

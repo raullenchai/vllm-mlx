@@ -96,6 +96,7 @@ def doctor_command(args) -> None:
 # Smoke tier
 # ---------------------------------------------------------------------
 
+
 def run_smoke_tier():
     """Static + import + CLI sanity. No model required."""
     from .checks import smoke
@@ -115,6 +116,7 @@ def run_smoke_tier():
 # ---------------------------------------------------------------------
 # Check tier
 # ---------------------------------------------------------------------
+
 
 def run_check_tier(model: str, update_baselines: bool = False):
     """Boot a server with ``model`` and run API + perf + agent checks."""
@@ -142,6 +144,7 @@ def run_check_tier(model: str, update_baselines: bool = False):
 # ---------------------------------------------------------------------
 # Full tier
 # ---------------------------------------------------------------------
+
 
 def run_full_tier(models: list[str], update_baselines: bool = False):
     """Loop check-tier work across multiple models + run all agent profiles."""
@@ -186,6 +189,7 @@ def _resolve_agent_profiles(explicit: list[str] | None) -> list[str]:
         return explicit
     try:
         from .. import agents
+
         return [p.name for p in agents.list_profiles()]
     except Exception as e:
         print(
@@ -244,7 +248,9 @@ def _run_per_model_block(
     server_log = runner.run_dir / f"server-{safe_model_slug(model)}.log"
     try:
         with serve(
-            model=model, log_path=server_log, boot_timeout_s=boot_timeout_s,
+            model=model,
+            log_path=server_log,
+            boot_timeout_s=boot_timeout_s,
         ) as info:
             port = info["port"]
             print(f"  [server] {model} up on port {port}, log → {server_log.name}")
@@ -297,6 +303,7 @@ def _run_per_model_block(
 # Benchmark tier
 # ---------------------------------------------------------------------
 
+
 def run_benchmark_tier(models: list[str] | None = None):
     """Cross-model scorecard.  Auto-skips models not present locally.
 
@@ -346,11 +353,7 @@ def run_benchmark_tier(models: list[str] | None = None):
                 skipped.append((alias, f"skipped (no auto-download): {reason}"))
     else:
         run_list = [m.alias for m in discovery.values() if m.available]
-        skipped = [
-            (m.alias, m.reason)
-            for m in discovery.values()
-            if not m.available
-        ]
+        skipped = [(m.alias, m.reason) for m in discovery.values() if not m.available]
 
     if not run_list:
         if skipped:
@@ -358,13 +361,14 @@ def run_benchmark_tier(models: list[str] | None = None):
             for alias, reason in skipped:
                 print(f"    - {alias}: {reason}")
         else:
-            print("\n  no models available locally — pre-fetch with "
-                  "`huggingface-cli download`,")
+            print(
+                "\n  no models available locally — pre-fetch with "
+                "`huggingface-cli download`,"
+            )
             print("  or pass --models <alias>,<alias> to force.")
         skipped_summary = "; ".join(f"{a} ({r})" for a, r in skipped[:5])
-        detail = (
-            f"no runnable models — {len(skipped)} skipped"
-            + (f": {skipped_summary}" if skipped_summary else "")
+        detail = f"no runnable models — {len(skipped)} skipped" + (
+            f": {skipped_summary}" if skipped_summary else ""
         )
         runner.run_check(
             "discovery",
@@ -377,8 +381,10 @@ def run_benchmark_tier(models: list[str] | None = None):
         )
         return runner.finalize()
 
-    print(f"\n  Will benchmark {len(run_list)} model(s); "
-          f"{len(skipped)} skipped (not local)")
+    print(
+        f"\n  Will benchmark {len(run_list)} model(s); "
+        f"{len(skipped)} skipped (not local)"
+    )
 
     cells: list[tuple[str, CheckResult]] = []
     for model in run_list:
@@ -499,7 +505,7 @@ def _apply_baseline(
                 status=Status.SKIP,
                 duration_s=0.0,
                 detail=f"no baseline found for model={model}; "
-                       "run --update-baselines to create",
+                "run --update-baselines to create",
             ),
         )
         return
@@ -542,7 +548,9 @@ def _apply_baseline(
 
     n_regress = sum(1 for d in deltas if d.status == DeltaStatus.REGRESSION)
     n_improve = sum(1 for d in deltas if d.status == DeltaStatus.IMPROVEMENT)
-    detail = f"{len(deltas)} metrics: {n_regress} regression(s), {n_improve} improvement(s)"
+    detail = (
+        f"{len(deltas)} metrics: {n_regress} regression(s), {n_improve} improvement(s)"
+    )
 
     status = Status.REGRESSION if has_regression(deltas) else Status.PASS
     # Include model in check name so multi-model tiers don't collide.

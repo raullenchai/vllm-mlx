@@ -1,4 +1,5 @@
 """Thorough LangChain test suite against local rapid-mlx server."""
+
 import os
 
 import httpx as _httpx
@@ -25,7 +26,9 @@ results = {}
 # === 1. Plain invoke ===
 print("=== Test 1: Plain invoke ===")
 try:
-    r = llm.invoke([HumanMessage(content="Reply with just '4' (the digit). What is 2+2?")])
+    r = llm.invoke(
+        [HumanMessage(content="Reply with just '4' (the digit). What is 2+2?")]
+    )
     assert "4" in r.content, r.content
     print(f"PASS: {r.content[:80]}")
     results["1_plain"] = "PASS"
@@ -36,10 +39,14 @@ except Exception as e:
 # === 2. System + User multi-message ===
 print("\n=== Test 2: System + User ===")
 try:
-    r = llm.invoke([
-        SystemMessage(content="You are a calculator. Output ONLY the integer result, nothing else."),
-        HumanMessage(content="7 * 8"),
-    ])
+    r = llm.invoke(
+        [
+            SystemMessage(
+                content="You are a calculator. Output ONLY the integer result, nothing else."
+            ),
+            HumanMessage(content="7 * 8"),
+        ]
+    )
     assert "56" in r.content, r.content
     print(f"PASS: {r.content[:80]}")
     results["2_system"] = "PASS"
@@ -65,6 +72,7 @@ except Exception as e:
 # === 4. Tool calling (single tool) ===
 print("\n=== Test 4: Single tool call ===")
 try:
+
     @tool
     def get_weather(city: str) -> str:
         """Get weather for a city."""
@@ -87,6 +95,7 @@ except Exception as e:
 # === 5. Multi-tool (model picks one) ===
 print("\n=== Test 5: Multi-tool selection ===")
 try:
+
     @tool
     def add(a: int, b: int) -> int:
         """Add two numbers."""
@@ -98,7 +107,9 @@ try:
         return a * b
 
     llm_multi = llm.bind_tools([add, multiply])
-    r = llm_multi.invoke([HumanMessage(content="What is 6 multiplied by 7? Use a tool.")])
+    r = llm_multi.invoke(
+        [HumanMessage(content="What is 6 multiplied by 7? Use a tool.")]
+    )
     tool_calls = r.tool_calls if hasattr(r, "tool_calls") else []
     assert len(tool_calls) > 0, f"No tool calls. content={r.content[:200]}"
     tc = tool_calls[0]
@@ -114,6 +125,7 @@ except Exception as e:
 # === 6. Structured output ===
 print("\n=== Test 6: Structured output (with_structured_output) ===")
 try:
+
     class Person(BaseModel):
         name: str = Field(description="The person's name")
         age: int = Field(description="The person's age in years")

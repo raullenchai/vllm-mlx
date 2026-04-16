@@ -101,7 +101,9 @@ class AgentProfile:
     needs_vision: bool = False
     needs_reasoning: bool = False
 
-    def get_config_for_version(self, agent_version: str | None = None) -> AgentConfigSpec:
+    def get_config_for_version(
+        self, agent_version: str | None = None
+    ) -> AgentConfigSpec:
         """Get the config spec, optionally matching an agent version."""
         if agent_version and self.versions:
             for vs in self.versions:
@@ -110,7 +112,9 @@ class AgentProfile:
                         return vs.config
         return self.config
 
-    def get_streaming_for_version(self, agent_version: str | None = None) -> AgentStreamingSpec:
+    def get_streaming_for_version(
+        self, agent_version: str | None = None
+    ) -> AgentStreamingSpec:
         """Get streaming spec, optionally matching an agent version."""
         if agent_version and self.versions:
             for vs in self.versions:
@@ -119,7 +123,9 @@ class AgentProfile:
                         return vs.streaming
         return self.streaming
 
-    def get_testing_for_version(self, agent_version: str | None = None) -> AgentTestingSpec:
+    def get_testing_for_version(
+        self, agent_version: str | None = None
+    ) -> AgentTestingSpec:
         """Get testing spec, optionally matching an agent version."""
         if agent_version and self.versions:
             for vs in self.versions:
@@ -128,8 +134,9 @@ class AgentProfile:
                         return vs.testing
         return self.testing
 
-    def render_config(self, base_url: str, model_id: str,
-                      agent_version: str | None = None) -> str | dict[str, str]:
+    def render_config(
+        self, base_url: str, model_id: str, agent_version: str | None = None
+    ) -> str | dict[str, str]:
         """Render the config file content or env vars for this agent.
 
         Returns:

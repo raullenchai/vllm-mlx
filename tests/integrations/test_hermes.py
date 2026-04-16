@@ -105,9 +105,9 @@ def hermes_query(query, timeout_sec=120):
 
 def run_test(name, fn):
     """Run a test function and record the result."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Test: {name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     try:
         fn()
         results[name] = "PASS"
@@ -169,7 +169,9 @@ BASIC_TOOLS = [
 
 def test_api_plain_chat():
     """Basic chat without tools."""
-    r = api_call([{"role": "user", "content": "What is 2+2? Reply with just the number."}])
+    r = api_call(
+        [{"role": "user", "content": "What is 2+2? Reply with just the number."}]
+    )
     content = r["choices"][0]["message"]["content"]
     assert "4" in content, f"Expected '4' in: {content[:100]}"
     print(f"  Response: {content[:80]}")
@@ -184,7 +186,9 @@ def test_api_single_tool_call():
     msg = r["choices"][0]["message"]
     assert msg.get("tool_calls"), f"No tool_calls in response: {msg}"
     tc = msg["tool_calls"][0]
-    assert tc["function"]["name"] == "read_file", f"Wrong tool: {tc['function']['name']}"
+    assert tc["function"]["name"] == "read_file", (
+        f"Wrong tool: {tc['function']['name']}"
+    )
     args = json.loads(tc["function"]["arguments"])
     assert "hostname" in args.get("path", "").lower(), f"Wrong path: {args}"
     print(f"  Tool: {tc['function']['name']}({args})")
@@ -232,7 +236,9 @@ def test_api_multi_turn_tool():
         tools=BASIC_TOOLS,
     )
     content2 = r2["choices"][0]["message"]["content"]
-    assert "127.0.0.1" in content2 or "localhost" in content2, f"Bad follow-up: {content2[:100]}"
+    assert "127.0.0.1" in content2 or "localhost" in content2, (
+        f"Bad follow-up: {content2[:100]}"
+    )
     print(f"  Multi-turn response: {content2[:80]}")
 
 
@@ -255,18 +261,20 @@ def test_api_many_tools():
     # Generate 20 dummy tools
     many_tools = []
     for i in range(20):
-        many_tools.append({
-            "type": "function",
-            "function": {
-                "name": f"tool_{i}",
-                "description": f"Tool number {i} that does something",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"arg": {"type": "string"}},
-                    "required": ["arg"],
+        many_tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": f"tool_{i}",
+                    "description": f"Tool number {i} that does something",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"arg": {"type": "string"}},
+                        "required": ["arg"],
+                    },
                 },
-            },
-        })
+            }
+        )
     # Add the real tools
     many_tools.extend(BASIC_TOOLS)
 
@@ -325,7 +333,9 @@ def test_api_no_tool_needed():
     )
     msg = r["choices"][0]["message"]
     content = msg.get("content", "")
-    assert "Paris" in content or "paris" in content.lower(), f"Expected Paris: {content[:100]}"
+    assert "Paris" in content or "paris" in content.lower(), (
+        f"Expected Paris: {content[:100]}"
+    )
     # Should NOT call a tool for a general knowledge question
     if msg.get("tool_calls"):
         print(f"  ⚠️ Unnecessary tool call: {msg['tool_calls'][0]['function']['name']}")
@@ -336,7 +346,12 @@ def test_api_no_tool_needed():
 def test_api_parallel_tool_calls():
     """Model can request multiple tool calls in one response."""
     r = api_call(
-        [{"role": "user", "content": "Read both /etc/hosts and /etc/resolv.conf at the same time"}],
+        [
+            {
+                "role": "user",
+                "content": "Read both /etc/hosts and /etc/resolv.conf at the same time",
+            }
+        ],
         tools=BASIC_TOOLS,
         max_tokens=500,
     )
@@ -345,7 +360,9 @@ def test_api_parallel_tool_calls():
         names = [tc["function"]["name"] for tc in msg["tool_calls"]]
         print(f"  Parallel calls: {names}")
     elif msg.get("tool_calls"):
-        print(f"  Single call (model chose sequential): {msg['tool_calls'][0]['function']['name']}")
+        print(
+            f"  Single call (model chose sequential): {msg['tool_calls'][0]['function']['name']}"
+        )
     else:
         print("  No tool calls (answered directly)")
     # Either way, no tag leaks
@@ -373,6 +390,7 @@ def test_api_stress_no_leak():
 # Hermes E2E tests (requires hermes binary)
 # =============================================================================
 
+
 def test_hermes_chat():
     """Basic Hermes chat (no tool use)."""
     out, err = hermes_query("What is 2+2? Reply with just the number.")
@@ -387,7 +405,9 @@ def test_hermes_read_file():
     out, err = hermes_query("Read the first line of pyproject.toml")
     if err:
         assert False, err
-    assert "build" in out.lower() or "project" in out.lower(), f"Unexpected: {out[:100]}"
+    assert "build" in out.lower() or "project" in out.lower(), (
+        f"Unexpected: {out[:100]}"
+    )
     print(f"  Hermes read_file: {out.strip()[:80]}")
 
 
@@ -426,6 +446,7 @@ def test_hermes_multi_step():
 # Deep agentic tests (requires hermes binary, tests real workflows)
 # =============================================================================
 
+
 def test_hermes_write_and_run():
     """Hermes writes a Python script and executes it (full agent loop)."""
     out, err = hermes_query(
@@ -437,12 +458,17 @@ def test_hermes_write_and_run():
         assert False, err
     # Verify via Hermes output or by checking the file directly
     import subprocess
+
     result = subprocess.run(
         ["python3", "/tmp/hermes_test_fib.py"],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     fib_out = result.stdout + out
-    assert any(str(n) in fib_out for n in [8, 13, 21, 34]), f"Fibonacci missing: {fib_out[:200]}"
+    assert any(str(n) in fib_out for n in [8, 13, 21, 34]), (
+        f"Fibonacci missing: {fib_out[:200]}"
+    )
     print("  Write+run: fibonacci script works")
 
 
@@ -458,11 +484,16 @@ def test_hermes_code_with_tests():
         assert False, err
     # Verify the files exist and tests pass
     import subprocess
+
     result = subprocess.run(
         ["python3", "-m", "pytest", "/tmp/hermes_test_calc.py", "-v"],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
-    assert "passed" in result.stdout.lower(), f"Tests failed: {result.stdout[:200]}{result.stderr[:200]}"
+    assert "passed" in result.stdout.lower(), (
+        f"Tests failed: {result.stdout[:200]}{result.stderr[:200]}"
+    )
     print("  Code+tests: pytest passing")
 
 
@@ -476,8 +507,9 @@ def test_hermes_code_review():
         assert False, err
     # Should mention something about the code (patterns, config, etc.)
     assert len(out) > 50, f"Response too short for a code review: {out[:100]}"
-    assert "model" in out.lower() or "pattern" in out.lower() or "config" in out.lower(), \
-        f"Doesn't look like a code review: {out[:100]}"
+    assert (
+        "model" in out.lower() or "pattern" in out.lower() or "config" in out.lower()
+    ), f"Doesn't look like a code review: {out[:100]}"
     print(f"  Code review: {out.strip()[:80]}")
 
 
@@ -489,8 +521,12 @@ def test_hermes_git_analysis():
     )
     if err:
         assert False, err
-    assert "commit" in out.lower() or "hermes" in out.lower() or "feat" in out.lower() or "fix" in out.lower(), \
-        f"No git info: {out[:200]}"
+    assert (
+        "commit" in out.lower()
+        or "hermes" in out.lower()
+        or "feat" in out.lower()
+        or "fix" in out.lower()
+    ), f"No git info: {out[:200]}"
     print("  Git analysis: OK")
 
 
@@ -510,8 +546,11 @@ def test_hermes_patch_file():
     # Verify the file was modified
     with open(test_file) as f:
         content = f.read()
-    assert "docstring" in content.lower() or "say hello" in content.lower() or '"""' in content, \
-        f"Patch not applied: {content[:200]}"
+    assert (
+        "docstring" in content.lower()
+        or "say hello" in content.lower()
+        or '"""' in content
+    ), f"Patch not applied: {content[:200]}"
     print("  Patch: file edited successfully")
 
 
@@ -524,7 +563,7 @@ if __name__ == "__main__":
     print(f"Server: {BASE_URL}")
     print(f"Model:  {MODEL_ID}")
     print(f"Hermes: {HERMES_BIN}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     t0 = time.time()
 
@@ -562,10 +601,10 @@ if __name__ == "__main__":
     passed = sum(1 for v in results.values() if v == "PASS")
     failed = sum(1 for v in results.values() if v != "PASS")
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Results: {passed}/{len(results)} passed ({elapsed:.1f}s)")
     print(f"Model:   {MODEL_ID}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     for name, status in results.items():
         icon = "✅" if status == "PASS" else "❌"
         print(f"  {icon} {name}: {status}")

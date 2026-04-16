@@ -57,16 +57,23 @@ def _make_hf_snapshot(
 # _is_complete_snapshot
 # ----------------------------------------------------------------------
 
+
 class TestIsCompleteSnapshot:
     def test_complete_snapshot_passes(self, tmp_cache):
         snap = _make_hf_snapshot(
-            tmp_cache, "org/repo", with_config=True, with_weights=True,
+            tmp_cache,
+            "org/repo",
+            with_config=True,
+            with_weights=True,
         )
         assert _is_complete_snapshot(snap) is True
 
     def test_missing_config_fails(self, tmp_cache):
         snap = _make_hf_snapshot(
-            tmp_cache, "org/repo", with_config=False, with_weights=True,
+            tmp_cache,
+            "org/repo",
+            with_config=False,
+            with_weights=True,
         )
         assert _is_complete_snapshot(snap) is False
 
@@ -75,7 +82,10 @@ class TestIsCompleteSnapshot:
         but no .safetensors file → discovery wrongly said 'available',
         server crashed at runtime with 'No safetensors found'."""
         snap = _make_hf_snapshot(
-            tmp_cache, "org/repo", with_config=True, with_weights=False,
+            tmp_cache,
+            "org/repo",
+            with_config=True,
+            with_weights=False,
         )
         assert _is_complete_snapshot(snap) is False
 
@@ -86,15 +96,21 @@ class TestIsCompleteSnapshot:
         but Path.glob() still surfaces them.  resolve(strict=True)
         is what catches the dangling case."""
         snap = _make_hf_snapshot(
-            tmp_cache, "org/repo", with_config=True,
-            with_weights=True, weight_resolves=False,
+            tmp_cache,
+            "org/repo",
+            with_config=True,
+            with_weights=True,
+            weight_resolves=False,
         )
         assert _is_complete_snapshot(snap) is False
 
     def test_npz_weights_accepted(self, tmp_cache):
         """Some MLX exports use .npz instead of .safetensors."""
         snap = _make_hf_snapshot(
-            tmp_cache, "org/repo", with_config=True, with_weights=False,
+            tmp_cache,
+            "org/repo",
+            with_config=True,
+            with_weights=False,
         )
         (snap / "weights.npz").write_text("fake npz")
         assert _is_complete_snapshot(snap) is True
@@ -102,7 +118,10 @@ class TestIsCompleteSnapshot:
     def test_sharded_complete_passes(self, tmp_cache):
         """All shards present + index → complete."""
         snap = _make_hf_snapshot(
-            tmp_cache, "org/repo", with_config=True, with_weights=False,
+            tmp_cache,
+            "org/repo",
+            with_config=True,
+            with_weights=False,
         )
         # Write index + every shard it references.
         (snap / "model.safetensors.index.json").write_text(
@@ -119,7 +138,10 @@ class TestIsCompleteSnapshot:
         falsely pass because *one* shard glob hit resolves.  This is the
         exact failure mode codex flagged in round 2."""
         snap = _make_hf_snapshot(
-            tmp_cache, "org/repo", with_config=True, with_weights=False,
+            tmp_cache,
+            "org/repo",
+            with_config=True,
+            with_weights=False,
         )
         (snap / "model.safetensors.index.json").write_text(
             '{"weight_map": {"a": "model-1-of-2.safetensors", '
@@ -133,7 +155,10 @@ class TestIsCompleteSnapshot:
         """Index references a shard that exists as a symlink, but the
         link target is missing.  resolve(strict=True) should catch it."""
         snap = _make_hf_snapshot(
-            tmp_cache, "org/repo", with_config=True, with_weights=False,
+            tmp_cache,
+            "org/repo",
+            with_config=True,
+            with_weights=False,
         )
         (snap / "model.safetensors.index.json").write_text(
             '{"weight_map": {"a": "model-1-of-1.safetensors"}}'
@@ -150,7 +175,10 @@ class TestIsCompleteSnapshot:
         one shard happened to be present.  Now we treat any unreadable
         index as a sign the snapshot can't be trusted."""
         snap = _make_hf_snapshot(
-            tmp_cache, "org/repo", with_config=True, with_weights=False,
+            tmp_cache,
+            "org/repo",
+            with_config=True,
+            with_weights=False,
         )
         # Truncated JSON.
         (snap / "model.safetensors.index.json").write_text(
@@ -160,18 +188,17 @@ class TestIsCompleteSnapshot:
         # No model-2-of-2.safetensors.
         assert _is_complete_snapshot(snap) is False
 
-    def test_index_with_empty_weight_map_falls_through_to_single_file(
-        self, tmp_cache
-    ):
+    def test_index_with_empty_weight_map_falls_through_to_single_file(self, tmp_cache):
         """Some templates ship an index with an empty weight_map; in
         that case treating the snapshot as a single-file layout is
         correct (and used to work before the codex fix)."""
         snap = _make_hf_snapshot(
-            tmp_cache, "org/repo", with_config=True, with_weights=False,
+            tmp_cache,
+            "org/repo",
+            with_config=True,
+            with_weights=False,
         )
-        (snap / "model.safetensors.index.json").write_text(
-            '{"weight_map": {}}'
-        )
+        (snap / "model.safetensors.index.json").write_text('{"weight_map": {}}')
         (snap / "model.safetensors").write_text("single-file weights")
         assert _is_complete_snapshot(snap) is True
 
@@ -179,6 +206,7 @@ class TestIsCompleteSnapshot:
 # ----------------------------------------------------------------------
 # _check_alias multi-root + multi-layout
 # ----------------------------------------------------------------------
+
 
 class TestCheckAlias:
     def test_picks_complete_over_partial_at_other_root(self, tmp_path):
@@ -194,16 +222,22 @@ class TestCheckAlias:
         complete_root = tmp_path / "local"
 
         _make_hf_snapshot(
-            partial_root, "org/repo",
-            with_config=True, with_weights=False,
+            partial_root,
+            "org/repo",
+            with_config=True,
+            with_weights=False,
         )
         complete_snap = _make_hf_snapshot(
-            complete_root, "org/repo",
-            with_config=True, with_weights=True,
+            complete_root,
+            "org/repo",
+            with_config=True,
+            with_weights=True,
         )
 
         result = _check_alias(
-            "test-alias", "org/repo", [partial_root, complete_root],
+            "test-alias",
+            "org/repo",
+            [partial_root, complete_root],
         )
         assert result.available is True
         assert result.path == complete_snap
@@ -211,7 +245,10 @@ class TestCheckAlias:
     def test_partial_only_marks_unavailable_with_clear_reason(self, tmp_path):
         cache = tmp_path / "cache"
         _make_hf_snapshot(
-            cache, "org/repo", with_config=True, with_weights=False,
+            cache,
+            "org/repo",
+            with_config=True,
+            with_weights=False,
         )
         result = _check_alias("test-alias", "org/repo", [cache])
         assert result.available is False

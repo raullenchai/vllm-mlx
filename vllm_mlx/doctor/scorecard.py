@@ -61,7 +61,9 @@ def render_scorecard(
             # is still useful at a glance.
             reason = (result.detail or "fail").splitlines()[0][:80]
             status_md = f"FAIL — {md_cell(reason)}"
-        lines.append(f"| {md_cell(model)} | " + " | ".join(cells_md) + f" | {status_md} |")
+        lines.append(
+            f"| {md_cell(model)} | " + " | ".join(cells_md) + f" | {status_md} |"
+        )
 
     if skipped:
         lines += ["", "## Skipped", ""]

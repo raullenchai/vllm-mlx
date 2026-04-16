@@ -131,7 +131,9 @@ class TestApplyChatTemplate:
         assert "tools" in fallback_kwargs
         assert "enable_thinking" not in fallback_kwargs
 
-    def test_fallback_strips_tools_when_both_fail(self, mock_tokenizer, simple_messages):
+    def test_fallback_strips_tools_when_both_fail(
+        self, mock_tokenizer, simple_messages
+    ):
         """Should fall back to prompt injection when template rejects both."""
         mock_tokenizer.apply_chat_template.side_effect = [
             TypeError("unsupported keyword argument 'enable_thinking'"),

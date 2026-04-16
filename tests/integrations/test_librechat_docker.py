@@ -10,6 +10,7 @@ Pipeline:
 Pass = LibreChat successfully proxies a chat through to rapid-mlx and returns
 an answer that contains the expected substring.
 """
+
 import uuid
 
 import requests
@@ -35,7 +36,9 @@ try:
         },
         timeout=15,
     )
-    assert r.status_code in (200, 201), f"register failed: {r.status_code} {r.text[:200]}"
+    assert r.status_code in (200, 201), (
+        f"register failed: {r.status_code} {r.text[:200]}"
+    )
     print(f"PASS: status={r.status_code}")
     results["1_register"] = "PASS"
 except Exception as e:
@@ -77,7 +80,9 @@ try:
     eps = r.json()
     print(f"  raw keys: {list(eps.keys())}")
     custom = eps.get("custom") or {}
-    print(f"  custom subkeys: {list(custom.keys()) if isinstance(custom, dict) else custom}")
+    print(
+        f"  custom subkeys: {list(custom.keys()) if isinstance(custom, dict) else custom}"
+    )
     assert "Rapid-MLX" in str(eps), f"Rapid-MLX not in endpoints: {eps}"
     print("PASS: Rapid-MLX endpoint is registered")
     results["3_endpoints"] = "PASS"
@@ -94,7 +99,9 @@ try:
     print(f"  models keys: {list(models.keys())[:20]}")
     rapid_models = models.get("Rapid-MLX") or models.get("custom", {}).get("Rapid-MLX")
     assert rapid_models, f"No Rapid-MLX models in {models}"
-    assert any("gemma" in m.lower() for m in rapid_models), f"gemma not in {rapid_models}"
+    assert any("gemma" in m.lower() for m in rapid_models), (
+        f"gemma not in {rapid_models}"
+    )
     print(f"PASS: {len(rapid_models)} model(s) fetched: {rapid_models}")
     results["4_models"] = "PASS"
 except Exception as e:

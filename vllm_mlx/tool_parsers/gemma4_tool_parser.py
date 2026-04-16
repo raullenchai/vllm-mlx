@@ -152,16 +152,14 @@ class Gemma4ToolParser(ToolParser):
             result = self.extract_tool_calls(current_text)
             if result.tools_called:
                 # Only emit tool calls we haven't sent yet
-                new_calls = result.tool_calls[self._emitted_tool_count:]
+                new_calls = result.tool_calls[self._emitted_tool_count :]
                 self._emitted_tool_count = len(result.tool_calls)
 
                 if new_calls:
                     return {
                         "tool_calls": [
                             {
-                                "index": self._emitted_tool_count
-                                - len(new_calls)
-                                + i,
+                                "index": self._emitted_tool_count - len(new_calls) + i,
                                 "id": tc["id"],
                                 "type": "function",
                                 "function": {
@@ -180,7 +178,7 @@ class Gemma4ToolParser(ToolParser):
         if TEXT_TOOL_CALL_ANY.search(current_text):
             # Check if we have a complete text tool call
             matches = list(TEXT_TOOL_CALL_FN_PATTERN.finditer(current_text))
-            new_matches = matches[self._emitted_tool_count:]
+            new_matches = matches[self._emitted_tool_count :]
             if new_matches:
                 self._emitted_tool_count = len(matches)
                 return {

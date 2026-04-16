@@ -6,6 +6,7 @@ Tests:
   3. GET /api/models → verify rapid-mlx models appear
   4. POST /api/chat/completions → chat through Open WebUI proxy to rapid-mlx
 """
+
 import json
 import uuid
 
@@ -20,11 +21,15 @@ results = {}
 # === 1. Register ===
 print("=== Test 1: Register ===")
 try:
-    r = requests.post(f"{OW}/api/v1/auths/signup", json={
-        "name": NAME,
-        "email": EMAIL,
-        "password": PASSWORD,
-    }, timeout=15)
+    r = requests.post(
+        f"{OW}/api/v1/auths/signup",
+        json={
+            "name": NAME,
+            "email": EMAIL,
+            "password": PASSWORD,
+        },
+        timeout=15,
+    )
     assert r.status_code in (200, 201), f"{r.status_code} {r.text[:200]}"
     data = r.json()
     token = data.get("token")
@@ -51,7 +56,11 @@ try:
     assert r.status_code == 200, f"{r.status_code} {r.text[:200]}"
     models = r.json()
     model_list = models.get("data", models) if isinstance(models, dict) else models
-    model_ids = [m.get("id", m.get("name", "?")) for m in model_list] if isinstance(model_list, list) else []
+    model_ids = (
+        [m.get("id", m.get("name", "?")) for m in model_list]
+        if isinstance(model_list, list)
+        else []
+    )
     assert len(model_ids) > 0, f"empty model list: {models}"
     print(f"PASS: {len(model_ids)} model(s): {model_ids[:3]}")
     results["2_models"] = "PASS"
@@ -70,7 +79,12 @@ if target_model:
             headers={**headers, "Content-Type": "application/json"},
             json={
                 "model": target_model,
-                "messages": [{"role": "user", "content": "What is 5+3? Reply with just the number."}],
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "What is 5+3? Reply with just the number.",
+                    }
+                ],
                 "max_tokens": 50,
                 "stream": False,
             },

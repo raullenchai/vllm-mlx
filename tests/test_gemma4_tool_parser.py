@@ -15,6 +15,7 @@ Fix history:
 - 2026-04-07: original parser only handled `key:<|"|>value<|"|>` form;
   numeric args like `{a:3,b:4}` parsed as empty dict {}.
 """
+
 import json
 
 import pytest
@@ -44,7 +45,10 @@ from vllm_mlx.tool_parsers.gemma4_tool_parser import (
         # mixed: numeric + quoted
         ('a:3,b:<|"|>hi<|"|>', {"a": 3, "b": "hi"}),
         # multiple quoted strings
-        ('first:<|"|>Alice<|"|>,last:<|"|>Smith<|"|>', {"first": "Alice", "last": "Smith"}),
+        (
+            'first:<|"|>Alice<|"|>,last:<|"|>Smith<|"|>',
+            {"first": "Alice", "last": "Smith"},
+        ),
         # mixed: 3 fields, all types
         (
             'flag:true,n:42,name:<|"|>Bob<|"|>',

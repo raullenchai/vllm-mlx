@@ -32,6 +32,7 @@ def _baseline(metrics: dict) -> dict:
 # Higher-is-better metrics (decode_tps)
 # ----------------------------------------------------------------------
 
+
 class TestHigherIsBetter:
     def test_within_threshold_is_ok(self):
         deltas = compare(
@@ -45,7 +46,7 @@ class TestHigherIsBetter:
 
     def test_drop_beyond_threshold_is_regression(self):
         deltas = compare(
-            current={"decode_tps": 90.0},   # 10% slower
+            current={"decode_tps": 90.0},  # 10% slower
             baseline=_baseline({"decode_tps": 100.0}),
             thresholds=TIGHT_THRESHOLDS,
         )
@@ -67,6 +68,7 @@ class TestHigherIsBetter:
 # ----------------------------------------------------------------------
 # Lower-is-better metrics (latency, memory)
 # ----------------------------------------------------------------------
+
 
 class TestLowerIsBetter:
     def test_lower_latency_is_improvement(self):
@@ -97,7 +99,7 @@ class TestLowerIsBetter:
         """Regression-test for codex round 2 finding — tc_latency_ms
         was missing from _LOWER_IS_BETTER and gave inverted signs."""
         deltas = compare(
-            current={"tc_latency_ms": 1200.0},   # 20% faster
+            current={"tc_latency_ms": 1200.0},  # 20% faster
             baseline=_baseline({"tc_latency_ms": 1500.0}),
             thresholds=TIGHT_THRESHOLDS,
         )
@@ -108,6 +110,7 @@ class TestLowerIsBetter:
 # ----------------------------------------------------------------------
 # Accuracy metrics — zero-tolerance regression
 # ----------------------------------------------------------------------
+
 
 class TestAccuracyZeroTolerance:
     def test_any_drop_is_regression(self):
@@ -123,6 +126,7 @@ class TestAccuracyZeroTolerance:
 # ----------------------------------------------------------------------
 # Edge cases
 # ----------------------------------------------------------------------
+
 
 class TestEdgeCases:
     def test_zero_baseline_no_change_is_ok(self):
@@ -174,6 +178,7 @@ class TestEdgeCases:
 # Slug injectivity — codex round 2 finding
 # ----------------------------------------------------------------------
 
+
 class TestSafeModelSlug:
     def test_distinct_inputs_produce_distinct_slugs(self):
         # Pairs that previously collided under the old replace-based
@@ -185,8 +190,7 @@ class TestSafeModelSlug:
         ]
         for a, b in pairs:
             assert safe_model_slug(a) != safe_model_slug(b), (
-                f"slug collision: {a!r} and {b!r} both map to "
-                f"{safe_model_slug(a)!r}"
+                f"slug collision: {a!r} and {b!r} both map to {safe_model_slug(a)!r}"
             )
 
     def test_simple_aliases_unchanged(self):
@@ -195,6 +199,7 @@ class TestSafeModelSlug:
 
     def test_hf_path_round_trips_via_unquote(self):
         import urllib.parse
+
         original = "mlx-community/Qwen3.5-4B-MLX-4bit"
         slug = safe_model_slug(original)
         assert urllib.parse.unquote(slug) == original

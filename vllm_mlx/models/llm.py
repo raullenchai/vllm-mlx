@@ -35,7 +35,9 @@ class StreamingOutput:
     token: int
     finished: bool = False
     finish_reason: str | None = None
-    channel: str | None = None  # "content", "reasoning", "tool_call", or None (unrouted)
+    channel: str | None = (
+        None  # "content", "reasoning", "tool_call", or None (unrouted)
+    )
     logprobs: Any = None  # mx.array of shape [vocab_size] from mlx-lm
     prompt_tokens: int = 0
 
@@ -104,7 +106,7 @@ class MLXLanguageModel:
 
         # DeltaNet/hybrid cache snapshot for prefix reuse
         self._rnn_state_snapshot: list | None = None  # deep-copied ArraysCache states
-        self._snapshot_prefix_ids: list[int] = []     # token IDs at snapshot time
+        self._snapshot_prefix_ids: list[int] = []  # token IDs at snapshot time
         self._main_cache_len: int = 0  # number of main model cache layers (excl. draft)
 
     def load(self) -> None:
@@ -284,12 +286,16 @@ class MLXLanguageModel:
             if not c.is_trimmable():
                 snapshot.append(copy.deepcopy(c))
             else:
-                snapshot.append(None)  # placeholder — KVCache is trimmed, not snapshotted
+                snapshot.append(
+                    None
+                )  # placeholder — KVCache is trimmed, not snapshotted
         self._rnn_state_snapshot = snapshot
         self._snapshot_prefix_ids = list(prefix_ids)
         logger.info(f"Saved RNN state snapshot for {len(prefix_ids)} token prefix")
 
-    def _prefill_and_snapshot(self, prompt_token_ids: list[int], prefix_len: int) -> list[int]:
+    def _prefill_and_snapshot(
+        self, prompt_token_ids: list[int], prefix_len: int
+    ) -> list[int]:
         """Create fresh cache, prefill the common prefix, snapshot, return suffix.
 
         For hybrid caches (Qwen3.5), this enables prefix reuse across requests
@@ -692,7 +698,9 @@ class MLXLanguageModel:
                     try:
                         event = self._output_router.feed(token_id)
                     except Exception as router_err:
-                        logger.warning("OutputRouter.feed failed (%s), disabling", router_err)
+                        logger.warning(
+                            "OutputRouter.feed failed (%s), disabling", router_err
+                        )
                         self._output_router = None
                         event = None
                     if self._output_router and event is None:
@@ -729,7 +737,9 @@ class MLXLanguageModel:
                         idx = accumulated_text.find(stop_seq)
                         if idx != -1:
                             should_stop = True
-                            stop_truncate_text = new_text[: len(new_text) - (len(accumulated_text) - idx)]
+                            stop_truncate_text = new_text[
+                                : len(new_text) - (len(accumulated_text) - idx)
+                            ]
                             accumulated_text = accumulated_text[:idx]
                             break
 
@@ -749,7 +759,9 @@ class MLXLanguageModel:
                     cache_saved = True
 
                 yield StreamingOutput(
-                    text=stop_truncate_text if stop_truncate_text is not None else new_text,
+                    text=stop_truncate_text
+                    if stop_truncate_text is not None
+                    else new_text,
                     token=response.token if hasattr(response, "token") else 0,
                     finished=finished,
                     finish_reason=finish_reason,

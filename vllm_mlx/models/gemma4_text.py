@@ -33,6 +33,7 @@ def is_gemma4_model(model_path: str | Path) -> bool:
         # Try HF cache
         try:
             from huggingface_hub import snapshot_download
+
             p = Path(snapshot_download(str(model_path)))
             config_path = p / "config.json"
         except Exception:
@@ -75,13 +76,15 @@ class Gemma4TextWrapper(nn.Module):
             new_key = k
             # Strip top-level "model." wrapper
             if new_key.startswith("model."):
-                new_key = new_key[len("model."):]
+                new_key = new_key[len("model.") :]
             # Strip "language_model." to get bare model weights,
             # then re-add "language_model." for our wrapper structure
             if new_key.startswith("language_model."):
                 pass  # keep as-is — our wrapper has .language_model attribute
-            elif not any(new_key.startswith(p) for p in
-                         ["vision_tower", "audio_tower", "embed_vision", "embed_audio"]):
+            elif not any(
+                new_key.startswith(p)
+                for p in ["vision_tower", "audio_tower", "embed_vision", "embed_audio"]
+            ):
                 new_key = "language_model." + new_key
             else:
                 continue  # skip vision/audio weights
@@ -89,7 +92,10 @@ class Gemma4TextWrapper(nn.Module):
             if "rotary_emb" in new_key:
                 continue
             # Skip clipping params (vision-only)
-            if any(s in new_key for s in ["input_max", "input_min", "output_max", "output_min"]):
+            if any(
+                s in new_key
+                for s in ["input_max", "input_min", "output_max", "output_min"]
+            ):
                 continue
             sanitized[new_key] = v
         return sanitized
@@ -121,6 +127,7 @@ def load_gemma4_text(model_path: str | Path, tokenizer_config: dict = None):
     p = Path(model_path)
     if not p.is_dir():
         from huggingface_hub import snapshot_download
+
         p = Path(snapshot_download(str(model_path)))
 
     config = json.loads((p / "config.json").read_text())
@@ -148,14 +155,16 @@ def load_gemma4_text(model_path: str | Path, tokenizer_config: dict = None):
         for k, v in quant_config.items():
             if isinstance(v, dict) and "bits" in v:
                 overrides[k] = {
-                    kk: vv for kk, vv in v.items()
+                    kk: vv
+                    for kk, vv in v.items()
                     if kk in ("bits", "group_size", "mode")
                 }
 
         if overrides:
             logger.info(
                 "[gemma4] Mixed quantization: %d-bit default, %d overrides (8-bit MLP)",
-                default_bits, len(overrides),
+                default_bits,
+                len(overrides),
             )
 
             def _class_predicate(path, module):
@@ -173,13 +182,16 @@ def load_gemma4_text(model_path: str | Path, tokenizer_config: dict = None):
 
             nn.quantize(model, class_predicate=_class_predicate)
         else:
-            logger.info("[gemma4] Applying %d-bit quantization (group_size=%d)", default_bits, default_gs)
+            logger.info(
+                "[gemma4] Applying %d-bit quantization (group_size=%d)",
+                default_bits,
+                default_gs,
+            )
             nn.quantize(model, bits=default_bits, group_size=default_gs)
 
     # Load weights
     weight_files = sorted(
-        f for f in p.glob("*.safetensors")
-        if not f.name.startswith("._")
+        f for f in p.glob("*.safetensors") if not f.name.startswith("._")
     )
     if not weight_files:
         raise FileNotFoundError(f"No .safetensors files in {p}")
@@ -194,12 +206,16 @@ def load_gemma4_text(model_path: str | Path, tokenizer_config: dict = None):
     # Verify weights loaded
     test_param = model.language_model.model.embed_tokens
     if hasattr(test_param, "scales") and mx.all(test_param.scales == 0).item():
-        logger.warning("[gemma4] Embedding scales are zero — quantized model may have issues")
+        logger.warning(
+            "[gemma4] Embedding scales are zero — quantized model may have issues"
+        )
 
     # Load tokenizer
     tokenizer_config = tokenizer_config or {}
     eos_token_ids = config.get("eos_token_id", text_config.get("eos_token_id"))
     tokenizer = load_tokenizer(p, tokenizer_config, eos_token_ids=eos_token_ids)
 
-    logger.info("[gemma4] Loaded text-only model via LLM path (%d layers)", len(model.layers))
+    logger.info(
+        "[gemma4] Loaded text-only model via LLM path (%d layers)", len(model.layers)
+    )
     return model, tokenizer

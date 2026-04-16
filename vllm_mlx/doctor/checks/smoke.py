@@ -14,11 +14,14 @@ def check_pytest_unit() -> CheckResult:
     t0 = time.perf_counter()
     py = python_executable()
     cmd = [
-        py, "-m", "pytest",
+        py,
+        "-m",
+        "pytest",
         "tests/",
         "-q",
         "--ignore=tests/integrations",
-        "--deselect", "tests/test_event_loop.py",
+        "--deselect",
+        "tests/test_event_loop.py",
     ]
     rc, stdout, stderr = run_subprocess(cmd, timeout=300)
     elapsed = time.perf_counter() - t0

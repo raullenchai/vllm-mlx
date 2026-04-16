@@ -1,22 +1,25 @@
 .PHONY: help smoke check full benchmark update-baselines lint test clean
 
 # Pick the interpreter:
-#   1. Active venv (VIRTUAL_ENV/bin/python) — wins so contributors using
-#      a 3.10/3.11/3.13 venv get their venv's python regardless of PATH
-#   2. Versioned binaries — only if no venv is active.  Skips 'python' /
-#      'python3' here because on macOS those can be system Python 3.9,
-#      which is below our minimum (project requires-python = >=3.10).
+#   1. Active venv ($VIRTUAL_ENV/bin/python) — wins so contributors using
+#      a 3.10/3.11/3.13 venv get their venv's python regardless of PATH.
+#   2. Versioned binaries that actually run a >=3.10 interpreter — we
+#      must run --version because pyenv shims appear on PATH for *every*
+#      version even if only one is installed, and macOS's bare 'python'
+#      is often system 3.9 (below requires-python).
+#   3. python3 last-resort fallback (lets the user see a clean error if
+#      nothing on the system meets the version requirement).
 # Override explicitly with: make smoke PY=python3.13
 PY ?= $(shell \
   if [ -n "$$VIRTUAL_ENV" ] && [ -x "$$VIRTUAL_ENV/bin/python" ]; then \
-    echo "$$VIRTUAL_ENV/bin/python"; \
-  else \
-    command -v python3.13 2>/dev/null \
-    || command -v python3.12 2>/dev/null \
-    || command -v python3.11 2>/dev/null \
-    || command -v python3.10 2>/dev/null \
-    || echo python3; \
-  fi)
+    echo "$$VIRTUAL_ENV/bin/python"; exit 0; \
+  fi; \
+  for cand in python3.13 python3.12 python3.11 python3.10 python3; do \
+    path=$$(command -v $$cand 2>/dev/null) || continue; \
+    "$$path" -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' \
+      2>/dev/null && echo "$$path" && exit 0; \
+  done; \
+  echo python3)
 HF_HUB_CACHE ?= $(shell echo $$HF_HUB_CACHE)
 DOCTOR := $(PY) -m vllm_mlx.cli doctor
 

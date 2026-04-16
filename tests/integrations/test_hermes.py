@@ -21,6 +21,7 @@ import os
 import subprocess
 import sys
 import time
+
 import httpx
 
 BASE_URL = os.environ.get("RAPID_MLX_BASE_URL", "http://localhost:8000/v1")
@@ -94,7 +95,7 @@ def hermes_query(query, timeout_sec=120):
         output = proc.stdout + proc.stderr
         # Detect Hermes-level errors
         if "Non-retryable error" in output or "HTTP 404" in output:
-            return None, f"Hermes error: model mismatch or server down"
+            return None, "Hermes error: model mismatch or server down"
         return output, None
     except subprocess.TimeoutExpired:
         return None, "TIMEOUT"
@@ -110,7 +111,7 @@ def run_test(name, fn):
     try:
         fn()
         results[name] = "PASS"
-        print(f"  ✅ PASS")
+        print("  ✅ PASS")
     except AssertionError as e:
         results[name] = f"FAIL: {e}"
         print(f"  ❌ FAIL: {e}")
@@ -199,7 +200,7 @@ def test_api_tool_choice():
     assert msg.get("tool_calls"), f"No tool_calls: {msg.get('content', '')[:100]}"
     tc = msg["tool_calls"][0]
     assert tc["function"]["name"] == "terminal", f"Wrong tool: {tc['function']['name']}"
-    print(f"  Correctly chose: terminal")
+    print("  Correctly chose: terminal")
 
 
 def test_api_multi_turn_tool():
@@ -246,7 +247,7 @@ def test_api_no_tool_leak():
     assert "<tool_call>" not in content, f"Tag leak in content: {content[:200]}"
     assert "<function=" not in content, f"Function tag leak: {content[:200]}"
     assert "<|im_end|>" not in content, f"EOS leak: {content[:200]}"
-    print(f"  No tag leaks detected")
+    print("  No tag leaks detected")
 
 
 def test_api_many_tools():
@@ -346,7 +347,7 @@ def test_api_parallel_tool_calls():
     elif msg.get("tool_calls"):
         print(f"  Single call (model chose sequential): {msg['tool_calls'][0]['function']['name']}")
     else:
-        print(f"  No tool calls (answered directly)")
+        print("  No tool calls (answered directly)")
     # Either way, no tag leaks
     content = msg.get("content", "")
     assert "<tool_call>" not in content, f"Tag leak: {content[:100]}"
@@ -365,7 +366,7 @@ def test_api_stress_no_leak():
         if "<tool_call>" in content or "<function=" in content:
             leaked += 1
     assert leaked == 0, f"{leaked}/10 requests had tag leaks"
-    print(f"  0/10 tag leaks at temperature=0.8")
+    print("  0/10 tag leaks at temperature=0.8")
 
 
 # =============================================================================
@@ -396,7 +397,7 @@ def test_hermes_terminal():
     if err:
         assert False, err
     assert "rapid_mlx_hermes_test" in out, f"Command output missing: {out[:100]}"
-    print(f"  Hermes terminal: OK")
+    print("  Hermes terminal: OK")
 
 
 def test_hermes_search():
@@ -405,7 +406,7 @@ def test_hermes_search():
     if err:
         assert False, err
     assert "aliases" in out.lower(), f"Search failed: {out[:100]}"
-    print(f"  Hermes search: OK")
+    print("  Hermes search: OK")
 
 
 def test_hermes_multi_step():
@@ -418,7 +419,7 @@ def test_hermes_multi_step():
         assert False, err
     # Should mention a number (we have ~22 aliases)
     assert any(str(n) in out for n in range(15, 30)), f"No count found: {out[:200]}"
-    print(f"  Hermes multi-step: OK")
+    print("  Hermes multi-step: OK")
 
 
 # =============================================================================
@@ -442,7 +443,7 @@ def test_hermes_write_and_run():
     )
     fib_out = result.stdout + out
     assert any(str(n) in fib_out for n in [8, 13, 21, 34]), f"Fibonacci missing: {fib_out[:200]}"
-    print(f"  Write+run: fibonacci script works")
+    print("  Write+run: fibonacci script works")
 
 
 def test_hermes_code_with_tests():
@@ -462,7 +463,7 @@ def test_hermes_code_with_tests():
         capture_output=True, text=True, timeout=30,
     )
     assert "passed" in result.stdout.lower(), f"Tests failed: {result.stdout[:200]}{result.stderr[:200]}"
-    print(f"  Code+tests: pytest passing")
+    print("  Code+tests: pytest passing")
 
 
 def test_hermes_code_review():
@@ -490,7 +491,7 @@ def test_hermes_git_analysis():
         assert False, err
     assert "commit" in out.lower() or "hermes" in out.lower() or "feat" in out.lower() or "fix" in out.lower(), \
         f"No git info: {out[:200]}"
-    print(f"  Git analysis: OK")
+    print("  Git analysis: OK")
 
 
 def test_hermes_patch_file():
@@ -511,7 +512,7 @@ def test_hermes_patch_file():
         content = f.read()
     assert "docstring" in content.lower() or "say hello" in content.lower() or '"""' in content, \
         f"Patch not applied: {content[:200]}"
-    print(f"  Patch: file edited successfully")
+    print("  Patch: file edited successfully")
 
 
 # =============================================================================
@@ -519,7 +520,7 @@ def test_hermes_patch_file():
 # =============================================================================
 
 if __name__ == "__main__":
-    print(f"Rapid-MLX Hermes Integration Tests")
+    print("Rapid-MLX Hermes Integration Tests")
     print(f"Server: {BASE_URL}")
     print(f"Model:  {MODEL_ID}")
     print(f"Hermes: {HERMES_BIN}")

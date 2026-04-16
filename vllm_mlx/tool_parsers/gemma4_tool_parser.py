@@ -175,7 +175,7 @@ class Gemma4ToolParser(ToolParser):
 
         # Text-format tool call recovery: catch [Calling tool: name({...})]
         # Models degrade to this format after multiple tool rounds at low quant
-        from .abstract_tool_parser import TEXT_TOOL_CALL_FN_PATTERN, TEXT_TOOL_CALL_ANY
+        from .abstract_tool_parser import TEXT_TOOL_CALL_ANY, TEXT_TOOL_CALL_FN_PATTERN
 
         if TEXT_TOOL_CALL_ANY.search(current_text):
             # Check if we have a complete text tool call

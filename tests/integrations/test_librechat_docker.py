@@ -10,9 +10,8 @@ Pipeline:
 Pass = LibreChat successfully proxies a chat through to rapid-mlx and returns
 an answer that contains the expected substring.
 """
-import json
-import time
 import uuid
+
 import requests
 
 LC = "http://localhost:3081"

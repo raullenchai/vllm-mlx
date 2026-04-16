@@ -2,9 +2,8 @@
 """Comprehensive regression and edge case test suite for Rapid-MLX."""
 
 import json
-import urllib.request
 import urllib.error
-import sys
+import urllib.request
 
 BASE = "http://localhost:8777"
 
@@ -21,7 +20,7 @@ def api_call(path, body=None, method="GET"):
     except urllib.error.HTTPError as e:
         try:
             body_text = e.read().decode()[:500]
-        except:
+        except Exception:
             body_text = ""
         return e.code, body_text
 
@@ -169,7 +168,7 @@ def test_6():
             print(f"  Response: {r[:200]}")
             passed = False
     elif code == 404:
-        print(f"  Endpoint not implemented (404)")
+        print("  Endpoint not implemented (404)")
         passed = False
     else:
         print(f"  Response: {r[:200] if isinstance(r, str) else r}")
@@ -253,15 +252,15 @@ def test_10():
         "stream_options": {"include_usage": True}
     })
     print(f"  Total SSE data lines: {len(lines)}")
-    print(f"  Last 3 lines:")
-    for l in lines[-3:]:
-        print(f"    {l[:200]}")
+    print("  Last 3 lines:")
+    for line in lines[-3:]:
+        print(f"    {line[:200]}")
 
     found_usage = False
-    for l in reversed(lines):
-        if "[DONE]" in l:
+    for line in reversed(lines):
+        if "[DONE]" in line:
             continue
-        chunk = json.loads(l[5:].strip())
+        chunk = json.loads(line[5:].strip())
         if "usage" in chunk and chunk["usage"] is not None:
             found_usage = True
             print(f"  Usage: {chunk['usage']}")

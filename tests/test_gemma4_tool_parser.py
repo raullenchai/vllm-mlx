@@ -16,13 +16,13 @@ Fix history:
   numeric args like `{a:3,b:4}` parsed as empty dict {}.
 """
 import json
+
 import pytest
 
 from vllm_mlx.tool_parsers.gemma4_tool_parser import (
     Gemma4ToolParser,
     _parse_gemma4_args,
 )
-
 
 # ---------------------------------------------------------------------------
 # _parse_gemma4_args — unit tests

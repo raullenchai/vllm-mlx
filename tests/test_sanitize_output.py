@@ -18,7 +18,6 @@ import pytest
 
 from vllm_mlx.api.utils import sanitize_output
 
-
 # ---------------------------------------------------------------------------
 # The exact regression cases from the bug report
 # ---------------------------------------------------------------------------

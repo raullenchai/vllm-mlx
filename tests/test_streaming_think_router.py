@@ -78,7 +78,7 @@ class TestStreamingThinkRouter(unittest.TestCase):
         p2 = r.process(" is not a tag>")
         # After p2, the held-back "<thi" + "s is not a tag>" should emit as text
         all_text = "".join(t for bt, t in p1 + p2 if bt == "text")
-        assert "Hello <this is not a tag>" == all_text
+        assert all_text == "Hello <this is not a tag>"
 
     # --- Multiple think blocks ---
 

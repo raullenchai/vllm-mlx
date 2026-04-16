@@ -8,6 +8,7 @@ Tests:
 """
 import json
 import uuid
+
 import requests
 
 OW = "http://localhost:3000"
@@ -28,7 +29,7 @@ try:
     data = r.json()
     token = data.get("token")
     assert token, f"no token: {data}"
-    print(f"PASS: registered + got token")
+    print("PASS: registered + got token")
     results["1_register"] = "PASS"
 except Exception as e:
     print(f"FAIL: {e}")
@@ -107,11 +108,14 @@ if target_model:
         chunks = 0
         content = ""
         for line in r.iter_lines():
-            if not line: continue
+            if not line:
+                continue
             line = line.decode()
-            if not line.startswith("data: "): continue
+            if not line.startswith("data: "):
+                continue
             payload = line[6:]
-            if payload == "[DONE]": break
+            if payload == "[DONE]":
+                break
             obj = json.loads(payload)
             delta = obj.get("choices", [{}])[0].get("delta", {}).get("content", "")
             content += delta

@@ -29,7 +29,7 @@ their token mappings in MODEL_TOKEN_MAPS.
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any
 

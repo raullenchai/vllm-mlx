@@ -10,7 +10,6 @@ import pytest
 
 from vllm_mlx.output_router import Channel, OutputRouter, RouterState, TokenMap
 
-
 # === Gemma 4 Token IDs (from tokenizer) ===
 GEMMA4_MAP = TokenMap(
     channel_start=100,   # <|channel>
@@ -296,7 +295,8 @@ class TestStateReset:
     def test_multiple_requests(self, router):
         """Router works correctly across multiple reset cycles."""
         # Request 1
-        router.feed(100); router.feed(45518)  # thinking
+        router.feed(100)
+        router.feed(45518)  # thinking
         e1 = router.feed(651)
         assert e1.channel == Channel.REASONING
 

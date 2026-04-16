@@ -71,13 +71,16 @@ class BaseEngine(ABC):
     def preserve_native_tool_format(self, value: bool) -> None:
         self._preserve_native_tool_format = value
 
-    def generate_warmup(self) -> None:
+    def generate_warmup(self) -> None:  # noqa: B027 — intentional no-op default
         """Run a minimal generation to compile Metal shaders.
 
         This prevents the first real request from hanging for minutes
         while shaders compile on-demand.
+
+        The default is a no-op; engines that benefit from warmup
+        (SimpleEngine, BatchedEngine) override this.
         """
-        pass  # Subclasses may override
+        pass
 
     @abstractmethod
     async def start(self) -> None:

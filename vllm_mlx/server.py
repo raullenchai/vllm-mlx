@@ -1079,8 +1079,17 @@ def _init_fsm_factory(tokenizer) -> None:
             return factory
 
         factory = _make_fsm_factory(_tool_call_parser, tokenizer)
+
+        # BatchedEngine: set on engine for Scheduler to pick up
         if hasattr(_engine, "_tool_logits_processor_factory"):
             _engine._tool_logits_processor_factory = factory
+
+        # SimpleEngine: set on the MLXLanguageModel for stream_generate
+        _model = getattr(_engine, "_model", None)
+        if _model is not None and hasattr(_model, "_logits_processor_factory"):
+            _model._logits_processor_factory = factory
+            logger.info("[FSM] Set logits processor factory on SimpleEngine model")
+
         logger.info(
             f"[FSM] Constrained decoding enabled for parser: {_tool_call_parser}"
         )

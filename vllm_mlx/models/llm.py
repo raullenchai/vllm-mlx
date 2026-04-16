@@ -101,6 +101,12 @@ class MLXLanguageModel:
         self._cached_token_ids: list[int] = []
         self._cache_lock = False  # Simple guard against concurrent use
 
+        # Logits processor factory (e.g. FSM constrained decoding for tool calls).
+        # Set by server after model load.  Called per-request, returns a processor
+        # or None.  The processor's __call__(token_ids, logits) → logits interface
+        # is passed directly to mlx_lm.generate_step via logits_processors.
+        self._logits_processor_factory: Any | None = None
+
         # Token-level output router (set in load() if model supports it)
         self._output_router = None
 
@@ -626,6 +632,16 @@ class MLXLanguageModel:
             "prompt_cache": self._prompt_cache,
             "prefill_step_size": self.prefill_step_size,
         }
+
+        # FSM constrained decoding (tool calls) — create a fresh processor
+        # per request so FSM state doesn't leak between requests.
+        if self._logits_processor_factory:
+            try:
+                proc = self._logits_processor_factory()
+                if proc is not None:
+                    gen_kwargs["logits_processors"] = [proc]
+            except Exception as lp_err:
+                logger.warning("Failed to create logits processor: %s", lp_err)
 
         # Native MTP speculative decoding
         if self._mtp:

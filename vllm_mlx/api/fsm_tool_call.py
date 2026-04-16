@@ -353,7 +353,7 @@ class FSMToolCallProcessor:
                 # JSON body complete — back to free mode
                 self._constrained = False
                 self._guide = None
-                logger.debug("[FSM] JSON body complete, back to free mode")
+                logger.info("[FSM] JSON body complete, back to free mode")
                 return logits
 
             # Get allowed tokens and mask logits
@@ -375,7 +375,7 @@ class FSMToolCallProcessor:
             if guide is not None:
                 self._guide = guide
                 self._constrained = True
-                logger.debug(
+                logger.info(
                     f"[FSM] Trigger detected: {self._trigger!r} → "
                     "constrained mode"
                 )

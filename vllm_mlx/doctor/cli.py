@@ -166,6 +166,9 @@ def run_full_tier(models: list[str], update_baselines: bool = False):
             tier="full",
             update_baselines=update_baselines,
             agent_profiles=profile_names,
+            # 27B+ models in the full sweep may need >180s on a slow
+            # disk; check tier (smaller default model) keeps fast-fail.
+            boot_timeout_s=600,
         )
 
     return runner.finalize()
@@ -203,23 +206,26 @@ def _run_per_model_block(
     tier: str,
     update_baselines: bool,
     agent_profiles: list[str],
+    boot_timeout_s: int = 180,
 ) -> None:
     """Boot a server for one model and run all model-bound checks against it.
 
     Failures here do NOT abort the rest of the tier — the runner just
     records the failure and moves on, so a single broken model in the
     full sweep still yields a complete report.
+
+    ``boot_timeout_s`` is per-tier: the check tier passes 180s (small
+    qwen3.5-4b should boot in <30s; we want fast-fail when something
+    breaks), full tier overrides to 600s because it covers 27B+ models
+    whose cold load can exceed 180s when paging from a slow disk.
     """
     from .checks import agent, api, perf
     from .server import ServerStartFailed, serve
 
     server_log = runner.run_dir / f"server-{safe_model_slug(model)}.log"
     try:
-        # Full tier covers 27B+ models (qwen3.5-35b, gemma-4-26b) whose
-        # cold load can exceed 180s when paging from a slow external
-        # SSD.  Use the same generous budget as the benchmark tier.
         with serve(
-            model=model, log_path=server_log, boot_timeout_s=600,
+            model=model, log_path=server_log, boot_timeout_s=boot_timeout_s,
         ) as info:
             port = info["port"]
             print(f"  [server] {model} up on port {port}, log → {server_log.name}")

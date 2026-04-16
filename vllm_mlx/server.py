@@ -982,6 +982,8 @@ def load_model(
 
     logger.info(f"Default max tokens: {_default_max_tokens}")
 
+    _register_model()
+
 
 def _setup_fsm_tool_calls() -> None:
     """Set up FSM-based constrained decoding for tool calls.
@@ -1111,6 +1113,12 @@ def _init_legacy_tool_logits(tokenizer) -> None:
         logger.warning(f"Failed to set up legacy tool logits: {e}")
 
 
+def _register_model() -> None:
+    """Register the loaded model in the multi-model registry.
+
+    Must be called at the end of ``load_model()`` after all engine
+    and tool setup is complete.
+    """
     # Register in multi-model registry
     aliases = set()
     if _model_alias and _model_alias != _model_name:

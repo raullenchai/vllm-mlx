@@ -70,13 +70,29 @@ class DoctorRunner:
     def __init__(self, tier: str, run_dir: Path | None = None):
         self.tier = tier
         self.started = _dt.datetime.now()
-        self.run_dir = run_dir or self._default_run_dir()
+        self.run_dir = run_dir or self._unique_run_dir()
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.checks: list[CheckResult] = []
 
-    def _default_run_dir(self) -> Path:
-        ts = self.started.strftime("%Y-%m-%d-%H%M")
-        return RUNS_DIR / f"{ts}-{self.tier}"
+    def _unique_run_dir(self) -> Path:
+        """Pick a run directory that does not collide with an existing one.
+
+        Uses second precision plus a numeric suffix on collision so back-
+        to-back invocations of the same tier never overwrite each other's
+        artefacts (which would defeat the purpose of a regression log).
+        """
+        ts = self.started.strftime("%Y-%m-%d-%H%M%S")
+        base = RUNS_DIR / f"{ts}-{self.tier}"
+        if not base.exists():
+            return base
+        # Highly unlikely (sub-second double-invocation) but cover it.
+        for i in range(1, 100):
+            candidate = RUNS_DIR / f"{ts}-{self.tier}-{i}"
+            if not candidate.exists():
+                return candidate
+        # Past 100 collisions, fall back to a microsecond-stamped dir
+        # rather than silently overwriting.
+        return RUNS_DIR / f"{ts}-{self.tier}-{self.started.microsecond}"
 
     # ------------------------------------------------------------------
     # Check execution

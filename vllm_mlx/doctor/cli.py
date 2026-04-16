@@ -5,11 +5,37 @@ from __future__ import annotations
 
 import sys
 
-from .runner import DoctorRunner
+from .runner import REPO_ROOT, DoctorRunner
+
+
+def _require_source_checkout() -> None:
+    """Doctor depends on tests/ + harness/ + pyproject.toml.
+
+    A pip-installed wheel does not ship those, so the command would
+    immediately produce confusing failures.  Detect that case up front
+    and exit with a clear message instead.
+    """
+    sentinels = [
+        REPO_ROOT / "pyproject.toml",
+        REPO_ROOT / "tests",
+        REPO_ROOT / "harness",
+    ]
+    missing = [str(p.relative_to(REPO_ROOT)) for p in sentinels if not p.exists()]
+    if missing:
+        print(
+            "[doctor] this command requires a source checkout of Rapid-MLX.\n"
+            f"        missing: {', '.join(missing)}\n"
+            "        Clone https://github.com/raullenchai/Rapid-MLX and run "
+            "from the repo root.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 
 def doctor_command(args) -> None:
     """Dispatch to the requested tier."""
+    _require_source_checkout()
+
     tier = getattr(args, "tier", None) or "smoke"
 
     if tier == "smoke":

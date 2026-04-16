@@ -91,14 +91,21 @@ def check_ruff() -> CheckResult:
 
 
 def check_imports() -> CheckResult:
-    """Verify critical modules import cleanly (catches syntax errors fast)."""
+    """Verify lightweight modules import cleanly (catches syntax errors fast).
+
+    We deliberately avoid importing ``vllm_mlx.server``, ``scheduler`` and
+    the engine modules here — those transitively initialize ``mlx.core``,
+    which aborts with NSRangeException on hosts without a usable Metal
+    device.  Heavy-import errors will still surface during the pytest
+    check that follows, on hosts where they actually matter.
+    """
     t0 = time.perf_counter()
     py = python_executable()
     code = (
         "import vllm_mlx; "
-        "from vllm_mlx import cli, server, scheduler; "
-        "from vllm_mlx.engine import simple, batched, hybrid; "
+        "from vllm_mlx import cli, model_aliases; "
         "from vllm_mlx.agents import list_profiles; "
+        "from vllm_mlx.doctor import DoctorRunner; "
         "print(f'modules: {len(list_profiles())} agent profiles')"
     )
     rc, stdout, stderr = run_subprocess([py, "-c", code], timeout=60)

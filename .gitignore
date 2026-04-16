@@ -115,3 +115,5 @@ reports/scan_*
 # Doctor harness — per-run artefacts (baselines/ ARE checked in)
 harness/runs/*
 !harness/runs/.gitkeep
+# Scorecard timestamped runs are local; only latest.md is tracked
+harness/scorecard/scorecard-*.md

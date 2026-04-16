@@ -30,7 +30,7 @@ help:
 	@echo "    make smoke              ~2 min,  no model required"
 	@echo "    make check              ~10 min, qwen3.5-4b"
 	@echo "    make full               ~1-2 hr, 3 models + 11 agents"
-	@echo "    make benchmark          (not yet implemented)"
+	@echo "    make benchmark          overnight, all local models → scorecard"
 	@echo "    make update-baselines TIER=check  re-record baseline (after review)"
 	@echo ""
 	@echo "  Quick checks:"

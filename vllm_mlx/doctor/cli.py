@@ -70,8 +70,9 @@ def doctor_command(args) -> None:
             update_baselines=update_baselines,
         )
     elif tier == "benchmark":
-        print("[doctor] benchmark tier not yet implemented", file=sys.stderr)
-        sys.exit(2)
+        result = run_benchmark_tier(
+            models=getattr(args, "models", None),
+        )
     else:
         print(f"[doctor] unknown tier: {tier}", file=sys.stderr)
         sys.exit(2)
@@ -237,6 +238,111 @@ def _run_per_model_block(
 # use _safe_model_slug from baseline.py so the mapping is injective —
 # a non-injective scheme reintroduces the same overwrite bug per-model
 # diffs were meant to fix.
+
+
+# ---------------------------------------------------------------------
+# Benchmark tier
+# ---------------------------------------------------------------------
+
+def run_benchmark_tier(models: list[str] | None = None):
+    """Cross-model scorecard.  Auto-skips models not present locally.
+
+    For each model:
+      1. Boot a server (Simple engine — broadest compatibility)
+      2. Run autoresearch_bench, capture decode/ttft/tool-call metrics
+      3. Tear down
+
+    Aggregates into harness/scorecard/scorecard-{ts}.md plus a
+    'latest.md' alias.  Designed to be runnable overnight — no agent
+    profile sweep, no baseline diff, just numbers for the table.
+    """
+    from .checks import benchmark, smoke
+    from .discovery import discover_local_models
+    from .scorecard import render_scorecard, write_scorecard
+    from .server import ServerStartFailed, serve
+
+    print("Rapid-MLX Doctor — benchmark tier")
+    print("=" * 60)
+
+    runner = DoctorRunner(tier="benchmark")
+    runner.run_check("repo_layout", smoke.check_repo_layout)
+    runner.run_check("imports", smoke.check_imports)
+
+    # Resolve which models to run.  Without --models, sweep every alias
+    # whose weights are already on disk.  Explicit --models overrides
+    # the auto-skip — caller takes responsibility for downloads.
+    skipped: list[tuple[str, str]] = []
+    if models:
+        run_list = models
+    else:
+        all_models = discover_local_models()
+        run_list = [m.alias for m in all_models if m.available]
+        skipped = [(m.alias, m.reason) for m in all_models if not m.available]
+
+    if not run_list:
+        print("\n  no models available locally — pre-fetch with `huggingface-cli download`,")
+        print("  or pass --models <alias>,<alias> to force.")
+        runner.run_check(
+            "discovery",
+            lambda: CheckResult(
+                name="discovery",
+                status=Status.FAIL,
+                duration_s=0.0,
+                detail="no locally-available aliases found",
+            ),
+        )
+        return runner.finalize()
+
+    print(f"\n  Will benchmark {len(run_list)} model(s); "
+          f"{len(skipped)} skipped (not local)")
+
+    cells: list[tuple[str, CheckResult]] = []
+    for model in run_list:
+        print(f"\n  ── model: {model} ──")
+        server_log = runner.run_dir / f"server-{_safe_model_slug(model)}.log"
+        try:
+            with serve(model=model, log_path=server_log) as info:
+                port = info["port"]
+                print(f"  [server] {model} up on port {port}")
+                result = runner.run_check(
+                    f"bench[{model}]",
+                    lambda port=port, model=model: benchmark.benchmark_one_cell(
+                        model, port, runs=1
+                    ),
+                )
+                cells.append((model, result))
+        except ServerStartFailed as exc:
+            err_msg = f"{exc}\nlog: {server_log}"
+            result = runner.run_check(
+                f"bench[{model}]",
+                lambda err_msg=err_msg, model=model: CheckResult(
+                    name=f"bench[{model}]",
+                    status=Status.FAIL,
+                    duration_s=0.0,
+                    detail=f"server boot failed: {err_msg.splitlines()[0]}",
+                ),
+            )
+            cells.append((model, result))
+        except Exception as exc:  # noqa: BLE001 — never abort the whole sweep
+            result = runner.run_check(
+                f"bench[{model}]",
+                lambda exc=exc, model=model: CheckResult(
+                    name=f"bench[{model}]",
+                    status=Status.FAIL,
+                    duration_s=0.0,
+                    detail=f"unexpected error: {type(exc).__name__}: {exc}",
+                ),
+            )
+            cells.append((model, result))
+
+    # Aggregate scorecard.
+    scorecard_md = render_scorecard(cells, skipped=skipped)
+    scorecard_path = write_scorecard(scorecard_md)
+    # Also drop a copy in the run_dir for self-containment.
+    (runner.run_dir / "scorecard.md").write_text(scorecard_md)
+
+    print(f"\n  Scorecard: {scorecard_path}")
+    return runner.finalize()
 
 
 def _apply_baseline(

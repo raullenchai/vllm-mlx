@@ -96,7 +96,36 @@ rapid-mlx doctor full --models qwen3.5-4b,gemma-4-26b
 
 ### `benchmark` (overnight, all local models)
 
-*Not yet implemented* — see TODO at the bottom of this file.
+Sweeps every model with locally-present weights and produces a single
+scorecard markdown:
+
+```bash
+# Auto-discovers models in HF_HUB_CACHE / ~/.cache/huggingface / ~/.lmstudio
+HF_HUB_CACHE=... rapid-mlx doctor benchmark
+
+# Or be explicit (forces inclusion even if cache probe misses):
+rapid-mlx doctor benchmark --models qwen3.5-4b,qwen3.5-9b,gemma-4-26b
+```
+
+Output:
+
+- `harness/scorecard/scorecard-{ts}.md` — timestamped, gitignored
+- `harness/scorecard/latest.md` — always points at the most recent run
+- `harness/runs/{ts}-benchmark/scorecard.md` — copy in the run dir for
+  self-containment alongside server logs
+
+Scorecard columns (kept narrow on purpose — wide markdown tables are
+unreadable):
+
+| Model | Decode TPS | Cold TTFT | Cached TTFT | Tool % | Score | Status |
+
+Models that fail to boot or whose autoresearch returns all-zero
+metrics get a `FAIL — <reason>` row instead of being silently dropped,
+so the scorecard always covers every model the user asked about.
+
+> v1 only sweeps the Simple engine. Cross-engine columns
+> (Simple/Batched/Hybrid) are planned for v2 once BatchedEngine
+> stabilises (see issue #105).
 
 ## Baselines
 
@@ -223,8 +252,8 @@ You're running this model for the first time. Run with
    so they get the right regression threshold (otherwise the default
    5%/10% applies).
 
-## TODO (not yet implemented)
+## TODO
 
-- `rapid-mlx doctor benchmark` — cross-model × cross-engine scorecard sweep
-- `make doctor` targets — `make smoke / check / full / benchmark`
+- `benchmark` v2: cross-engine columns (Simple / Batched / Hybrid) once
+  BatchedEngine stabilises (issue #105)
 - Pre-push git hook integration (optional, opt-in)

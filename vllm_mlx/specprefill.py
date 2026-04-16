@@ -41,7 +41,6 @@ Reference: arxiv.org/abs/2502.02789 (SpecPrefill: Speculative Prefilling)
 import math
 
 import mlx.core as mx
-
 from mlx_lm.models.cache import make_prompt_cache
 from mlx_lm.sample_utils import make_sampler
 
@@ -549,9 +548,7 @@ def _find_attention_layers(model):
     """
     results = []
     for idx, layer in enumerate(model.layers):
-        if hasattr(layer, "self_attn"):
-            results.append((idx, layer))
-        elif getattr(layer, "block_type", None) == "*":
+        if hasattr(layer, "self_attn") or getattr(layer, "block_type", None) == "*":
             results.append((idx, layer))
     return results
 

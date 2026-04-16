@@ -14,9 +14,7 @@ import re
 from .base import DeltaMessage, ReasoningParser
 
 # Match full thought blocks in complete text
-_THOUGHT_BLOCK = re.compile(
-    r"<\|channel>thought\n[\s\S]*?<channel\|>\s*", re.DOTALL
-)
+_THOUGHT_BLOCK = re.compile(r"<\|channel>thought\n[\s\S]*?<channel\|>\s*", re.DOTALL)
 # Match content channel markers
 _CONTENT_START = re.compile(r"<\|channel>(?:content|final)\n?")
 _CHANNEL_END = re.compile(r"<channel\|>")
@@ -55,7 +53,11 @@ class Gemma4ReasoningParser(ReasoningParser):
         # Reasoning = thought block contents (strip markers)
         reasoning = ""
         for block in thought_blocks:
-            inner = block.replace("<|channel>thought\n", "").replace("<channel|>", "").strip()
+            inner = (
+                block.replace("<|channel>thought\n", "")
+                .replace("<channel|>", "")
+                .strip()
+            )
             reasoning += inner
 
         # Content = everything after thought blocks, strip markers
@@ -91,13 +93,23 @@ class Gemma4ReasoningParser(ReasoningParser):
             if channel_ends >= thought_starts:
                 self._in_thought = False
                 # If no explicit content channel follows, switch to content mode
-                if "<|channel>content" not in current_text and "<|channel>final" not in current_text:
+                if (
+                    "<|channel>content" not in current_text
+                    and "<|channel>final" not in current_text
+                ):
                     self._in_content = True
 
         # Filter out channel markers from delta
         clean = delta_text
-        for marker in ["<|channel>", "<channel|>", "<|turn>", "<turn|>",
-                        "thought\n", "content\n", "final\n"]:
+        for marker in [
+            "<|channel>",
+            "<channel|>",
+            "<|turn>",
+            "<turn|>",
+            "thought\n",
+            "content\n",
+            "final\n",
+        ]:
             clean = clean.replace(marker, "")
 
         if not clean:

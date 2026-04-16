@@ -538,7 +538,7 @@ class MLLMScheduler:
                         prev_text = tokenizer.decode(request.output_tokens[:-1])
                         trimmed_total = decoded_so_far[:idx]
                         if len(trimmed_total) > len(prev_text):
-                            output.new_text = trimmed_total[len(prev_text):]
+                            output.new_text = trimmed_total[len(prev_text) :]
                         else:
                             output.new_text = ""
                         break

@@ -548,8 +548,11 @@ class SimpleEngine(BaseEngine):
                     finish_reason=last_chunk.finish_reason or "stop",
                 )
             return GenerationOutput(
-                text="", tokens=[], prompt_tokens=0,
-                completion_tokens=0, finish_reason="stop",
+                text="",
+                tokens=[],
+                prompt_tokens=0,
+                completion_tokens=0,
+                finish_reason="stop",
             )
 
         async with self._generation_lock:
@@ -757,7 +760,8 @@ class SimpleEngine(BaseEngine):
                             logger.warning(
                                 "MLLM stream_chat error after %d tokens "
                                 "(likely post-generation cleanup): %s",
-                                token_count, e,
+                                token_count,
+                                e,
                             )
                             break
                         raise

@@ -10,23 +10,22 @@ import pytest
 
 from vllm_mlx.output_router import Channel, OutputRouter, RouterState, TokenMap
 
-
 # === Gemma 4 Token IDs (from tokenizer) ===
 GEMMA4_MAP = TokenMap(
-    channel_start=100,   # <|channel>
-    channel_end=101,     # <channel|>
+    channel_start=100,  # <|channel>
+    channel_end=101,  # <channel|>
     thought_word=45518,  # "thought"
-    content_word=3955,   # "content"
-    final_word=10218,    # "final"
-    turn_start=105,      # <|turn>
-    turn_end=106,        # <turn|>
+    content_word=3955,  # "content"
+    final_word=10218,  # "final"
+    turn_start=105,  # <|turn>
+    turn_end=106,  # <turn|>
     tool_call_start=48,  # <|tool_call>
-    tool_call_end=49,    # <tool_call|>
-    tool_quote=52,       # <|"|>
-    tool_start=46,       # <|tool>
-    tool_end=47,         # <tool|>
+    tool_call_end=49,  # <tool_call|>
+    tool_quote=52,  # <|"|>
+    tool_start=46,  # <|tool>
+    tool_end=47,  # <tool|>
     tool_response_start=50,  # <|tool_response>
-    tool_response_end=51,    # <tool_response|>
+    tool_response_end=51,  # <tool_response|>
     bos=2,
     eos=1,
     pad=0,
@@ -49,20 +48,39 @@ class FakeTokenizer:
 
 # Gemma 4 vocabulary (subset for testing)
 VOCAB = {
-    "<pad>": 0, "<eos>": 1, "<bos>": 2,
-    "<|tool>": 46, "<tool|>": 47,
-    "<|tool_call>": 48, "<tool_call|>": 49,
-    "<|tool_response>": 50, "<tool_response|>": 51,
+    "<pad>": 0,
+    "<eos>": 1,
+    "<bos>": 2,
+    "<|tool>": 46,
+    "<tool|>": 47,
+    "<|tool_call>": 48,
+    "<tool_call|>": 49,
+    "<|tool_response>": 50,
+    "<tool_response|>": 51,
     '<|"|>': 52,
-    "<|channel>": 100, "<channel|>": 101,
-    "<|turn>": 105, "<turn|>": 106,
+    "<|channel>": 100,
+    "<channel|>": 101,
+    "<|turn>": 105,
+    "<turn|>": 106,
     "\n": 107,
-    "thought": 45518, "content": 3955, "final": 10218,
-    "Hello": 9259, "Four": 73440, "call": 6639, ":": 236787,
-    "get": 828, "_": 236779, "weather": 19323,
-    "{": 236782, "}": 236783, "city": 13319,
-    "Tokyo": 89265, " ": 235248,
-    "The": 651, "user": 2364, "wants": 10388,
+    "thought": 45518,
+    "content": 3955,
+    "final": 10218,
+    "Hello": 9259,
+    "Four": 73440,
+    "call": 6639,
+    ":": 236787,
+    "get": 828,
+    "_": 236779,
+    "weather": 19323,
+    "{": 236782,
+    "}": 236783,
+    "city": 13319,
+    "Tokyo": 89265,
+    " ": 235248,
+    "The": 651,
+    "user": 2364,
+    "wants": 10388,
 }
 
 TOKENIZER = FakeTokenizer(VOCAB)
@@ -87,9 +105,9 @@ class TestBasicRouting:
 
     def test_bos_eos_pad_suppressed(self, router):
         """Control tokens are suppressed."""
-        assert router.feed(0) is None   # pad
-        assert router.feed(1) is None   # eos
-        assert router.feed(2) is None   # bos
+        assert router.feed(0) is None  # pad
+        assert router.feed(1) is None  # eos
+        assert router.feed(2) is None  # bos
 
     def test_turn_tokens_suppressed(self, router):
         """Turn markers are suppressed."""
@@ -102,7 +120,7 @@ class TestThinkingChannel:
 
     def test_thought_channel_detected(self, router):
         """<|channel> + thought → THINKING state, tokens go to REASONING."""
-        assert router.feed(100) is None   # <|channel> suppressed
+        assert router.feed(100) is None  # <|channel> suppressed
         assert router.feed(45518) is None  # "thought" suppressed
         assert router.state == RouterState.THINKING
 
@@ -112,9 +130,9 @@ class TestThinkingChannel:
 
     def test_thought_ends_at_channel_close(self, router):
         """<channel|> ends thinking, switches to CONTENT."""
-        router.feed(100)    # <|channel>
+        router.feed(100)  # <|channel>
         router.feed(45518)  # thought
-        router.feed(651)    # "The" (reasoning)
+        router.feed(651)  # "The" (reasoning)
 
         assert router.feed(101) is None  # <channel|> suppressed
         assert router.state == RouterState.CONTENT
@@ -126,8 +144,8 @@ class TestThinkingChannel:
     def test_thought_then_content_channel(self, router):
         """Full cycle: thought → <channel|> → content channel → answer."""
         # Thought channel
-        router.feed(100)     # <|channel>
-        router.feed(45518)   # thought
+        router.feed(100)  # <|channel>
+        router.feed(45518)  # thought
         e1 = router.feed(651)  # "The"
         assert e1.channel == Channel.REASONING
 
@@ -135,17 +153,17 @@ class TestThinkingChannel:
         router.feed(101)  # <channel|>
 
         # Content channel
-        router.feed(100)   # <|channel>
+        router.feed(100)  # <|channel>
         router.feed(3955)  # content
         e2 = router.feed(73440)  # "Four"
         assert e2.channel == Channel.CONTENT
 
     def test_implicit_content_after_thought(self, router):
         """After <channel|>, if no new <|channel>, tokens are content."""
-        router.feed(100)     # <|channel>
-        router.feed(45518)   # thought
-        router.feed(651)     # reasoning
-        router.feed(101)     # <channel|>
+        router.feed(100)  # <|channel>
+        router.feed(45518)  # thought
+        router.feed(651)  # reasoning
+        router.feed(101)  # <channel|>
 
         # No explicit content channel — should still be content
         e = router.feed(73440)  # "Four"
@@ -157,24 +175,24 @@ class TestToolCallRouting:
 
     def test_tool_call_accumulated(self, router):
         """Tokens between <|tool_call> and <tool_call|> are accumulated."""
-        assert router.feed(48) is None   # <|tool_call> → accumulate
+        assert router.feed(48) is None  # <|tool_call> → accumulate
         assert router.feed(6639) is None  # "call" → accumulate
         assert router.feed(236787) is None  # ":" → accumulate
 
     def test_tool_call_emitted_on_close(self, router):
         """Complete tool call emitted as TOOL_CALL event."""
-        router.feed(48)      # <|tool_call>
-        router.feed(6639)    # call
+        router.feed(48)  # <|tool_call>
+        router.feed(6639)  # call
         router.feed(236787)  # :
-        router.feed(828)     # get
+        router.feed(828)  # get
         router.feed(236779)  # _
-        router.feed(19323)   # weather
+        router.feed(19323)  # weather
         router.feed(236782)  # {
-        router.feed(13319)   # city
+        router.feed(13319)  # city
         router.feed(236787)  # :
-        router.feed(52)      # <|"|>
-        router.feed(89265)   # Tokyo
-        router.feed(52)      # <|"|>
+        router.feed(52)  # <|"|>
+        router.feed(89265)  # Tokyo
+        router.feed(52)  # <|"|>
         router.feed(236783)  # }
 
         event = router.feed(49)  # <tool_call|>
@@ -185,9 +203,9 @@ class TestToolCallRouting:
 
     def test_content_after_tool_call(self, router):
         """After tool call completes, back to content mode."""
-        router.feed(48)   # <|tool_call>
-        router.feed(6639) # call
-        router.feed(49)   # <tool_call|>
+        router.feed(48)  # <|tool_call>
+        router.feed(6639)  # call
+        router.feed(49)  # <tool_call|>
 
         event = router.feed(9259)  # "Hello"
         assert event.channel == Channel.CONTENT
@@ -212,8 +230,8 @@ class TestOrphanTokens:
 
     def test_content_after_orphan_tokens(self, router):
         """Content after orphan tokens routes correctly."""
-        router.feed(49)   # orphan <tool_call|>
-        router.feed(51)   # orphan <tool_response|>
+        router.feed(49)  # orphan <tool_call|>
+        router.feed(51)  # orphan <tool_response|>
         event = router.feed(9259)  # "Hello"
         assert event is not None
         assert event.channel == Channel.CONTENT
@@ -225,12 +243,17 @@ class TestFeedSequence:
     def test_thought_then_content(self, router):
         """Process a full thought→content sequence."""
         tokens = [
-            100, 45518, 107,  # <|channel> thought \n
-            651, 2364,        # "The" "user" (reasoning)
-            101,              # <channel|>
-            100, 3955, 107,   # <|channel> content \n
-            73440,            # "Four" (content)
-            101,              # <channel|>
+            100,
+            45518,
+            107,  # <|channel> thought \n
+            651,
+            2364,  # "The" "user" (reasoning)
+            101,  # <channel|>
+            100,
+            3955,
+            107,  # <|channel> content \n
+            73440,  # "Four" (content)
+            101,  # <channel|>
         ]
         result = router.feed_sequence(tokens)
         assert result["content"] == "Four"
@@ -240,14 +263,20 @@ class TestFeedSequence:
     def test_tool_call_sequence(self, router):
         """Process a tool call sequence."""
         tokens = [
-            48,               # <|tool_call>
-            6639, 236787,     # call :
-            828, 236779, 19323,  # get _ weather
-            236782,           # {
-            13319, 236787,    # city :
-            52, 89265, 52,    # <|"|> Tokyo <|"|>
-            236783,           # }
-            49,               # <tool_call|>
+            48,  # <|tool_call>
+            6639,
+            236787,  # call :
+            828,
+            236779,
+            19323,  # get _ weather
+            236782,  # {
+            13319,
+            236787,  # city :
+            52,
+            89265,
+            52,  # <|"|> Tokyo <|"|>
+            236783,  # }
+            49,  # <tool_call|>
         ]
         result = router.feed_sequence(tokens)
         assert result["tool_calls"] is not None
@@ -285,8 +314,8 @@ class TestStateReset:
 
     def test_reset_clears_state(self, router):
         """Reset returns to INIT state."""
-        router.feed(100)     # enter channel
-        router.feed(45518)   # thinking
+        router.feed(100)  # enter channel
+        router.feed(45518)  # thinking
         assert router.state == RouterState.THINKING
 
         router.reset()
@@ -296,7 +325,8 @@ class TestStateReset:
     def test_multiple_requests(self, router):
         """Router works correctly across multiple reset cycles."""
         # Request 1
-        router.feed(100); router.feed(45518)  # thinking
+        router.feed(100)
+        router.feed(45518)  # thinking
         e1 = router.feed(651)
         assert e1.channel == Channel.REASONING
 

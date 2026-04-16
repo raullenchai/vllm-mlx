@@ -139,6 +139,7 @@ def configure_logging(log_level: str) -> str:
     logger.setLevel(getattr(logging, normalized, logging.INFO))
     return normalized.lower()
 
+
 # Multi-model registry — supports loading 2+ models simultaneously.
 # When populated, get_engine() routes by request model name.
 # Backward-compatible: single-model mode still uses _engine global as before.
@@ -205,7 +206,9 @@ _cloud_router = None  # CloudRouter instance when --cloud-model is set
 
 # GC control (Tier 0 optimization)
 _gc_control: bool = True  # Disable GC during generation to avoid latency spikes
-_no_thinking: bool = False  # --no-thinking: force enable_thinking=False in chat template
+_no_thinking: bool = (
+    False  # --no-thinking: force enable_thinking=False in chat template
+)
 
 # Pinned prefix cache (Tier 0 optimization)
 _pin_system_prompt: bool = False  # Auto-pin system prompt prefix cache blocks
@@ -374,16 +377,20 @@ async def lifespan(app: FastAPI):
             _is_hybrid = getattr(_engine, "_hybrid_throttle", False)
             if not _is_hybrid and not getattr(_engine, "_is_mllm", False):
                 # Try to find the raw model through wrapper layers
-                _model = (
-                    getattr(_engine, "_model", None)
-                    or getattr(_engine, "_shared_model", None)
+                _model = getattr(_engine, "_model", None) or getattr(
+                    _engine, "_shared_model", None
                 )
                 # Unwrap MLXLanguageModel if needed
-                if _model and hasattr(_model, "model") and not hasattr(_model, "make_cache"):
+                if (
+                    _model
+                    and hasattr(_model, "model")
+                    and not hasattr(_model, "make_cache")
+                ):
                     _model = _model.model
                 if _model and hasattr(_model, "make_cache"):
                     try:
                         from mlx_lm.models.cache import ArraysCache
+
                         _test_cache = _model.make_cache()
                         _is_hybrid = any(
                             isinstance(c, ArraysCache) for c in _test_cache
@@ -460,6 +467,7 @@ def configure_cors(origins: list[str]) -> None:
         allow_headers=["*"],
     )
 
+
 security = HTTPBearer(auto_error=False)
 
 
@@ -467,8 +475,15 @@ security = HTTPBearer(auto_error=False)
 async def _global_exception_handler(request: Request, exc: Exception):
     """Catch unhandled exceptions so they return JSON 500 instead of killing
     the connection. This keeps the server alive for subsequent requests."""
-    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    logger.error(
+        "Unhandled exception on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc,
+        exc_info=True,
+    )
     from starlette.responses import JSONResponse
+
     return JSONResponse(
         status_code=500,
         content={"error": {"message": str(exc), "type": type(exc).__name__}},
@@ -608,7 +623,11 @@ def _validate_model_name(request_model: str) -> None:
     if _model_path:
         accepted.add(_model_path)
     if request_model not in accepted:
-        available = ", ".join(_model_registry.list_model_names()) if _model_registry else _model_name
+        available = (
+            ", ".join(_model_registry.list_model_names())
+            if _model_registry
+            else _model_name
+        )
         raise HTTPException(
             status_code=404,
             detail=f"The model `{request_model}` does not exist. "
@@ -2160,9 +2179,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
                     )
                 else:
                     result = await _wait_with_disconnect(
-                        _cloud_router.completion(
-                            cloud_messages, **cloud_kwargs
-                        ),
+                        _cloud_router.completion(cloud_messages, **cloud_kwargs),
                         raw_request,
                         timeout=request.timeout or _default_timeout,
                     )
@@ -2196,8 +2213,10 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
             except Exception as e:
                 err_msg = str(e)
                 err_type = type(e).__name__
-                if "TemplateError" in err_type or "template" in err_msg.lower() or (
-                    "user" in err_msg.lower() and "found" in err_msg.lower()
+                if (
+                    "TemplateError" in err_type
+                    or "template" in err_msg.lower()
+                    or ("user" in err_msg.lower() and "found" in err_msg.lower())
                 ):
                     raise HTTPException(
                         status_code=400,
@@ -2288,10 +2307,14 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
         # and other chat template failures, return 400 instead of 500.
         err_msg = str(e)
         err_type = type(e).__name__
-        if "TemplateError" in err_type or "template" in err_msg.lower() or (
-            "user" in err_msg.lower() and "found" in err_msg.lower()
+        if (
+            "TemplateError" in err_type
+            or "template" in err_msg.lower()
+            or ("user" in err_msg.lower() and "found" in err_msg.lower())
         ):
-            raise HTTPException(status_code=400, detail=f"Chat template error: {err_msg}")
+            raise HTTPException(
+                status_code=400, detail=f"Chat template error: {err_msg}"
+            )
         raise  # Re-raise non-template errors
     finally:
         if _gc_control and gc_was_enabled:
@@ -2520,10 +2543,14 @@ async def create_anthropic_message(
     except Exception as e:
         err_msg = str(e)
         err_type = type(e).__name__
-        if "TemplateError" in err_type or "template" in err_msg.lower() or (
-            "user" in err_msg.lower() and "found" in err_msg.lower()
+        if (
+            "TemplateError" in err_type
+            or "template" in err_msg.lower()
+            or ("user" in err_msg.lower() and "found" in err_msg.lower())
         ):
-            raise HTTPException(status_code=400, detail=f"Chat template error: {err_msg}")
+            raise HTTPException(
+                status_code=400, detail=f"Chat template error: {err_msg}"
+            )
         raise
     if output is None:
         return Response(status_code=499)  # Client closed request
@@ -3123,7 +3150,11 @@ async def stream_chat_completion(
 
                 # Tool call parsing on content
                 if tool_parser and content:
-                    if not tool_markup_possible and "<" not in content and "[" not in content:
+                    if (
+                        not tool_markup_possible
+                        and "<" not in content
+                        and "[" not in content
+                    ):
                         tool_accumulated_text += content
                     else:
                         if not tool_markup_possible:
@@ -3140,12 +3171,16 @@ async def stream_chat_completion(
                             chunk = ChatCompletionChunk(
                                 id=response_id,
                                 model=request.model or _model_name,
-                                choices=[ChatCompletionChunkChoice(
-                                    delta=ChatCompletionChunkDelta(
-                                        tool_calls=tool_result["tool_calls"]
-                                    ),
-                                    finish_reason="tool_calls" if output.finished else None,
-                                )],
+                                choices=[
+                                    ChatCompletionChunkChoice(
+                                        delta=ChatCompletionChunkDelta(
+                                            tool_calls=tool_result["tool_calls"]
+                                        ),
+                                        finish_reason="tool_calls"
+                                        if output.finished
+                                        else None,
+                                    )
+                                ],
                                 usage=get_usage(output) if output.finished else None,
                             )
                             yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
@@ -3157,10 +3192,12 @@ async def stream_chat_completion(
                         chunk = ChatCompletionChunk(
                             id=response_id,
                             model=request.model or _model_name,
-                            choices=[ChatCompletionChunkChoice(
-                                delta=ChatCompletionChunkDelta(),
-                                finish_reason="tool_calls",
-                            )],
+                            choices=[
+                                ChatCompletionChunkChoice(
+                                    delta=ChatCompletionChunkDelta(),
+                                    finish_reason="tool_calls",
+                                )
+                            ],
                             usage=get_usage(output),
                         )
                         yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
@@ -3174,7 +3211,8 @@ async def stream_chat_completion(
 
                 # Skip empty deltas
                 finish_reason = (
-                    "tool_calls" if (output.finished and tool_calls_detected)
+                    "tool_calls"
+                    if (output.finished and tool_calls_detected)
                     else (output.finish_reason if output.finished else None)
                 )
                 if not content and not reasoning and not finish_reason:
@@ -3194,13 +3232,15 @@ async def stream_chat_completion(
                 chunk = ChatCompletionChunk(
                     id=response_id,
                     model=request.model or _model_name,
-                    choices=[ChatCompletionChunkChoice(
-                        delta=ChatCompletionChunkDelta(
-                            content=sanitize_output(content) if content else None,
-                            reasoning=reasoning if reasoning else None,
-                        ),
-                        finish_reason=finish_reason,
-                    )],
+                    choices=[
+                        ChatCompletionChunkChoice(
+                            delta=ChatCompletionChunkDelta(
+                                content=sanitize_output(content) if content else None,
+                                reasoning=reasoning if reasoning else None,
+                            ),
+                            finish_reason=finish_reason,
+                        )
+                    ],
                     usage=get_usage(output) if output.finished else None,
                 )
                 sse_line = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
@@ -3244,7 +3284,11 @@ async def stream_chat_completion(
 
                 # Tool call parsing on content portion
                 if tool_parser and content:
-                    if not tool_markup_possible and "<" not in content and "[" not in content:
+                    if (
+                        not tool_markup_possible
+                        and "<" not in content
+                        and "[" not in content
+                    ):
                         tool_accumulated_text += content
                     else:
                         if not tool_markup_possible:
@@ -3324,11 +3368,7 @@ async def stream_chat_completion(
 
                 # Fast path: simple content or reasoning delta without
                 # logprobs, finish_reason, or usage — skip Pydantic entirely.
-                if (
-                    not finish_reason
-                    and not want_logprobs
-                    and not output.finished
-                ):
+                if not finish_reason and not want_logprobs and not output.finished:
                     if content and not reasoning:
                         _sse = _fast_sse_chunk(content, "content")
                         if _sse:
@@ -3375,7 +3415,11 @@ async def stream_chat_completion(
                     # Fast path: skip full parsing until '<' is seen in the stream,
                     # which could start tool markup (e.g. <tool_call>). This avoids
                     # per-token string scanning on the growing accumulated text.
-                    if not tool_markup_possible and "<" not in delta_text and "[" not in delta_text:
+                    if (
+                        not tool_markup_possible
+                        and "<" not in delta_text
+                        and "[" not in delta_text
+                    ):
                         tool_accumulated_text += delta_text
                         # No tool markup yet, fall through to normal chunk emission
                     else:

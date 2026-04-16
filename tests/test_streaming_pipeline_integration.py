@@ -8,7 +8,7 @@ prompt_tokens tracking work together correctly.
 import json
 import unittest
 
-from vllm_mlx.api.utils import StreamingToolCallFilter, StreamingThinkRouter
+from vllm_mlx.api.utils import StreamingThinkRouter, StreamingToolCallFilter
 from vllm_mlx.server import _emit_content_pieces
 
 

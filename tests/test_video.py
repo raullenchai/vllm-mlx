@@ -34,9 +34,9 @@ class TestSmartNframes:
     def test_result_always_even(self):
         for total in [5, 7, 11, 13, 100, 999]:
             result = smart_nframes(total, 30.0)
-            assert (
-                result % FRAME_FACTOR == 0
-            ), f"Odd frame count {result} for total={total}"
+            assert result % FRAME_FACTOR == 0, (
+                f"Odd frame count {result} for total={total}"
+            )
 
 
 class TestVideoUrlParsing:

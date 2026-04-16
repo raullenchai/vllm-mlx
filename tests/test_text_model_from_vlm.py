@@ -45,9 +45,9 @@ def test_build_text_model_moe():
     assert hasattr(text_model, "mtp"), "TextModel missing .mtp attribute"
     assert text_model.mtp is not None, "TextModel.mtp is None"
     assert hasattr(text_model, "mtp_forward"), "TextModel missing mtp_forward method"
-    assert hasattr(
-        text_model, "make_mtp_cache"
-    ), "TextModel missing make_mtp_cache method"
+    assert hasattr(text_model, "make_mtp_cache"), (
+        "TextModel missing make_mtp_cache method"
+    )
 
     # Verify MoE layer exists in MTP
     mtp_layer = text_model.mtp.layers[0]
@@ -77,9 +77,9 @@ def test_text_model_mtp_forward():
     next_ids = mx.array([[0]])
     logits = text_model.mtp_forward(hidden, next_ids, mtp_cache)
 
-    assert (
-        logits.shape[-1] == text_config["vocab_size"]
-    ), f"Expected vocab_size={text_config['vocab_size']}, got {logits.shape[-1]}"
+    assert logits.shape[-1] == text_config["vocab_size"], (
+        f"Expected vocab_size={text_config['vocab_size']}, got {logits.shape[-1]}"
+    )
 
 
 @pytest.mark.skipif(not VLM_MTP_MODEL.exists(), reason="VLM+MTP model not on disk")
@@ -132,9 +132,9 @@ def test_weight_sharing():
         if hasattr(layer, "self_attn"):
             vlm_weight = layer.self_attn.q_proj.weight
             tm_weight = text_model.model.layers[i].self_attn.q_proj.weight
-            assert mx.array_equal(
-                vlm_weight, tm_weight
-            ), f"Weights at layer {i} should be identical"
+            assert mx.array_equal(vlm_weight, tm_weight), (
+                f"Weights at layer {i} should be identical"
+            )
             break
     else:
         pytest.fail("No layer with self_attn found")

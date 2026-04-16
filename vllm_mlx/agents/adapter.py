@@ -111,8 +111,7 @@ def get_setup_instructions(
     return "\n".join(lines)
 
 
-def apply_streaming_config(profile: AgentProfile,
-                           agent_version: str | None = None):
+def apply_streaming_config(profile: AgentProfile, agent_version: str | None = None):
     """Inject agent-specific streaming filter tags into the global registry.
 
     This is called at server startup or when an agent profile is activated,
@@ -143,9 +142,10 @@ def apply_streaming_config(profile: AgentProfile,
         )
 
 
-def get_extra_tags_for_profile(profile: AgentProfile,
-                               agent_version: str | None = None,
-                               ) -> list[tuple[str, str]]:
+def get_extra_tags_for_profile(
+    profile: AgentProfile,
+    agent_version: str | None = None,
+) -> list[tuple[str, str]]:
     """Get extra streaming tags from a profile (for per-request filter creation).
 
     Instead of mutating global state, this returns the tags so they can be

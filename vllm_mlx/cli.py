@@ -236,7 +236,9 @@ def serve_command(args):
         print(f"  Features: {', '.join(features)}")
     print(f"  Model: {args.model}")
     if args.draft_model:
-        print(f"  Speculative: {args.draft_model} ({args.num_draft_tokens} draft tokens)")
+        print(
+            f"  Speculative: {args.draft_model} ({args.num_draft_tokens} draft tokens)"
+        )
     # Store MCP config path for FastAPI startup
     if args.mcp_config:
         print(f"MCP config: {args.mcp_config}")
@@ -315,7 +317,7 @@ def serve_command(args):
             print(
                 f"SpecPrefill: enabled (draft={args.specprefill_draft_model}, "
                 f"threshold={args.specprefill_threshold}, "
-                f"keep={args.specprefill_keep_pct*100:.0f}%)"
+                f"keep={args.specprefill_keep_pct * 100:.0f}%)"
             )
 
     # Check port availability before loading model (avoid wasting RAM on conflict)
@@ -327,7 +329,9 @@ def serve_command(args):
         _sock.close()
     except OSError:
         print(f"\n  Error: Port {args.port} is already in use.")
-        print(f"  Try a different port: rapid-mlx serve {args.model} --port {args.port + 1}")
+        print(
+            f"  Try a different port: rapid-mlx serve {args.model} --port {args.port + 1}"
+        )
         sys.exit(1)
 
     # Check disk space before downloading model
@@ -365,7 +369,9 @@ def serve_command(args):
         if "404" in error_msg or "not found" in error_msg.lower():
             print(f"\n  Error: Model '{args.model}' not found.")
             print("  Run `rapid-mlx models` to see available aliases,")
-            print("  or use a full HuggingFace path like: mlx-community/Qwen3.5-9B-4bit")
+            print(
+                "  or use a full HuggingFace path like: mlx-community/Qwen3.5-9B-4bit"
+            )
         else:
             print(f"\n  Error loading model: {error_msg}")
         sys.exit(1)
@@ -824,9 +830,12 @@ def agents_command(args):
         from vllm_mlx.agents.testing import AgentTestRunner
 
         model_id = args.model or None
-        runner = AgentTestRunner(profile, base_url=base_url,
-                                 model_id=model_id,
-                                 agent_version=args.agent_version)
+        runner = AgentTestRunner(
+            profile,
+            base_url=base_url,
+            model_id=model_id,
+            agent_version=args.agent_version,
+        )
         if not runner._server_available():
             print(f"\n  Server not running at {base_url}")
             print("  Start it first: rapid-mlx serve <model>")
@@ -843,23 +852,27 @@ def agents_command(args):
         if model_id == "default":
             try:
                 import httpx
+
                 resp = httpx.get(f"{base_url}/models", timeout=3)
                 model_id = resp.json()["data"][0]["id"]
             except Exception:
                 pass
 
-        summary = setup_agent_config(profile, base_url, model_id,
-                                      agent_version=args.agent_version)
+        summary = setup_agent_config(
+            profile, base_url, model_id, agent_version=args.agent_version
+        )
         print(f"\n  {profile.display_name} configured!")
         print(f"  {summary}")
         print()
         return
 
     # Default: show setup instructions
-    model_id = args.model or (profile.recommended_models[0]
-                               if profile.recommended_models else "<MODEL>")
-    instructions = get_setup_instructions(profile, base_url, model_id,
-                                          agent_version=args.agent_version)
+    model_id = args.model or (
+        profile.recommended_models[0] if profile.recommended_models else "<MODEL>"
+    )
+    instructions = get_setup_instructions(
+        profile, base_url, model_id, agent_version=args.agent_version
+    )
     print()
     print(instructions)
     print()
@@ -1102,14 +1115,14 @@ Examples:
         help="API key for authentication (if not set, no auth required)",
     )
     serve_parser.add_argument(
-    "--cors-origins",
-    type=str,
-    nargs="+",
-    default=None,
-    metavar="ORIGIN",
-    help=(
-        "Allowed CORS origins (default: * for all origins). "
-        "Example: --cors-origins http://localhost:3000 https://myapp.com"
+        "--cors-origins",
+        type=str,
+        nargs="+",
+        default=None,
+        metavar="ORIGIN",
+        help=(
+            "Allowed CORS origins (default: * for all origins). "
+            "Example: --cors-origins http://localhost:3000 https://myapp.com"
         ),
     )
     serve_parser.add_argument(
@@ -1435,34 +1448,88 @@ Examples:
         "agents", help="List, configure, and test agent integrations"
     )
     agents_parser.add_argument(
-        "agent_name", nargs="?", default=None,
+        "agent_name",
+        nargs="?",
+        default=None,
         help="Agent name (e.g. hermes, goose, aider). Omit to list all.",
     )
     agents_parser.add_argument(
-        "--setup", action="store_true",
+        "--setup",
+        action="store_true",
         help="Auto-configure the agent to point at this server",
     )
     agents_parser.add_argument(
-        "--test", action="store_true",
+        "--test",
+        action="store_true",
         help="Run integration tests for this agent",
     )
     agents_parser.add_argument(
-        "--model", type=str, default=None,
+        "--model",
+        type=str,
+        default=None,
         help="Model to use (default: auto-detect from running server)",
     )
     agents_parser.add_argument(
-        "--base-url", type=str, default="http://localhost:8000/v1",
+        "--base-url",
+        type=str,
+        default="http://localhost:8000/v1",
         help="Rapid-MLX server URL (default: http://localhost:8000/v1)",
     )
     agents_parser.add_argument(
-        "--agent-version", type=str, default=None,
+        "--agent-version",
+        type=str,
+        default=None,
         help="Agent version for version-specific config (e.g. 0.8.5)",
+    )
+
+    # Doctor command — regression harness
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Run regression harness (smoke / check / full / benchmark)",
+    )
+    doctor_parser.add_argument(
+        "tier",
+        nargs="?",
+        default="smoke",
+        choices=["smoke", "check", "full", "benchmark"],
+        help="Which tier to run (default: smoke)",
+    )
+    doctor_parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model alias for check tier (default: qwen3.5-4b)",
+    )
+    doctor_parser.add_argument(
+        "--models",
+        type=str,
+        default=None,
+        help="Comma-separated model aliases for full / benchmark tiers "
+        "(full default: qwen3.5-4b,qwen3.5-35b,gemma-4-26b; "
+        "benchmark default: auto-discovered from local cache)",
+    )
+    doctor_parser.add_argument(
+        "--update-baselines",
+        action="store_true",
+        help="Record current run as the new baseline (check / full only). "
+        "Ignored with a warning for smoke / benchmark tiers.",
     )
 
     args = parser.parse_args()
 
-    # Resolve model aliases before dispatch
-    if hasattr(args, "model") and args.model:
+    # Resolve model aliases before dispatch.
+    #
+    # The doctor subcommand is exempt: it intentionally keeps the alias
+    # form so per-model artefacts (baseline filenames, scorecard rows,
+    # report check names) stay human-readable and stable across runs.
+    # Doctor does its own alias→path resolution inside the server-spawn
+    # path via discovery, so resolving here would write the wrong
+    # baseline filename and confuse multi-model loops.
+    if (
+        hasattr(args, "model")
+        and args.model
+        and getattr(args, "command", None) != "doctor"
+    ):
         from vllm_mlx.model_aliases import resolve_model
 
         resolved = resolve_model(args.model)
@@ -1483,6 +1550,13 @@ Examples:
         models_command(args)
     elif args.command == "agents":
         agents_command(args)
+    elif args.command == "doctor":
+        from vllm_mlx.doctor.cli import doctor_command
+
+        # Parse --models comma-list now so the doctor module gets a clean list.
+        if getattr(args, "models", None):
+            args.models = [m.strip() for m in args.models.split(",") if m.strip()]
+        doctor_command(args)
     else:
         parser.print_help()
         sys.exit(1)

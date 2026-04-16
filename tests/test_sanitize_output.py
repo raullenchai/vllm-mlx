@@ -14,10 +14,10 @@ Fix history:
   tokens but left the inner `call:name{...}` body in place. Also, the
   non-streaming chat path never called sanitize_output at all.
 """
+
 import pytest
 
 from vllm_mlx.api.utils import sanitize_output
-
 
 # ---------------------------------------------------------------------------
 # The exact regression cases from the bug report
@@ -39,9 +39,7 @@ def test_strips_full_gemma4_tool_call_quoted_args():
 
 def test_strips_gemma4_markup_inside_content():
     """When markup is sandwiched between real content, leave the content."""
-    out = sanitize_output(
-        "Result: <|tool_call>call:add{a:3,b:4}<tool_call|> done"
-    )
+    out = sanitize_output("Result: <|tool_call>call:add{a:3,b:4}<tool_call|> done")
     assert out is not None
     assert "<|tool_call>" not in out
     assert "<tool_call|>" not in out

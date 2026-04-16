@@ -160,15 +160,29 @@ def _install_chunked_prefill(
         _merge_caches,
         _right_pad_prompts,
     )
+
     # mlx-lm 0.31+ renamed Batch → GenerationBatch with different constructor
     try:
         from mlx_lm.generate import Batch as _Batch
+
         _USE_NEW_BATCH = False
     except ImportError:
         from mlx_lm.generate import GenerationBatch as _Batch
+
         _USE_NEW_BATCH = True
 
-    def _make_batch(model, uids, y, logprobs, max_tokens, num_tokens, prompt_cache, samplers, logits_processors, tokens):
+    def _make_batch(
+        model,
+        uids,
+        y,
+        logprobs,
+        max_tokens,
+        num_tokens,
+        prompt_cache,
+        samplers,
+        logits_processors,
+        tokens,
+    ):
         if _USE_NEW_BATCH:
             # GenerationBatch(model, uids, inputs, prompt_cache, tokens,
             #   samplers, fallback_sampler, logits_processors, state_machines, max_tokens)
@@ -185,7 +199,17 @@ def _install_chunked_prefill(
                 max_tokens=max_tokens,
             )
         else:
-            return _Batch(uids, y, logprobs, max_tokens, num_tokens, prompt_cache, samplers, logits_processors, tokens)
+            return _Batch(
+                uids,
+                y,
+                logprobs,
+                max_tokens,
+                num_tokens,
+                prompt_cache,
+                samplers,
+                logits_processors,
+                tokens,
+            )
 
     # Keep references to originals
     _orig_next = batch_gen._next
@@ -736,8 +760,7 @@ def _install_mtp(
                     if hasattr(_c, "state"):
                         _orig_state = _c.state
                         _copied = [
-                            s.copy() if s is not None else None
-                            for s in _orig_state
+                            s.copy() if s is not None else None for s in _orig_state
                         ]
                         # Preserve original type (tuple vs list) so downstream
                         # code that does `h, c = cache.state` doesn't break.
@@ -1209,7 +1232,7 @@ class Scheduler:
         # removed in 0.31+. Skip the monkey-patch if the old API is unavailable.
         chunked_budget = self.config.chunked_prefill_tokens
         need_chunked = chunked_budget > 0 or self.memory_aware_cache is not None
-        _has_old_batch_api = hasattr(bg, '_process_prompts')
+        _has_old_batch_api = hasattr(bg, "_process_prompts")
         if need_chunked and _has_old_batch_api:
             if chunked_budget <= 0:
                 # No explicit budget — use a very large value so normal

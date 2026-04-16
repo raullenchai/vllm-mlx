@@ -9,8 +9,6 @@ corrupting multi-turn conversations.
 """
 
 
-
-
 class FakeKVCache:
     """Simulates a trimmable KVCache."""
 
@@ -93,8 +91,7 @@ class FakeLLM:
         common_len = self._find_common_prefix_len(prompt_token_ids)
 
         has_non_trimmable = any(
-            not c.is_trimmable() and not c.empty()
-            for c in self._prompt_cache
+            not c.is_trimmable() and not c.empty() for c in self._prompt_cache
         )
 
         if common_len == 0:
@@ -175,8 +172,9 @@ class TestDeltaNetCacheReset:
         suffix = llm._prepare_cache_for_prompt([1, 2, 3, 10, 20])
 
         # Must return FULL prompt because DeltaNet can't be trimmed
-        assert suffix == [1, 2, 3, 10, 20], \
+        assert suffix == [1, 2, 3, 10, 20], (
             "Should reprocess full prompt when DeltaNet state can't be trimmed"
+        )
 
     def test_exact_same_prompt_no_reset(self):
         """When the same prompt is repeated, no reset needed."""
@@ -192,8 +190,9 @@ class TestDeltaNetCacheReset:
         # KV cache has offset = 10 (5 prompt + 5 gen), needs trim to 5
         # DeltaNet state is non-empty and KV needs_trim = True
         # So this WILL reset — which is correct because DeltaNet state includes gen tokens
-        assert suffix == [1, 2, 3, 4, 5], \
+        assert suffix == [1, 2, 3, 4, 5], (
             "Should reprocess when DeltaNet has generated token state"
+        )
 
     def test_pure_kv_cache_no_regression(self):
         """Pure KV cache models (no DeltaNet) should work as before."""
@@ -247,5 +246,6 @@ class TestDeltaNetCacheReset:
         # Turn 2: extends the prompt. KV cache offset = 10 (5 prompt + 5 gen),
         # common_len = 5, KV needs trim (10 > 5), DeltaNet is non-empty → reset
         suffix = llm._prepare_cache_for_prompt([1, 2, 3, 4, 5, 6, 7, 8])
-        assert suffix == [1, 2, 3, 4, 5, 6, 7, 8], \
+        assert suffix == [1, 2, 3, 4, 5, 6, 7, 8], (
             "DeltaNet model must reprocess full prompt when KV needs trimming"
+        )

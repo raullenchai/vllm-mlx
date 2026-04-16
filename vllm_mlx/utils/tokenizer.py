@@ -118,9 +118,16 @@ def _read_num_mtp_layers(config: dict) -> int:
 
 def _try_inject_mtp(model, model_path, config):
     """Inject MTP support if model has MTP config + weights."""
-    if _read_num_mtp_layers(config) > 0:
+    num = _read_num_mtp_layers(config)
+    if num > 0:
         from ..patches.qwen3_next_mtp import inject_mtp_support
 
+        # inject_mtp_support reads config["num_nextn_predict_layers"]
+        # directly.  For VLM checkpoints where the field lives under
+        # text_config, surface it to the top level so the injector
+        # doesn't skip with "num_nextn_predict_layers=0".
+        if config.get("num_nextn_predict_layers", 0) == 0:
+            config = {**config, "num_nextn_predict_layers": num}
         inject_mtp_support(model, model_path, config)
 
 

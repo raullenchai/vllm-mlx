@@ -66,13 +66,22 @@ def _repo_to_hf_dirname(repo_id: str) -> str:
 
 
 def _check_alias(alias: str, repo_id: str, cache_roots: list[Path]) -> ModelAvailability:
-    """Look for the model in the candidate cache roots."""
-    target = _repo_to_hf_dirname(repo_id)
+    """Look for the model in the candidate cache roots.
+
+    Two cache layouts are checked at every root:
+      - Hugging Face hub:  ``{root}/models--{org}--{repo}/snapshots/<sha>/``
+      - LM Studio (and HF "raw" mode):  ``{root}/{org}/{repo}/``
+
+    The second layout is what LM Studio uses for its model store at
+    ``~/.lmstudio/models``; without it, models installed via LM Studio
+    were silently invisible to discovery.
+    """
+    hf_dirname = _repo_to_hf_dirname(repo_id)
     for root in cache_roots:
-        candidate = root / target
-        if candidate.exists() and any(candidate.iterdir()):
-            # Sanity: at least one snapshot must contain a config.json.
-            snapshots = candidate / "snapshots"
+        # 1. Hugging Face hub layout
+        hf_candidate = root / hf_dirname
+        if hf_candidate.exists():
+            snapshots = hf_candidate / "snapshots"
             if snapshots.exists():
                 for snap in snapshots.iterdir():
                     if (snap / "config.json").exists():
@@ -80,12 +89,15 @@ def _check_alias(alias: str, repo_id: str, cache_roots: list[Path]) -> ModelAvai
                             alias=alias, repo_id=repo_id,
                             available=True, path=snap,
                         )
-            # LM Studio layout: just the model files in a subdir.
-            if (candidate / "config.json").exists():
-                return ModelAvailability(
-                    alias=alias, repo_id=repo_id,
-                    available=True, path=candidate,
-                )
+
+        # 2. LM Studio / HF raw layout — repo_id maps to nested dirs.
+        raw_candidate = root.joinpath(*repo_id.split("/"))
+        if (raw_candidate / "config.json").exists():
+            return ModelAvailability(
+                alias=alias, repo_id=repo_id,
+                available=True, path=raw_candidate,
+            )
+
     return ModelAvailability(
         alias=alias, repo_id=repo_id, available=False,
         reason="not found in HF_HUB_CACHE / ~/.cache/huggingface / ~/.lmstudio",

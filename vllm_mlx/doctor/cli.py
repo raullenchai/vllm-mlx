@@ -257,7 +257,7 @@ def run_benchmark_tier(models: list[str] | None = None):
     profile sweep, no baseline diff, just numbers for the table.
     """
     from .checks import benchmark, smoke
-    from .discovery import discover_local_models
+    from .discovery import discover_local_models, load_aliases
     from .scorecard import render_scorecard, write_scorecard
     from .server import ServerStartFailed, serve
 
@@ -269,26 +269,57 @@ def run_benchmark_tier(models: list[str] | None = None):
     runner.run_check("imports", smoke.check_imports)
 
     # Resolve which models to run.  Without --models, sweep every alias
-    # whose weights are already on disk.  Explicit --models overrides
-    # the auto-skip — caller takes responsibility for downloads.
+    # whose weights are already on disk.  Explicit --models still get
+    # an availability check so a typo doesn't trigger a multi-GB
+    # background download mid-sweep — explicit-but-missing aliases land
+    # in the skipped list with a clear reason instead.
     skipped: list[tuple[str, str]] = []
+    discovery = {m.alias: m for m in discover_local_models()}
+    aliases_set = set(load_aliases())
+
     if models:
-        run_list = models
+        run_list = []
+        for alias in models:
+            if alias not in aliases_set:
+                skipped.append((alias, "unknown alias (not in aliases.json)"))
+            elif alias in discovery and discovery[alias].available:
+                run_list.append(alias)
+            else:
+                reason = (
+                    discovery[alias].reason
+                    if alias in discovery
+                    else "weights not on disk"
+                )
+                skipped.append((alias, f"skipped (no auto-download): {reason}"))
     else:
-        all_models = discover_local_models()
-        run_list = [m.alias for m in all_models if m.available]
-        skipped = [(m.alias, m.reason) for m in all_models if not m.available]
+        run_list = [m.alias for m in discovery.values() if m.available]
+        skipped = [
+            (m.alias, m.reason)
+            for m in discovery.values()
+            if not m.available
+        ]
 
     if not run_list:
-        print("\n  no models available locally — pre-fetch with `huggingface-cli download`,")
-        print("  or pass --models <alias>,<alias> to force.")
+        if skipped:
+            print("\n  No models to benchmark.  Skipped:")
+            for alias, reason in skipped:
+                print(f"    - {alias}: {reason}")
+        else:
+            print("\n  no models available locally — pre-fetch with "
+                  "`huggingface-cli download`,")
+            print("  or pass --models <alias>,<alias> to force.")
+        skipped_summary = "; ".join(f"{a} ({r})" for a, r in skipped[:5])
+        detail = (
+            f"no runnable models — {len(skipped)} skipped"
+            + (f": {skipped_summary}" if skipped_summary else "")
+        )
         runner.run_check(
             "discovery",
             lambda: CheckResult(
                 name="discovery",
                 status=Status.FAIL,
                 duration_s=0.0,
-                detail="no locally-available aliases found",
+                detail=detail,
             ),
         )
         return runner.finalize()

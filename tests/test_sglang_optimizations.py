@@ -442,6 +442,48 @@ class TestJumpForwardDecoding:
         print(f"\n  Two patterns: saved {total_saved} decode steps")
         assert total_saved >= 5
 
+    def test_all_parsers_have_jump_forward(self, tokenizer):
+        """Every parser with registered patterns must produce a working
+        processor with jump-forward capability."""
+        from vllm_mlx.api.tool_logits import (
+            PARSER_PATTERNS,
+            create_tool_logits_processor,
+        )
+
+        results = []
+        for parser_name, patterns in PARSER_PATTERNS.items():
+            if not patterns:
+                continue
+            proc = create_tool_logits_processor(parser_name, tokenizer)
+            assert proc is not None, f"Parser {parser_name!r} should create a processor"
+
+            # Check that at least one pattern is jumpable (>= 2 tokens)
+            jumpable = 0
+            total_saved = 0
+            for pattern_text, _trigger in patterns:
+                tokens = proc._pattern_tokens.get(pattern_text, [])
+                if len(tokens) >= 2:
+                    jumpable += 1
+                    total_saved += len(tokens) - 1
+
+            results.append((parser_name, len(patterns), jumpable, total_saved))
+
+        print("\n  Parser jump-forward coverage:")
+        print(f"  {'Parser':<20s} {'Patterns':>8s} {'Jumpable':>8s} {'Steps saved':>11s}")
+        print(f"  {'-'*20} {'-'*8} {'-'*8} {'-'*11}")
+        for name, n_pat, n_jump, saved in sorted(results):
+            print(f"  {name:<20s} {n_pat:>8d} {n_jump:>8d} {saved:>11d}")
+
+        total_parsers = len(results)
+        parsers_with_jump = sum(1 for _, _, j, _ in results if j > 0)
+        print(
+            f"\n  {parsers_with_jump}/{total_parsers} parsers have jump-forward "
+            f"patterns"
+        )
+        assert parsers_with_jump >= 10, (
+            f"Expected >= 10 parsers with jump-forward, got {parsers_with_jump}"
+        )
+
 
 # =====================================================================
 # 4. Radix tree correctness under stress

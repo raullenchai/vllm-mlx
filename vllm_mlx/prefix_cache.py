@@ -54,7 +54,7 @@ class RadixNode:
         cache_entry: CacheEntry | None = None,
     ):
         self.edge: tuple[int, ...] = edge
-        self.children: dict[int, "RadixNode"] = {}
+        self.children: dict[int, RadixNode] = {}
         self.cache_entry: CacheEntry | None = cache_entry
 
     def _compact(self) -> None:

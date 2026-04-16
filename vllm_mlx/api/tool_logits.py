@@ -156,6 +156,44 @@ class MiniMaxToolLogitsProcessor:
         self._in_parameter_value = False
         self._param_value_text = ""
 
+    def get_jump_forward_tokens(self) -> list[int] | None:
+        """Return remaining deterministic tokens in the active pattern.
+
+        Called by the generation loop to detect jump-forward opportunities.
+        When a structural pattern is active and has >= 2 remaining tokens,
+        those tokens can be injected in a single prefill pass instead of
+        N separate decode steps.
+
+        Returns:
+            List of deterministic token IDs, or None if no jump available.
+        """
+        if self._active_pattern is None:
+            return None
+        pattern_tokens = self._pattern_tokens.get(self._active_pattern, [])
+        remaining = pattern_tokens[self._pattern_pos :]
+        if len(remaining) >= 2:
+            return remaining
+        return None
+
+    def complete_jump_forward(self, jumped_tokens: list[int]) -> None:
+        """Update processor state after a jump-forward injection.
+
+        Called by the generation loop after it processes jump tokens via
+        a single prefill pass.  Updates recent text and resets pattern state.
+
+        Args:
+            jumped_tokens: The token IDs that were injected.
+        """
+        text = self.tokenizer.decode(jumped_tokens, skip_special_tokens=False)
+        self._recent_text += text
+        if len(self._recent_text) > 200:
+            self._recent_text = self._recent_text[-200:]
+        self._active_pattern = None
+        self._pattern_pos = 0
+        self._consecutive_bias_count = 0
+        # Update parameter state in case jumped text contains markers
+        self._update_param_state()
+
     # Regex patterns for detecting tool/parameter context
     _INVOKE_RE = re.compile(r'<invoke\s+name="([^"]+)"')
     _PARAM_OPEN_RE = re.compile(r'<parameter\s+name="([^"]+)">')

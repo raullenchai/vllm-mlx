@@ -239,7 +239,7 @@ def _install_chunked_prefill(
 
         batch_gen._process_prompts = _patched_process_prompts
 
-    def _generation_step(self=batch_gen):
+    def _generation_step(self=batch_gen):  # noqa: C901
         """Run one generation step on the active batch. Returns responses."""
         batch = self.active_batch
         if batch is None or len(batch) == 0:
@@ -259,6 +259,92 @@ def _install_chunked_prefill(
         mx.async_eval(batch.y, batch.logprobs)
 
         y = y.tolist()
+
+        # ------------------------------------------------------------------
+        # Jump-forward: when the logits processor has activated a
+        # deterministic structural pattern (e.g. "</invoke>" or
+        # "</minimax:tool_call>"), inject all remaining pattern tokens
+        # in a single prefill pass instead of N separate decode steps.
+        # Only applies to single-request batches (typical agentic use).
+        # ------------------------------------------------------------------
+        jump_tokens = None
+        _jump_proc = None
+        if (
+            len(batch) == 1
+            and batch.logits_processors
+            and batch.logits_processors[0]
+        ):
+            _jump_proc = batch.logits_processors[0][0]
+            if hasattr(_jump_proc, "get_jump_forward_tokens"):
+                jump_tokens = _jump_proc.get_jump_forward_tokens()
+
+        if jump_tokens and _jump_proc is not None:
+            # Wait for batch.y — this is the first pattern token
+            # (already biased by the processor in _step above)
+            first_tok = batch.y.tolist()[0]
+            all_inject = [first_tok] + list(jump_tokens)
+
+            # Feed all deterministic tokens through the model in one
+            # prefill pass to update the KV cache.
+            inject_arr = mx.array([all_inject])  # (1, N)
+            inject_logits = self.model(inject_arr, cache=batch.cache)
+
+            # Append injected tokens to the sequence
+            batch.tokens[0] = mx.concatenate(
+                (batch.tokens[0], mx.array(all_inject))
+            )
+
+            # Sample next token from the last position's logits
+            # (this is the first non-deterministic token after the pattern)
+            batch.y = batch.samplers[0](inject_logits[:, -1, :])
+            batch.logprobs = inject_logits[:, -1, :] - mx.logsumexp(
+                inject_logits[:, -1, :], axis=-1, keepdims=True
+            )
+            mx.async_eval(batch.y, batch.logprobs)
+
+            # Update processor state to reflect the completed pattern
+            _jump_proc.complete_jump_forward(all_inject)
+
+            # Build responses: original token y + all injected tokens
+            uid = batch.uids[0]
+            num_tok = batch.num_tokens[0]
+            max_tok = batch.max_tokens[0]
+            responses = []
+
+            # Original token from this step
+            num_tok += 1
+            batch.num_tokens[0] = num_tok
+            _finished = False
+            for tok in [y[0]] + all_inject:
+                finish_reason = None
+                cache_out = None
+                if tok in self.stop_tokens:
+                    finish_reason = "stop"
+                    _finished = True
+                elif num_tok >= max_tok:
+                    finish_reason = "length"
+                    _finished = True
+                if finish_reason is not None:
+                    cache_out = batch.extract_cache(0)
+                responses.append(
+                    self.Response(uid, tok, mx.array(0.0), finish_reason, cache_out)
+                )
+                num_tok += 1
+                batch.num_tokens[0] = num_tok
+                if _finished:
+                    break
+
+            if _finished:
+                self.active_batch = None
+
+            self._stats.generation_time += _time.perf_counter() - tic_gen
+            self._stats.generation_tokens += len(responses)
+            logger.debug(
+                f"[jump-forward] injected {len(all_inject)} deterministic "
+                f"tokens (saved {len(all_inject) - 1} decode steps)"
+            )
+            return responses
+
         self._stats.generation_time += _time.perf_counter() - tic_gen
 
         keep_idx = []

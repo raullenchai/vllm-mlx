@@ -97,10 +97,15 @@ def _is_complete_snapshot(snap: Path) -> bool:
         try:
             with open(index_path) as f:
                 index = json.load(f)
-            weight_map = index.get("weight_map") or {}
-            shard_names = set(weight_map.values())
         except (OSError, json.JSONDecodeError):
-            shard_names = set()
+            # The index exists but we can't trust it — could be
+            # truncated mid-download, corrupted, or a non-standard
+            # layout we don't understand.  Either way, falling back to
+            # "any one shard counts" would re-introduce the false
+            # positive codex flagged.  Treat as incomplete instead.
+            return False
+        weight_map = index.get("weight_map") or {}
+        shard_names = set(weight_map.values())
         if shard_names:
             for shard in shard_names:
                 target = snap / shard
@@ -109,8 +114,9 @@ def _is_complete_snapshot(snap: Path) -> bool:
                 except (OSError, RuntimeError):
                     return False
             return True
-        # If the index parsed but had no weight_map, fall through and
-        # behave like a single-file model.
+        # Index parsed cleanly but has no weight_map — unusual but
+        # legitimate (some templates ship empty maps).  Fall through to
+        # the single-file glob check.
 
     # 2. Single-file or non-indexed model — at least one weight file resolves.
     for ext in ("*.safetensors", "*.npz", "*.gguf"):

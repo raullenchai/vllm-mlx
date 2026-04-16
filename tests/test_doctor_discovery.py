@@ -143,6 +143,38 @@ class TestIsCompleteSnapshot:
         )
         assert _is_complete_snapshot(snap) is False
 
+    def test_corrupt_index_with_shards_fails(self, tmp_cache):
+        """Regression for codex round 3: if the index file is corrupt
+        (truncated mid-download, broken JSON), we used to fall back to
+        the single-shard glob which would falsely pass when at least
+        one shard happened to be present.  Now we treat any unreadable
+        index as a sign the snapshot can't be trusted."""
+        snap = _make_hf_snapshot(
+            tmp_cache, "org/repo", with_config=True, with_weights=False,
+        )
+        # Truncated JSON.
+        (snap / "model.safetensors.index.json").write_text(
+            '{"weight_map": {"a": "model-1-of-2'
+        )
+        (snap / "model-1-of-2.safetensors").write_text("shard 1")
+        # No model-2-of-2.safetensors.
+        assert _is_complete_snapshot(snap) is False
+
+    def test_index_with_empty_weight_map_falls_through_to_single_file(
+        self, tmp_cache
+    ):
+        """Some templates ship an index with an empty weight_map; in
+        that case treating the snapshot as a single-file layout is
+        correct (and used to work before the codex fix)."""
+        snap = _make_hf_snapshot(
+            tmp_cache, "org/repo", with_config=True, with_weights=False,
+        )
+        (snap / "model.safetensors.index.json").write_text(
+            '{"weight_map": {}}'
+        )
+        (snap / "model.safetensors").write_text("single-file weights")
+        assert _is_complete_snapshot(snap) is True
+
 
 # ----------------------------------------------------------------------
 # _check_alias multi-root + multi-layout

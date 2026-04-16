@@ -9,33 +9,49 @@
 # Adjust per-metric, not globally — different signals tolerate different
 # noise levels.
 
-# Performance
+# Performance.  Metric names match the keys emitted by
+# scripts/autoresearch_bench.py --json (see ``run_suite()`` there).
 decode_tps:
   regression_pct: 5
   improvement_pct: 10
-prefill_tps:
+cold_tps:
   regression_pct: 5
   improvement_pct: 10
-ttft_cold_ms:
+mt_tps:
+  regression_pct: 5
+  improvement_pct: 10
+long_tps:
+  regression_pct: 5
+  improvement_pct: 10
+cold_ttft_ms:
   regression_pct: 10        # higher noise floor; cold startup is variable
   improvement_pct: 15
-ttft_cached_ms:
+cached_ttft_ms:
   regression_pct: 10
   improvement_pct: 15
-multiturn_ttft_ms:
+mt_ttft_ms:
   regression_pct: 10
   improvement_pct: 15
-long_prompt_ttft_ms:
+long_ttft_ms:
   regression_pct: 10
   improvement_pct: 15
-tool_latency_s:
+long_cached_ttft_ms:
+  regression_pct: 10
+  improvement_pct: 15
+tc_latency_ms:
   regression_pct: 10
   improvement_pct: 15
 peak_ram_mb:
   regression_pct: 10        # memory growth is treated as a regression
   improvement_pct: 10
+composite_score:
+  regression_pct: 5
+  improvement_pct: 10
 
 # Functional / accuracy — zero tolerance: any drop is a regression
+tc_success_rate:
+  regression_pct: 0
+  improvement_pct: 5
 tool_call_accuracy:
   regression_pct: 0
   improvement_pct: 5

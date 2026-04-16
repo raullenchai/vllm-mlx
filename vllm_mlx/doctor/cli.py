@@ -150,8 +150,13 @@ def _apply_baseline(
     metrics: dict,
     update_baselines: bool,
 ) -> None:
-    """Diff against baseline; flag regressions; optionally update baseline."""
-    baseline = load_baseline(tier)
+    """Diff against baseline; flag regressions; optionally update baseline.
+
+    Baselines are per-model — comparing decode TPS for a 4B and a 35B
+    model is meaningless.  ``--update-baselines`` writes the model-
+    specific file, so each model accumulates its own history.
+    """
+    baseline = load_baseline(tier, model)
     thresholds = load_thresholds()
 
     if update_baselines:
@@ -177,7 +182,26 @@ def _apply_baseline(
                 name="baseline_diff",
                 status=Status.SKIP,
                 duration_s=0.0,
-                detail="no baseline found; run --update-baselines to create",
+                detail=f"no baseline found for model={model}; "
+                       "run --update-baselines to create",
+            ),
+        )
+        return
+
+    # Defence-in-depth: per-model file paths should already prevent this,
+    # but a manually copied/renamed file could mix model identities.
+    baseline_model = baseline.get("model")
+    if baseline_model and baseline_model != model:
+        runner.run_check(
+            "baseline_diff",
+            lambda: CheckResult(
+                name="baseline_diff",
+                status=Status.FAIL,
+                duration_s=0.0,
+                detail=(
+                    f"baseline model mismatch: file has model={baseline_model!r} "
+                    f"but current run is model={model!r}. Refusing to compare."
+                ),
             ),
         )
         return

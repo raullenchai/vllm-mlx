@@ -67,13 +67,27 @@ def load_thresholds(path: Path | None = None) -> dict[str, dict[str, float]]:
 # Baseline read/write
 # ---------------------------------------------------------------------
 
-def baseline_path(tier: str) -> Path:
-    return HARNESS_DIR / "baselines" / f"{tier}.json"
+def _safe_model_slug(model: str) -> str:
+    """File-system-safe slug for use in baseline filenames."""
+    return model.replace("/", "__").replace(" ", "_")
 
 
-def load_baseline(tier: str) -> dict | None:
+def baseline_path(tier: str, model: str | None = None) -> Path:
+    """Path to the baseline JSON.
+
+    Per-model file when ``model`` is given (used by check/full tiers
+    where a baseline is only meaningful for one model).  The unsuffixed
+    path is reserved for tiers whose metrics aren't model-specific.
+    """
+    base = HARNESS_DIR / "baselines"
+    if model is None:
+        return base / f"{tier}.json"
+    return base / f"{tier}-{_safe_model_slug(model)}.json"
+
+
+def load_baseline(tier: str, model: str | None = None) -> dict | None:
     """Return the baseline dict, or None if absent."""
-    p = baseline_path(tier)
+    p = baseline_path(tier, model)
     if not p.exists():
         return None
     with open(p) as f:
@@ -95,7 +109,7 @@ def save_baseline(tier: str, model: str, metrics: dict[str, float]) -> Path:
         "model": model,
         "metrics": metrics,
     }
-    p = baseline_path(tier)
+    p = baseline_path(tier, model)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(payload, indent=2))
     return p

@@ -66,36 +66,54 @@ def _repo_to_hf_dirname(repo_id: str) -> str:
 
 
 def _is_complete_snapshot(snap: Path) -> bool:
-    """A snapshot is "complete" if it has config.json AND actual model weights.
+    """A snapshot is "complete" if it has config.json AND every weight file resolves.
 
-    Just probing config.json is not enough — partially-downloaded HF
-    snapshots routinely have config.json + model.safetensors.index.json
-    but no *.safetensors shards (the shards are symlinks into ../blobs/
-    that point at non-existent files when the download was aborted).
-    Loading such a snapshot crashes the server with "No safetensors
-    found", which then shows up in the scorecard as a misleading FAIL
-    even though the right diagnosis is "model never finished
-    downloading".
+    Why "every" matters: HF interrupts mid-download can leave a snapshot
+    with config.json, the index file, and *some* shard symlinks (the
+    ones that finished) — but not all.  Loading such a snapshot crashes
+    the server with "No safetensors found" or a torch/mlx-lm error
+    halfway through deserialization, both of which surface in the
+    scorecard as misleading runtime failures rather than the correct
+    "skipped (partial download)" diagnosis.
 
-    A weight file counts whether it's a single ``model.safetensors``,
-    sharded ``model-NNNN-of-NNNN.safetensors``, or any other
-    ``.safetensors`` file (some MLX exports use bespoke names).  We
-    additionally resolve symlinks so a dangling link does not satisfy
-    the check.
+    Strategy:
+
+    1. If ``model.safetensors.index.json`` is present, parse its
+       ``weight_map`` and require every referenced shard to exist
+       (and resolve, in case it's a dangling symlink into ../blobs/).
+    2. Otherwise, require at least one resolvable ``*.safetensors`` /
+       ``*.npz`` / ``*.gguf`` file — a single-file model needs only one,
+       and we shouldn't require an index for those.
+
+    Either way: ``resolve(strict=True)`` is what catches dangling
+    symlinks, which a plain ``.exists()`` check misses on macOS.
     """
     if not (snap / "config.json").exists():
         return False
-    for entry in snap.glob("*.safetensors"):
+
+    # 1. Sharded model — the index lists every shard we need.
+    index_path = snap / "model.safetensors.index.json"
+    if index_path.exists():
         try:
-            # resolve(strict=True) raises if the target is missing,
-            # so we can rely on it to detect dangling symlinks too.
-            entry.resolve(strict=True)
+            with open(index_path) as f:
+                index = json.load(f)
+            weight_map = index.get("weight_map") or {}
+            shard_names = set(weight_map.values())
+        except (OSError, json.JSONDecodeError):
+            shard_names = set()
+        if shard_names:
+            for shard in shard_names:
+                target = snap / shard
+                try:
+                    target.resolve(strict=True)
+                except (OSError, RuntimeError):
+                    return False
             return True
-        except (OSError, RuntimeError):
-            continue
-    # Some loaders accept .npz or .gguf — be conservative and accept
-    # them too rather than over-report missing weights.
-    for ext in ("*.npz", "*.gguf"):
+        # If the index parsed but had no weight_map, fall through and
+        # behave like a single-file model.
+
+    # 2. Single-file or non-indexed model — at least one weight file resolves.
+    for ext in ("*.safetensors", "*.npz", "*.gguf"):
         for entry in snap.glob(ext):
             try:
                 entry.resolve(strict=True)

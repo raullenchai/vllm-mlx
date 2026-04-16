@@ -99,6 +99,50 @@ class TestIsCompleteSnapshot:
         (snap / "weights.npz").write_text("fake npz")
         assert _is_complete_snapshot(snap) is True
 
+    def test_sharded_complete_passes(self, tmp_cache):
+        """All shards present + index → complete."""
+        snap = _make_hf_snapshot(
+            tmp_cache, "org/repo", with_config=True, with_weights=False,
+        )
+        # Write index + every shard it references.
+        (snap / "model.safetensors.index.json").write_text(
+            '{"weight_map": {"a": "model-1-of-2.safetensors", '
+            '"b": "model-2-of-2.safetensors"}}'
+        )
+        (snap / "model-1-of-2.safetensors").write_text("shard 1")
+        (snap / "model-2-of-2.safetensors").write_text("shard 2")
+        assert _is_complete_snapshot(snap) is True
+
+    def test_sharded_partial_fails(self, tmp_cache):
+        """Regression: index claims 2 shards, only 1 present.  Without
+        validating against the index, _is_complete_snapshot would
+        falsely pass because *one* shard glob hit resolves.  This is the
+        exact failure mode codex flagged in round 2."""
+        snap = _make_hf_snapshot(
+            tmp_cache, "org/repo", with_config=True, with_weights=False,
+        )
+        (snap / "model.safetensors.index.json").write_text(
+            '{"weight_map": {"a": "model-1-of-2.safetensors", '
+            '"b": "model-2-of-2.safetensors"}}'
+        )
+        # Only the first shard arrived before the download was killed.
+        (snap / "model-1-of-2.safetensors").write_text("shard 1")
+        assert _is_complete_snapshot(snap) is False
+
+    def test_sharded_dangling_symlink_fails(self, tmp_cache):
+        """Index references a shard that exists as a symlink, but the
+        link target is missing.  resolve(strict=True) should catch it."""
+        snap = _make_hf_snapshot(
+            tmp_cache, "org/repo", with_config=True, with_weights=False,
+        )
+        (snap / "model.safetensors.index.json").write_text(
+            '{"weight_map": {"a": "model-1-of-1.safetensors"}}'
+        )
+        (snap / "model-1-of-1.safetensors").symlink_to(
+            snap / ".." / "blobs" / "missing-blob"
+        )
+        assert _is_complete_snapshot(snap) is False
+
 
 # ----------------------------------------------------------------------
 # _check_alias multi-root + multi-layout

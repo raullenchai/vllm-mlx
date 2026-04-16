@@ -256,9 +256,9 @@ def _apply_baseline(
     if update_baselines:
         path = save_baseline(tier, model, metrics)
         runner.run_check(
-            "baseline_update",
+            f"baseline_update[{model}]",
             lambda: CheckResult(
-                name="baseline_update",
+                name=f"baseline_update[{model}]",
                 status=Status.PASS,
                 duration_s=0.0,
                 detail=f"wrote {path.relative_to(REPO_ROOT)}",
@@ -268,12 +268,10 @@ def _apply_baseline(
 
     if baseline is None:
         # First run with no baseline — record what we saw, don't fail.
-        deltas_md = "_no baseline yet — run with --update-baselines to record one_\n"
-        (runner.run_dir / "diff.md").write_text(deltas_md)
         runner.run_check(
-            "baseline_diff",
+            f"baseline_diff[{model}]",
             lambda: CheckResult(
-                name="baseline_diff",
+                name=f"baseline_diff[{model}]",
                 status=Status.SKIP,
                 duration_s=0.0,
                 detail=f"no baseline found for model={model}; "
@@ -287,9 +285,9 @@ def _apply_baseline(
     baseline_model = baseline.get("model")
     if baseline_model and baseline_model != model:
         runner.run_check(
-            "baseline_diff",
+            f"baseline_diff[{model}]",
             lambda: CheckResult(
-                name="baseline_diff",
+                name=f"baseline_diff[{model}]",
                 status=Status.FAIL,
                 duration_s=0.0,
                 detail=(
@@ -302,17 +300,32 @@ def _apply_baseline(
 
     deltas = compare(metrics, baseline, thresholds)
     deltas_md = render_deltas_md(deltas)
-    (runner.run_dir / "diff.md").write_text(deltas_md)
+
+    # In multi-model tiers (full / benchmark), each call would clobber a
+    # shared diff.md and we'd lose all earlier models' delta tables.
+    # Always write per-model files; also append to a combined diff.md
+    # so single-model tiers (check) keep their existing artefact name.
+    per_model_diff = runner.run_dir / f"diff-{_filename_safe(model)}.md"
+    per_model_diff.write_text(deltas_md)
+
+    combined_diff = runner.run_dir / "diff.md"
+    section = f"## {model}\n\n{deltas_md}\n"
+    if combined_diff.exists():
+        with open(combined_diff, "a") as f:
+            f.write(section)
+    else:
+        combined_diff.write_text(section)
 
     n_regress = sum(1 for d in deltas if d.status == DeltaStatus.REGRESSION)
     n_improve = sum(1 for d in deltas if d.status == DeltaStatus.IMPROVEMENT)
     detail = f"{len(deltas)} metrics: {n_regress} regression(s), {n_improve} improvement(s)"
 
     status = Status.REGRESSION if has_regression(deltas) else Status.PASS
+    # Include model in check name so multi-model tiers don't collide.
     runner.run_check(
-        "baseline_diff",
+        f"baseline_diff[{model}]",
         lambda: CheckResult(
-            name="baseline_diff",
+            name=f"baseline_diff[{model}]",
             status=status,
             duration_s=0.0,
             detail=detail,

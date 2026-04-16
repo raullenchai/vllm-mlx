@@ -7,6 +7,7 @@ import sys
 
 from .baseline import (
     DeltaStatus,
+    _safe_model_slug,
     compare,
     has_regression,
     load_baseline,
@@ -188,7 +189,7 @@ def _run_per_model_block(
     from .checks import agent, api, perf
     from .server import ServerStartFailed, serve
 
-    server_log = runner.run_dir / f"server-{_filename_safe(model)}.log"
+    server_log = runner.run_dir / f"server-{_safe_model_slug(model)}.log"
     try:
         with serve(model=model, log_path=server_log) as info:
             port = info["port"]
@@ -232,9 +233,10 @@ def _run_per_model_block(
         _apply_baseline(runner, tier, model, perf_result.metrics, update_baselines)
 
 
-def _filename_safe(name: str) -> str:
-    """Reduce a model name to something safe in a server log filename."""
-    return name.replace("/", "_").replace(" ", "_")
+# NOTE: per-model artefact filenames (diff-{model}.md, server-{model}.log)
+# use _safe_model_slug from baseline.py so the mapping is injective —
+# a non-injective scheme reintroduces the same overwrite bug per-model
+# diffs were meant to fix.
 
 
 def _apply_baseline(
@@ -268,6 +270,23 @@ def _apply_baseline(
 
     if baseline is None:
         # First run with no baseline — record what we saw, don't fail.
+        # Still write a diff.md (and per-model variant) so external
+        # automation that always reads run_dir/diff.md gets a stable
+        # artefact, not a missing-file error.
+        notice = (
+            f"_no baseline yet for model={model} — "
+            "run with --update-baselines to record one_\n"
+        )
+        per_model_diff = runner.run_dir / f"diff-{_safe_model_slug(model)}.md"
+        per_model_diff.write_text(notice)
+        combined_diff = runner.run_dir / "diff.md"
+        section = f"## {model}\n\n{notice}\n"
+        if combined_diff.exists():
+            with open(combined_diff, "a") as f:
+                f.write(section)
+        else:
+            combined_diff.write_text(section)
+
         runner.run_check(
             f"baseline_diff[{model}]",
             lambda: CheckResult(
@@ -305,7 +324,7 @@ def _apply_baseline(
     # shared diff.md and we'd lose all earlier models' delta tables.
     # Always write per-model files; also append to a combined diff.md
     # so single-model tiers (check) keep their existing artefact name.
-    per_model_diff = runner.run_dir / f"diff-{_filename_safe(model)}.md"
+    per_model_diff = runner.run_dir / f"diff-{_safe_model_slug(model)}.md"
     per_model_diff.write_text(deltas_md)
 
     combined_diff = runner.run_dir / "diff.md"

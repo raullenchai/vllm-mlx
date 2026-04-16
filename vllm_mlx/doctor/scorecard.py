@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime as _dt
 from pathlib import Path
 
-from .runner import HARNESS_DIR, CheckResult, Status
+from .runner import HARNESS_DIR, CheckResult, Status, md_cell
 
 SCORECARD_DIR = HARNESS_DIR / "scorecard"
 
@@ -60,8 +60,8 @@ def render_scorecard(
             # Fold the failure reason into the status cell so the row
             # is still useful at a glance.
             reason = (result.detail or "fail").splitlines()[0][:80]
-            status_md = f"FAIL — {reason}"
-        lines.append(f"| {model} | " + " | ".join(cells_md) + f" | {status_md} |")
+            status_md = f"FAIL — {md_cell(reason)}"
+        lines.append(f"| {md_cell(model)} | " + " | ".join(cells_md) + f" | {status_md} |")
 
     if skipped:
         lines += ["", "## Skipped", ""]

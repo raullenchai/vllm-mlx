@@ -1481,19 +1481,32 @@ Examples:
         "--models",
         type=str,
         default=None,
-        help="Comma-separated model aliases for full tier "
-             "(default: qwen3.5-4b,qwen3.5-35b,gemma-4-26b)",
+        help="Comma-separated model aliases for full / benchmark tiers "
+             "(full default: qwen3.5-4b,qwen3.5-35b,gemma-4-26b; "
+             "benchmark default: auto-discovered from local cache)",
     )
     doctor_parser.add_argument(
         "--update-baselines",
         action="store_true",
-        help="Record current run as the new baseline (after human review)",
+        help="Record current run as the new baseline (check / full only). "
+             "Ignored with a warning for smoke / benchmark tiers.",
     )
 
     args = parser.parse_args()
 
-    # Resolve model aliases before dispatch
-    if hasattr(args, "model") and args.model:
+    # Resolve model aliases before dispatch.
+    #
+    # The doctor subcommand is exempt: it intentionally keeps the alias
+    # form so per-model artefacts (baseline filenames, scorecard rows,
+    # report check names) stay human-readable and stable across runs.
+    # Doctor does its own alias→path resolution inside the server-spawn
+    # path via discovery, so resolving here would write the wrong
+    # baseline filename and confuse multi-model loops.
+    if (
+        hasattr(args, "model")
+        and args.model
+        and getattr(args, "command", None) != "doctor"
+    ):
         from vllm_mlx.model_aliases import resolve_model
 
         resolved = resolve_model(args.model)

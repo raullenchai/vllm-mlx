@@ -67,7 +67,7 @@ def load_thresholds(path: Path | None = None) -> dict[str, dict[str, float]]:
 # Baseline read/write
 # ---------------------------------------------------------------------
 
-def _safe_model_slug(model: str) -> str:
+def safe_model_slug(model: str) -> str:
     """File-system-safe, *injective* slug for baseline filenames.
 
     Uses URL percent-encoding so the mapping is one-to-one — i.e.
@@ -92,7 +92,7 @@ def baseline_path(tier: str, model: str | None = None) -> Path:
     base = HARNESS_DIR / "baselines"
     if model is None:
         return base / f"{tier}.json"
-    return base / f"{tier}-{_safe_model_slug(model)}.json"
+    return base / f"{tier}-{safe_model_slug(model)}.json"
 
 
 def _legacy_slug(model: str) -> str:

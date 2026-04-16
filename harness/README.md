@@ -25,19 +25,28 @@ it needs `tests/`, `harness/`, and `pyproject.toml`):
 
 ```bash
 # Pre-commit — no model required
-rapid-mlx doctor smoke
+make smoke                            # or: rapid-mlx doctor smoke
 
-# Pre-PR — boots a server with qwen3.5-4b, runs API + perf checks,
-# diffs against the recorded baseline
-HF_HUB_CACHE="/path/to/your/hf/cache" rapid-mlx doctor check
+# Pre-PR — boots qwen3.5-4b, runs API + perf checks, diffs vs baseline
+HF_HUB_CACHE=... make check           # or: rapid-mlx doctor check
 
-# Pre-release / after a refactor — three models + all 11 agent profiles
-HF_HUB_CACHE="/path/to/your/hf/cache" rapid-mlx doctor full
+# Pre-release — three models + all 11 agent profiles
+HF_HUB_CACHE=... make full
+
+# Re-record baselines (after intentional perf changes)
+HF_HUB_CACHE=... make update-baselines TIER=check
+
+# Cross-model scorecard (overnight)
+HF_HUB_CACHE=... make benchmark
 ```
 
 `HF_HUB_CACHE` is a vanilla Hugging Face env var — use it if your models
 live somewhere other than `~/.cache/huggingface`. The doctor inherits
 your environment when spawning the server.
+
+Run `make help` for the full target list. The Makefile auto-detects a
+suitable Python interpreter (active venv → python3.13/12/11/10) and
+respects `make smoke PY=python3.X` for explicit override.
 
 ## Exit codes
 
@@ -64,7 +73,7 @@ Designed to be invoked from a pre-commit hook or `make` target.
 | `imports` | Import lightweight modules — catches syntax errors fast |
 | `ruff` | Lint (binary or `python -m ruff`, gracefully skips if neither) |
 | `cli_sanity` | `rapid-mlx --help / models / agents` actually run |
-| `pytest` | Full unit suite (~45s, 2027 tests) excluding integration/server |
+| `pytest` | Full unit suite (~45s, ~2070 tests) excluding `tests/integrations/` and `test_event_loop.py` |
 
 ### `check` (~10 min, qwen3.5-4b)
 
@@ -100,7 +109,7 @@ Sweeps every model with locally-present weights and produces a single
 scorecard markdown:
 
 ```bash
-# Auto-discovers models in HF_HUB_CACHE / ~/.cache/huggingface / ~/.lmstudio
+# Auto-discovers models in HF_HUB_CACHE / $HF_HOME/hub / ~/.cache/huggingface / ~/.lmstudio
 HF_HUB_CACHE=... rapid-mlx doctor benchmark
 
 # Or be explicit (forces inclusion even if cache probe misses):

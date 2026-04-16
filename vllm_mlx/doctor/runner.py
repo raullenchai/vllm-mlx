@@ -200,13 +200,25 @@ class DoctorRunner:
             "| --- | --- | --- | --- |",
         ]
         for c in result.checks:
-            detail = c.detail.replace("\n", " ").replace("|", "\\|")
-            if len(detail) > 120:
-                detail = detail[:117] + "..."
             lines.append(
-                f"| {c.name} | {c.status.value} | {c.duration_s:.1f}s | {detail} |"
+                f"| {md_cell(c.name)} | {c.status.value} | {c.duration_s:.1f}s | "
+                f"{md_cell(c.detail, max_len=120)} |"
             )
+
+        # Per-model baseline-diff tables (if any) — these are stashed by
+        # _apply_baseline because they're too long to fit in a check's
+        # detail cell.  Render as a separate section so report.md is
+        # self-contained without needing to read diff.md alongside it.
+        diff_sections = getattr(self, "_pending_diff_sections", [])
+        if diff_sections:
+            lines += ["", "## Baseline diffs", ""]
+            for model, deltas_md in diff_sections:
+                lines.append(f"### {model}")
+                lines.append("")
+                lines.append(deltas_md.rstrip())
+                lines.append("")
         return "\n".join(lines) + "\n"
+
 
     def _print_summary(self, result: TierResult) -> None:
         n_pass = sum(1 for c in result.checks if c.status == Status.PASS)
@@ -222,6 +234,22 @@ class DoctorRunner:
             f"({n_pass} pass, {n_regress} regression, {n_fail} fail, {n_skip} skip)"
         )
         print(f"Report: {self.run_dir / 'report.md'}")
+
+
+def md_cell(s: str, max_len: int = 0) -> str:
+    """Sanitise a string for safe inclusion in a markdown table cell.
+
+    Replaces newlines with spaces and escapes ``|`` so the table layout
+    is preserved.  Optionally truncates to ``max_len`` characters with
+    a "..." suffix; ``max_len=0`` (default) leaves the cell uncapped.
+
+    Used by both ``runner.py`` (per-check rows) and ``scorecard.py``
+    (per-model rows) so escaping rules stay consistent.
+    """
+    s = (s or "").replace("\n", " ").replace("|", "\\|")
+    if max_len and len(s) > max_len:
+        s = s[: max_len - 3] + "..."
+    return s
 
 
 # ----------------------------------------------------------------------

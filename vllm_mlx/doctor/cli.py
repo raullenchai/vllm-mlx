@@ -7,12 +7,12 @@ import sys
 
 from .baseline import (
     DeltaStatus,
-    _safe_model_slug,
     compare,
     has_regression,
     load_baseline,
     load_thresholds,
     render_deltas_md,
+    safe_model_slug,
     save_baseline,
 )
 from .runner import REPO_ROOT, CheckResult, DoctorRunner, Status
@@ -56,6 +56,18 @@ def doctor_command(args) -> None:
 
     tier = getattr(args, "tier", None) or "smoke"
     update_baselines = getattr(args, "update_baselines", False)
+
+    # --update-baselines only makes sense for tiers that diff against a
+    # baseline.  Warn explicitly when it's used with smoke (no perf
+    # metrics) or benchmark (scorecard, no baseline contract) so users
+    # don't think they recorded something they didn't.
+    if update_baselines and tier in ("smoke", "benchmark"):
+        print(
+            f"[doctor] --update-baselines has no effect for tier '{tier}' "
+            "(only check / full record baselines); ignoring.",
+            file=sys.stderr,
+        )
+        update_baselines = False
 
     if tier == "smoke":
         result = run_smoke_tier()
@@ -160,13 +172,24 @@ def run_full_tier(models: list[str], update_baselines: bool = False):
 
 
 def _resolve_agent_profiles(explicit: list[str] | None) -> list[str]:
-    """Return the list of agent profile names to exercise."""
+    """Return the list of agent profile names to exercise.
+
+    Loud failure on profile-loading errors: silently degrading to
+    ``["generic"]`` made full-tier reports look successful while
+    actually exercising 1/11 of the documented profile coverage.
+    """
     if explicit:
         return explicit
     try:
         from .. import agents
         return [p.name for p in agents.list_profiles()]
-    except Exception:
+    except Exception as e:
+        print(
+            f"[doctor] WARNING: agent profile loading failed "
+            f"({type(e).__name__}: {e}); falling back to 'generic' only. "
+            "Full-tier results will not reflect the documented 11-profile sweep.",
+            file=sys.stderr,
+        )
         return ["generic"]
 
 
@@ -190,9 +213,14 @@ def _run_per_model_block(
     from .checks import agent, api, perf
     from .server import ServerStartFailed, serve
 
-    server_log = runner.run_dir / f"server-{_safe_model_slug(model)}.log"
+    server_log = runner.run_dir / f"server-{safe_model_slug(model)}.log"
     try:
-        with serve(model=model, log_path=server_log) as info:
+        # Full tier covers 27B+ models (qwen3.5-35b, gemma-4-26b) whose
+        # cold load can exceed 180s when paging from a slow external
+        # SSD.  Use the same generous budget as the benchmark tier.
+        with serve(
+            model=model, log_path=server_log, boot_timeout_s=600,
+        ) as info:
             port = info["port"]
             print(f"  [server] {model} up on port {port}, log → {server_log.name}")
             runner.run_check(
@@ -235,7 +263,7 @@ def _run_per_model_block(
 
 
 # NOTE: per-model artefact filenames (diff-{model}.md, server-{model}.log)
-# use _safe_model_slug from baseline.py so the mapping is injective —
+# use safe_model_slug from baseline.py so the mapping is injective —
 # a non-injective scheme reintroduces the same overwrite bug per-model
 # diffs were meant to fix.
 
@@ -330,7 +358,7 @@ def run_benchmark_tier(models: list[str] | None = None):
     cells: list[tuple[str, CheckResult]] = []
     for model in run_list:
         print(f"\n  ── model: {model} ──")
-        server_log = runner.run_dir / f"server-{_safe_model_slug(model)}.log"
+        server_log = runner.run_dir / f"server-{safe_model_slug(model)}.log"
         # Pass the discovered local path so LM Studio / non-HF layouts
         # don't trigger a re-download via mlx_lm.load(alias).
         local_path = (
@@ -429,7 +457,7 @@ def _apply_baseline(
             f"_no baseline yet for model={model} — "
             "run with --update-baselines to record one_\n"
         )
-        per_model_diff = runner.run_dir / f"diff-{_safe_model_slug(model)}.md"
+        per_model_diff = runner.run_dir / f"diff-{safe_model_slug(model)}.md"
         per_model_diff.write_text(notice)
         combined_diff = runner.run_dir / "diff.md"
         section = f"## {model}\n\n{notice}\n"
@@ -476,7 +504,7 @@ def _apply_baseline(
     # shared diff.md and we'd lose all earlier models' delta tables.
     # Always write per-model files; also append to a combined diff.md
     # so single-model tiers (check) keep their existing artefact name.
-    per_model_diff = runner.run_dir / f"diff-{_safe_model_slug(model)}.md"
+    per_model_diff = runner.run_dir / f"diff-{safe_model_slug(model)}.md"
     per_model_diff.write_text(deltas_md)
 
     combined_diff = runner.run_dir / "diff.md"
@@ -503,5 +531,10 @@ def _apply_baseline(
         ),
     )
 
-    # Append delta table to the report so the summary is self-contained.
-    runner.checks[-1].detail += f"\n\n{deltas_md}"
+    # Stash the full delta table on the runner so finalize() can append
+    # it to report.md as a section.  Stuffing it into CheckResult.detail
+    # would only survive in result.json — _render_markdown truncates
+    # long detail strings to 120 chars.
+    if not hasattr(runner, "_pending_diff_sections"):
+        runner._pending_diff_sections = []
+    runner._pending_diff_sections.append((model, deltas_md))

@@ -10,9 +10,9 @@ detection is wrong and we need to look at it.
 from vllm_mlx.doctor.baseline import (
     DEFAULT_THRESHOLDS,
     DeltaStatus,
-    _safe_model_slug,
     compare,
     has_regression,
+    safe_model_slug,
 )
 
 # A minimal threshold map covering the metrics we exercise below.
@@ -184,17 +184,17 @@ class TestSafeModelSlug:
             ("a/b", "a%2Fb"),
         ]
         for a, b in pairs:
-            assert _safe_model_slug(a) != _safe_model_slug(b), (
+            assert safe_model_slug(a) != safe_model_slug(b), (
                 f"slug collision: {a!r} and {b!r} both map to "
-                f"{_safe_model_slug(a)!r}"
+                f"{safe_model_slug(a)!r}"
             )
 
     def test_simple_aliases_unchanged(self):
         # Common case: an alias with no special chars stays human-readable.
-        assert _safe_model_slug("qwen3.5-4b") == "qwen3.5-4b"
+        assert safe_model_slug("qwen3.5-4b") == "qwen3.5-4b"
 
     def test_hf_path_round_trips_via_unquote(self):
         import urllib.parse
         original = "mlx-community/Qwen3.5-4B-MLX-4bit"
-        slug = _safe_model_slug(original)
+        slug = safe_model_slug(original)
         assert urllib.parse.unquote(slug) == original

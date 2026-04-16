@@ -48,16 +48,10 @@ composite_score:
   regression_pct: 5
   improvement_pct: 10
 
-# Functional / accuracy — zero tolerance: any drop is a regression
+# Functional / accuracy — zero tolerance: any drop is a regression.
+# Only metrics actually emitted by the harness are listed.  When new
+# accuracy signals are added (e.g. BFCL pass rate, eval suite scores),
+# add their threshold here so they're treated as accuracy not perf.
 tc_success_rate:
-  regression_pct: 0
-  improvement_pct: 5
-tool_call_accuracy:
-  regression_pct: 0
-  improvement_pct: 5
-reasoning_accuracy:
-  regression_pct: 0
-  improvement_pct: 5
-coding_accuracy:
   regression_pct: 0
   improvement_pct: 5

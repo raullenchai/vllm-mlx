@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import re
 import sys
 
 from .baseline import (
@@ -202,25 +201,20 @@ def _resolve_agent_profiles(explicit: list[str] | None) -> list[str]:
 # Shared per-model block (used by check + full)
 # ---------------------------------------------------------------------
 
-# Boot timeout buckets keyed on the model alias's parameter-count hint.
-# The check tier defaults to qwen3.5-4b (small) which boots in <30s; bumping
-# everything to 600s would steal the tier's fast-fail property. Conversely,
-# 'doctor check --model qwen3.5-35b' is a supported workflow and 27B+ cold
-# loads on a slow disk routinely exceed 180s. Pattern-match the alias for a
-# size hint instead of asking the user to think about timeouts.
-_LARGE_MODEL_RE = re.compile(
-    r"\b(?:[2-9]\d|\d{3,})b\b", re.IGNORECASE,
-)  # matches '20b', '27b', '35b', '70b', '122b', '405b', ...
-
-
-def _suggested_boot_timeout(model: str) -> int:
-    """Pick a boot timeout based on a parameter-count hint in the alias.
-
-    Returns 600s for ≥20B-shaped aliases, 180s otherwise.  Errs on the
-    side of fast-fail: if the regex doesn't match, you get the short
-    timeout (which surfaces broken-server issues faster).
-    """
-    return 600 if _LARGE_MODEL_RE.search(model) else 180
+# Default boot timeout for any model.  600s is generous enough for cold
+# loads of 27B-122B models from a slow external SSD, which is the realistic
+# worst case on a developer Mac.  Server crashes (port-bind failure, missing
+# weights, import error, ...) are detected within <1s by proc.poll() in
+# server._wait_for_health regardless of this value, so the only scenario
+# where 600s actually waits 600s is a genuinely slow legitimate load — at
+# which point we want the long budget.
+#
+# Earlier iterations tried to pick a tier-/alias-aware shorter budget for
+# the small-model case, but every heuristic missed at least one supported
+# large model (Qwen3-Coder lacks a 'NNb' hint in its alias, MiniMax M2.5
+# is huge but named 'minimax-m2.5', etc.).  The optimisation isn't worth
+# the false-fail risk.
+DEFAULT_BOOT_TIMEOUT_S = 600
 
 
 def _run_per_model_block(
@@ -237,15 +231,15 @@ def _run_per_model_block(
     records the failure and moves on, so a single broken model in the
     full sweep still yields a complete report.
 
-    ``boot_timeout_s=None`` (default) auto-picks based on the model's
-    parameter-count hint via _suggested_boot_timeout().  Callers can
-    pass an explicit value to force a specific budget.
+    ``boot_timeout_s`` defaults to ``DEFAULT_BOOT_TIMEOUT_S`` (600s).
+    See the constant's docstring for why a single generous value beats
+    every per-model / per-tier heuristic we tried.
     """
     from .checks import agent, api, perf
     from .server import ServerStartFailed, serve
 
     if boot_timeout_s is None:
-        boot_timeout_s = _suggested_boot_timeout(model)
+        boot_timeout_s = DEFAULT_BOOT_TIMEOUT_S
 
     server_log = runner.run_dir / f"server-{safe_model_slug(model)}.log"
     try:

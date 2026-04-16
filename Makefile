@@ -1,6 +1,13 @@
 .PHONY: help smoke check full benchmark update-baselines lint test clean
 
-PY ?= python3.12
+# Pick the active interpreter, then fall back to common names.
+# Override with: make smoke PY=python3.13
+PY ?= $(shell command -v python3.12 2>/dev/null \
+              || command -v python3.13 2>/dev/null \
+              || command -v python3.11 2>/dev/null \
+              || command -v python3.10 2>/dev/null \
+              || command -v python3 2>/dev/null \
+              || echo python)
 HF_HUB_CACHE ?= $(shell echo $$HF_HUB_CACHE)
 DOCTOR := $(PY) -m vllm_mlx.cli doctor
 

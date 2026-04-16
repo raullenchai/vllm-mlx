@@ -112,6 +112,11 @@ class DoctorRunner:
         broad ``Exception`` here is intentional: a check that crashes
         should not abort the entire tier — we record the failure and
         continue so the user sees the full picture in the report.
+
+        The caller-supplied ``name`` always wins over ``result.name``.
+        That matters for tiers that run the same check fn multiple
+        times (e.g. full tier across 3 models), where the report would
+        otherwise collapse entries.
         """
         print(f"  [{name}]", end=" ", flush=True)
         t0 = time.perf_counter()
@@ -126,6 +131,9 @@ class DoctorRunner:
                 detail=f"check raised: {type(e).__name__}: {e}",
             )
             logger.exception("Doctor check %s crashed", name)
+
+        # Caller's name wins — see docstring.
+        result.name = name
 
         # Sanity: even a passing check should report a positive duration
         if result.duration_s == 0.0:

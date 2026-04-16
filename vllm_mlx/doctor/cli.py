@@ -19,6 +19,16 @@ from .runner import REPO_ROOT, CheckResult, DoctorRunner, Status
 # Default model used by the check tier.  Tier 3 (full) loops a wider list.
 DEFAULT_CHECK_MODEL = "qwen3.5-4b"
 
+# Model list for the full tier: small/medium/large + a non-Qwen template
+# path so we cover both Hermes-style (Qwen) and Gemma's distinct chat
+# template + tool-call format.
+DEFAULT_FULL_MODELS = ["qwen3.5-4b", "qwen3.5-35b", "gemma-4-26b"]
+
+# Agent profiles to exercise per-model in the full tier.  None ⇒ all
+# loaded profiles.  Limit here if a particular profile is too slow to
+# include in the regular full sweep.
+DEFAULT_FULL_AGENT_PROFILES = None
+
 
 def _require_source_checkout() -> None:
     """Doctor depends on tests/ + harness/ + pyproject.toml."""
@@ -54,8 +64,10 @@ def doctor_command(args) -> None:
             update_baselines=update_baselines,
         )
     elif tier == "full":
-        print("[doctor] full tier not yet implemented", file=sys.stderr)
-        sys.exit(2)
+        result = run_full_tier(
+            models=getattr(args, "models", None) or DEFAULT_FULL_MODELS,
+            update_baselines=update_baselines,
+        )
     elif tier == "benchmark":
         print("[doctor] benchmark tier not yet implemented", file=sys.stderr)
         sys.exit(2)
@@ -92,8 +104,7 @@ def run_smoke_tier():
 
 def run_check_tier(model: str, update_baselines: bool = False):
     """Boot a server with ``model`` and run API + perf + agent checks."""
-    from .checks import api, perf, smoke
-    from .server import ServerStartFailed, serve
+    from .checks import smoke
 
     print(f"Rapid-MLX Doctor — check tier (model={model})")
     print("=" * 60)
@@ -104,43 +115,126 @@ def run_check_tier(model: str, update_baselines: bool = False):
     runner.run_check("repo_layout", smoke.check_repo_layout)
     runner.run_check("imports", smoke.check_imports)
 
-    server_log = runner.run_dir / "server.log"
+    _run_per_model_block(
+        runner=runner,
+        model=model,
+        tier="check",
+        update_baselines=update_baselines,
+        agent_profiles=[],  # check tier keeps it lean — agents only in full
+    )
+    return runner.finalize()
+
+
+# ---------------------------------------------------------------------
+# Full tier
+# ---------------------------------------------------------------------
+
+def run_full_tier(models: list[str], update_baselines: bool = False):
+    """Loop check-tier work across multiple models + run all agent profiles."""
+    from .checks import smoke
+
+    print(f"Rapid-MLX Doctor — full tier (models={', '.join(models)})")
+    print("=" * 60)
+
+    runner = DoctorRunner(tier="full")
+
+    runner.run_check("repo_layout", smoke.check_repo_layout)
+    runner.run_check("imports", smoke.check_imports)
+
+    # Resolve agent profile list once so a missing profile fails fast.
+    profile_names = _resolve_agent_profiles(DEFAULT_FULL_AGENT_PROFILES)
+
+    for model in models:
+        print(f"\n  ── model: {model} ──")
+        _run_per_model_block(
+            runner=runner,
+            model=model,
+            tier="full",
+            update_baselines=update_baselines,
+            agent_profiles=profile_names,
+        )
+
+    return runner.finalize()
+
+
+def _resolve_agent_profiles(explicit: list[str] | None) -> list[str]:
+    """Return the list of agent profile names to exercise."""
+    if explicit:
+        return explicit
+    try:
+        from .. import agents
+        return [p.name for p in agents.list_profiles()]
+    except Exception:
+        return ["generic"]
+
+
+# ---------------------------------------------------------------------
+# Shared per-model block (used by check + full)
+# ---------------------------------------------------------------------
+
+def _run_per_model_block(
+    runner: DoctorRunner,
+    model: str,
+    tier: str,
+    update_baselines: bool,
+    agent_profiles: list[str],
+) -> None:
+    """Boot a server for one model and run all model-bound checks against it.
+
+    Failures here do NOT abort the rest of the tier — the runner just
+    records the failure and moves on, so a single broken model in the
+    full sweep still yields a complete report.
+    """
+    from .checks import agent, api, perf
+    from .server import ServerStartFailed, serve
+
+    server_log = runner.run_dir / f"server-{_filename_safe(model)}.log"
     try:
         with serve(model=model, log_path=server_log) as info:
             port = info["port"]
-            print(f"  [server] up on port {port}, log → {server_log.name}")
+            print(f"  [server] {model} up on port {port}, log → {server_log.name}")
             runner.run_check(
-                "regression_suite",
+                f"regression_suite[{model}]",
                 lambda: api.check_regression_suite(port),
             )
             runner.run_check(
-                "smoke_matrix",
+                f"smoke_matrix[{model}]",
                 lambda: api.check_smoke_matrix(port),
             )
             perf_result = runner.run_check(
-                "autoresearch",
+                f"autoresearch[{model}]",
                 lambda: perf.check_autoresearch(port, runs=1),
             )
+            for profile_name in agent_profiles:
+                # Bind per-iteration values so the lambda doesn't close
+                # over the loop variables.
+                runner.run_check(
+                    f"agent[{profile_name}@{model}]",
+                    lambda p=profile_name, port=port: agent.check_agent_profile(
+                        p, port, model_id=model
+                    ),
+                )
     except ServerStartFailed as exc:
-        # Capture the exception locally so the closure below sees it
-        # even if Python clears `exc` at the end of the except block.
         err_msg = f"{exc}\nlog: {server_log}"
         runner.run_check(
-            "server_boot",
+            f"server_boot[{model}]",
             lambda: CheckResult(
-                name="server_boot",
+                name=f"server_boot[{model}]",
                 status=Status.FAIL,
                 duration_s=0.0,
                 detail=err_msg,
             ),
         )
-        return runner.finalize()
+        return
 
     # Compare perf metrics against baseline (if one exists).
     if perf_result.metrics:
-        _apply_baseline(runner, "check", model, perf_result.metrics, update_baselines)
+        _apply_baseline(runner, tier, model, perf_result.metrics, update_baselines)
 
-    return runner.finalize()
+
+def _filename_safe(name: str) -> str:
+    """Reduce a model name to something safe in a server log filename."""
+    return name.replace("/", "_").replace(" ", "_")
 
 
 def _apply_baseline(

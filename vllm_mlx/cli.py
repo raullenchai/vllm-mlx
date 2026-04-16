@@ -1478,6 +1478,13 @@ Examples:
         help="Model alias for check tier (default: qwen3.5-4b)",
     )
     doctor_parser.add_argument(
+        "--models",
+        type=str,
+        default=None,
+        help="Comma-separated model aliases for full tier "
+             "(default: qwen3.5-4b,qwen3.5-35b,gemma-4-26b)",
+    )
+    doctor_parser.add_argument(
         "--update-baselines",
         action="store_true",
         help="Record current run as the new baseline (after human review)",
@@ -1510,6 +1517,9 @@ Examples:
     elif args.command == "doctor":
         from vllm_mlx.doctor.cli import doctor_command
 
+        # Parse --models comma-list now so the doctor module gets a clean list.
+        if getattr(args, "models", None):
+            args.models = [m.strip() for m in args.models.split(",") if m.strip()]
         doctor_command(args)
     else:
         parser.print_help()

@@ -251,6 +251,11 @@ def _run_per_model_block(
             model=model,
             log_path=server_log,
             boot_timeout_s=boot_timeout_s,
+            extra_args=[
+                "--enable-auto-tool-choice",
+                "--tool-call-parser", "hermes",
+                "--enable-tool-logits-bias",
+            ],
         ) as info:
             port = info["port"]
             print(f"  [server] {model} up on port {port}, log → {server_log.name}")
@@ -406,6 +411,11 @@ def run_benchmark_tier(models: list[str] | None = None):
                 model_path=local_path,
                 log_path=server_log,
                 boot_timeout_s=600,
+                extra_args=[
+                    "--enable-auto-tool-choice",
+                    "--tool-call-parser", "hermes",
+                    "--enable-tool-logits-bias",
+                ],
             ) as info:
                 port = info["port"]
                 print(f"  [server] {model} up on port {port}")

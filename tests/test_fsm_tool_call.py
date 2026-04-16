@@ -154,23 +154,34 @@ class TestFSMToolCallProcessor:
         # Should be identical (no masking)
         assert mx.array_equal(result, logits)
 
-    def test_trigger_activates_constrained_mode(self, processor, tokenizer):
-        """After seeing <tool_call>\\n, processor should constrain."""
+    def test_trigger_plus_json_activates_constrained_mode(self, processor, tokenizer):
+        """After seeing <tool_call>\\n + '{', processor should constrain."""
         import mlx.core as mx
 
-        # Feed the trigger tokens one by one
-        trigger = "<tool_call>\n"
-        trigger_ids = tokenizer.encode(trigger, add_special_tokens=False)
-
+        # Feed trigger + JSON start
+        text = '<tool_call>\n{"'
+        token_ids = tokenizer.encode(text, add_special_tokens=False)
         logits = mx.zeros((1, 248077))
 
-        # Feed all trigger tokens
-        for tid in trigger_ids:
-            all_ids = mx.array(trigger_ids[: trigger_ids.index(tid) + 1])
-            result = processor(all_ids, logits)
+        for i, tid in enumerate(token_ids):
+            all_ids = mx.array(token_ids[: i + 1])
+            processor(all_ids, logits)
 
-        # After trigger, the processor should be in constrained mode
-        assert processor._constrained, "Should be in constrained mode after trigger"
+        assert processor._constrained, "Should be in constrained mode after trigger + '{'"
+
+    def test_trigger_plus_xml_skips_fsm(self, processor, tokenizer):
+        """After <tool_call>\\n + '<', FSM should NOT activate (XML format)."""
+        import mlx.core as mx
+
+        text = "<tool_call>\n<function"
+        token_ids = tokenizer.encode(text, add_special_tokens=False)
+        logits = mx.zeros((1, 248077))
+
+        for i, tid in enumerate(token_ids):
+            all_ids = mx.array(token_ids[: i + 1])
+            processor(all_ids, logits)
+
+        assert not processor._constrained, "Should NOT constrain for XML format"
 
     def test_constrained_mode_masks_invalid_tokens(self, processor, tokenizer):
         """In constrained mode, most tokens should be masked to -inf."""
@@ -227,12 +238,15 @@ class TestFSMFactory:
         proc = create_fsm_processor("hermes", tok, tools)
         assert proc is not None
 
-    def test_create_returns_none_without_tools(self):
+    def test_create_returns_processor_with_generic_schema(self):
+        """Even without specific tools, factory returns a processor
+        with generic schema (any name + any arguments)."""
         from vllm_mlx.api.fsm_tool_call import create_fsm_processor
 
         tok = MagicMock()
-        assert create_fsm_processor("hermes", tok, None) is None
-        assert create_fsm_processor("hermes", tok, []) is None
+        # No tools → generic schema processor (not None)
+        proc = create_fsm_processor("hermes", tok, None)
+        assert proc is not None, "Should return generic FSM processor"
 
     def test_all_parsers_have_triggers(self):
         """Every parser should have a trigger pattern registered."""

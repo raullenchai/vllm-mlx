@@ -369,27 +369,47 @@ class FSMToolCallProcessor:
 
             return logits
 
-        # --- Free mode: check for trigger ---
-        if self._trigger and self._recent_text.endswith(self._trigger):
-            guide = self._cache.get_guide(self.tools)
-            if guide is not None:
-                self._guide = guide
-                self._constrained = True
+        # --- Free mode: check for pending activation from previous step ---
+        if getattr(self, "_pending_activation", False):
+            self._pending_activation = False
+            # Check if the model is starting JSON output
+            last_char = last_text.strip()
+            if last_char.startswith("{"):
+                guide = self._cache.get_guide(self.tools)
+                if guide is not None:
+                    self._guide = guide
+                    self._constrained = True
+                    # Advance past the '{' we just saw
+                    try:
+                        self._guide.advance(last_tok)
+                    except Exception:
+                        self._constrained = False
+                        self._guide = None
+                    else:
+                        logger.info(
+                            f"[FSM] Trigger {self._trigger!r} + JSON start → "
+                            "constrained mode"
+                        )
+                        # Mask for the NEXT token
+                        if not self._guide.is_finished():
+                            allowed = self._guide.get_tokens()
+                            if allowed:
+                                mask = mx.full(logits.shape, -float("inf"))
+                                allowed_arr = mx.array(allowed)
+                                if logits.ndim == 2:
+                                    mask[0, allowed_arr] = 0.0
+                                else:
+                                    mask[allowed_arr] = 0.0
+                                return logits + mask
+            else:
                 logger.info(
-                    f"[FSM] Trigger detected: {self._trigger!r} → "
-                    "constrained mode"
+                    f"[FSM] Trigger detected but non-JSON start "
+                    f"({last_char[:10]!r}), skipping FSM"
                 )
 
-                # Immediately mask for the NEXT token
-                allowed = self._guide.get_tokens()
-                if allowed:
-                    mask = mx.full(logits.shape, -float("inf"))
-                    allowed_arr = mx.array(allowed)
-                    if logits.ndim == 2:
-                        mask[0, allowed_arr] = 0.0
-                    else:
-                        mask[allowed_arr] = 0.0
-                    return logits + mask
+        # --- Check for trigger (sets pending for NEXT step) ---
+        if self._trigger and self._recent_text.endswith(self._trigger):
+            self._pending_activation = True
 
         return logits
 

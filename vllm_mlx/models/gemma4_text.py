@@ -189,18 +189,21 @@ def load_gemma4_text(model_path: str | Path, tokenizer_config: dict = None):
             )
             nn.quantize(model, bits=default_bits, group_size=default_gs)
 
-    # Load weights
+    # Load weights — sanitize per shard to keep peak memory proportional
+    # to the text-model size, not the full multimodal checkpoint.  On
+    # Gemma 4 the multimodal shards can be >2× the language-model
+    # weight, so loading everything then sanitizing would transiently
+    # allocate the entire checkpoint and OOM smaller Macs.  Fixes #123.
     weight_files = sorted(
         f for f in p.glob("*.safetensors") if not f.name.startswith("._")
     )
     if not weight_files:
         raise FileNotFoundError(f"No .safetensors files in {p}")
-    raw_weights = {}
+    sanitized = {}
     for wf in weight_files:
-        raw_weights.update(mx.load(str(wf)))
-
-    # Sanitize and load
-    sanitized = model.sanitize(raw_weights)
+        shard = mx.load(str(wf))
+        sanitized.update(model.sanitize(shard))
+        del shard
     model.load_weights(list(sanitized.items()), strict=False)
 
     # Verify weights loaded

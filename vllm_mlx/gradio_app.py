@@ -23,9 +23,17 @@ from pathlib import Path
 try:
     import gradio as gr
 except ImportError:
-    print("Error: gradio is required for the chat UI.")
-    print("Install it with: pip install 'rapid-mlx[chat]'")
-    raise SystemExit(1)
+    import sys
+
+    print(
+        "Error: gradio is required for the chat UI.\n"
+        "Install it with: pip install 'rapid-mlx[chat]'\n"
+        "\n"
+        "The vllm-mlx-chat command requires the [chat] extra which\n"
+        "includes gradio and pytz. It is not installed by default to\n"
+        "keep the base package small."
+    )
+    sys.exit(1)
 import requests
 
 

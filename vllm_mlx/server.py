@@ -3768,8 +3768,9 @@ Examples:
     parser.add_argument(
         "--prefill-step-size",
         type=int,
-        default=2048,
-        help="Tokens to process per prefill chunk (default: 2048). "
+        default=None,
+        help="Tokens to process per prefill chunk "
+        "(default: 2048 for LLM, 1024 for MLLM/vision). "
         "Larger values may improve TTFT on Apple Silicon with sufficient memory.",
     )
     parser.add_argument(

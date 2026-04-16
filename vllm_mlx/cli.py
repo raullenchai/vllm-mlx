@@ -279,6 +279,8 @@ def serve_command(args):
             kv_cache_quantization_bits=args.kv_cache_quantization_bits,
             kv_cache_quantization_group_size=args.kv_cache_quantization_group_size,
             kv_cache_min_quantize_tokens=args.kv_cache_min_quantize_tokens,
+            # Prefill chunking
+            prefill_step_size=args.prefill_step_size,
         )
 
         print("Mode: Continuous batching (for multiple concurrent users)")

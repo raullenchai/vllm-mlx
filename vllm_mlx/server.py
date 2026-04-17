@@ -172,13 +172,18 @@ def _resolve_model_name(request_model: str | None) -> str:
     return request_model
 
 
-def _resolve_max_tokens(request_value: int | None) -> int:
+def _resolve_max_tokens(
+    request_value: int | None, enable_thinking: bool | None = None
+) -> int:
     """Resolve max_tokens with thinking budget for reasoning models.
 
     When a reasoning parser is active and the user requests a small max_tokens,
     add extra headroom so <think>...</think> tokens don't eat into the content budget.
+    Skips the budget when the request explicitly disables thinking.
     """
     base = request_value if request_value is not None else _default_max_tokens
+    if enable_thinking is False:
+        return base  # User explicitly disabled thinking — no budget needed
     if _reasoning_parser_name and base > 0 and base < 4096:
         return base + _thinking_token_budget
     return base
@@ -2162,7 +2167,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 
     # Prepare kwargs
     chat_kwargs = {
-        "max_tokens": _resolve_max_tokens(request.max_tokens),
+        "max_tokens": _resolve_max_tokens(request.max_tokens, request.enable_thinking),
         "temperature": _resolve_temperature(request.temperature),
         "top_p": _resolve_top_p(request.top_p),
         "stop": request.stop,

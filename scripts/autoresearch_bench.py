@@ -91,7 +91,9 @@ LONG_PROMPT_MESSAGES.append(
 )
 
 
-def stream_request(messages, max_tokens=300, tools=None, timeout=60):
+def stream_request(
+    messages, max_tokens=300, tools=None, timeout=60, enable_thinking=None
+):
     """Send streaming request, return metrics dict."""
     body = {
         "model": "default",
@@ -102,12 +104,17 @@ def stream_request(messages, max_tokens=300, tools=None, timeout=60):
     }
     if tools:
         body["tools"] = tools
+    if enable_thinking is not None:
+        body["enable_thinking"] = enable_thinking
 
     data = json.dumps(body).encode()
     req = urllib.request.Request(BASE_URL, data=data, headers=HEADERS, method="POST")
     start = time.perf_counter()
     first_token_time = None
+    first_content_time = None
     token_count = 0
+    content_token_count = 0
+    reasoning_token_count = 0
     has_tool_calls = False
     tool_call_time = None
 
@@ -124,12 +131,20 @@ def stream_request(messages, max_tokens=300, tools=None, timeout=60):
                     chunk = json.loads(payload)
                     delta = chunk["choices"][0]["delta"]
                     content = delta.get("content")
-                    reasoning = delta.get("reasoning")
+                    reasoning = delta.get("reasoning_content") or delta.get(
+                        "reasoning"
+                    )
                     tc = delta.get("tool_calls")
                     if content or reasoning:
                         if first_token_time is None:
                             first_token_time = time.perf_counter()
                         token_count += 1
+                        if content:
+                            content_token_count += 1
+                            if first_content_time is None:
+                                first_content_time = time.perf_counter()
+                        if reasoning:
+                            reasoning_token_count += 1
                     if tc:
                         has_tool_calls = True
                         if tool_call_time is None:
@@ -144,14 +159,29 @@ def stream_request(messages, max_tokens=300, tools=None, timeout=60):
     ttft = (first_token_time - start) * 1000 if first_token_time else 0
     if tool_call_time and not first_token_time:
         ttft = (tool_call_time - start) * 1000
+    # Content TTFT: time to first content token (excluding reasoning)
+    content_ttft = (
+        (first_content_time - start) * 1000 if first_content_time else ttft
+    )
     decode_time = end - (first_token_time or tool_call_time or start)
     tps = (token_count - 1) / decode_time if decode_time > 0 and token_count > 1 else 0
+    # Content-only TPS (vLLM-style: excludes reasoning tokens)
+    content_decode_time = end - (first_content_time or first_token_time or start)
+    content_tps = (
+        (content_token_count - 1) / content_decode_time
+        if content_decode_time > 0 and content_token_count > 1
+        else 0
+    )
     tc_latency = (tool_call_time - start) * 1000 if tool_call_time else None
 
     return {
         "ttft_ms": ttft,
         "tps": tps,
         "tokens": token_count,
+        "content_ttft_ms": content_ttft,
+        "content_tps": content_tps,
+        "content_tokens": content_token_count,
+        "reasoning_tokens": reasoning_token_count,
         "has_tool_calls": has_tool_calls,
         "tc_latency_ms": tc_latency,
         "total_ms": (end - start) * 1000,
@@ -167,7 +197,7 @@ def run_suite(n_runs=3, verbose=True):
             print(msg, flush=True)
 
     # 1. Cold TTFT + Decode TPS (first request, no cache)
-    log("\n[1/6] Cold TTFT + Decode TPS...")
+    log("\n[1/7] Cold TTFT + Decode TPS...")
     msgs = [
         {"role": "system", "content": SYSTEM_MSG},
         {"role": "user", "content": USER_MSG},
@@ -180,7 +210,7 @@ def run_suite(n_runs=3, verbose=True):
     )
 
     # 2. Cached TTFT + steady-state Decode TPS
-    log(f"\n[2/6] Cached TTFT + Decode TPS (x{n_runs})...")
+    log(f"\n[2/7] Cached TTFT + Decode TPS (x{n_runs})...")
     cached_ttfts = []
     cached_tps = []
     for i in range(n_runs):
@@ -195,7 +225,7 @@ def run_suite(n_runs=3, verbose=True):
     )
 
     # 3. Multi-turn TTFT
-    log(f"\n[3/6] Multi-turn TTFT (x{n_runs})...")
+    log(f"\n[3/7] Multi-turn TTFT (x{n_runs})...")
     stream_request(MULTI_TURN, max_tokens=150)  # warm cache
     mt_ttfts = []
     mt_tps = []
@@ -208,7 +238,7 @@ def run_suite(n_runs=3, verbose=True):
     results["mt_tps"] = statistics.mean(mt_tps)
 
     # 4. Tool call latency
-    log(f"\n[4/6] Tool call latency (x{n_runs})...")
+    log(f"\n[4/7] Tool call latency (x{n_runs})...")
     stream_request(TOOL_MESSAGES, max_tokens=200, tools=TOOLS)  # warm
     tc_latencies = []
     tc_success = 0
@@ -225,7 +255,7 @@ def run_suite(n_runs=3, verbose=True):
     results["tc_success_rate"] = tc_success / n_runs
 
     # 5. Long prompt TTFT
-    log(f"\n[5/6] Long prompt TTFT...")
+    log("\n[5/7] Long prompt TTFT...")
     r = stream_request(LONG_PROMPT_MESSAGES, max_tokens=200)
     results["long_ttft_ms"] = r["ttft_ms"]
     results["long_tps"] = r["tps"]
@@ -234,13 +264,24 @@ def run_suite(n_runs=3, verbose=True):
     )
 
     # 6. Long prompt cached TTFT
-    log(f"\n[6/6] Long prompt cached TTFT (x{n_runs})...")
+    log(f"\n[6/7] Long prompt cached TTFT (x{n_runs})...")
     long_cached = []
     for i in range(n_runs):
         r = stream_request(LONG_PROMPT_MESSAGES, max_tokens=200)
         long_cached.append(r["ttft_ms"])
         log(f"  Run {i + 1}: TTFT={r['ttft_ms']:.0f}ms")
     results["long_cached_ttft_ms"] = statistics.mean(long_cached)
+
+    # 7. Pure decode speed (no thinking) — comparable to Ollama/llama.cpp benchmarks
+    log(f"\n[7/7] Pure decode TPS (enable_thinking=false, x{n_runs})...")
+    nothink_tps = []
+    for i in range(n_runs):
+        r = stream_request(msgs, max_tokens=200, enable_thinking=False)
+        nothink_tps.append(r["tps"])
+        log(
+            f"  Run {i + 1}: {r['tps']:.1f} tok/s | Tokens: {r['tokens']}"
+        )
+    results["nothink_decode_tps"] = statistics.mean(nothink_tps)
 
     # Composite score: weighted combination (higher = better)
     # Weights reflect importance for user experience
@@ -262,8 +303,12 @@ def print_summary(results, label=""):
     print(f"BENCHMARK RESULTS {label}")
     print("=" * 65)
     print(
-        f"  Decode TPS:         {results['decode_tps']:.1f} tok/s (±{results.get('decode_tps_stdev', 0):.1f})"
+        f"  Decode TPS (think): {results['decode_tps']:.1f} tok/s (±{results.get('decode_tps_stdev', 0):.1f})"
     )
+    if "nothink_decode_tps" in results:
+        print(
+            f"  Decode TPS (pure):  {results['nothink_decode_tps']:.1f} tok/s  ← comparable to Ollama"
+        )
     print(f"  Cold TTFT:          {results['cold_ttft_ms']:.0f} ms")
     print(f"  Cached TTFT:        {results['cached_ttft_ms']:.0f} ms")
     print(f"  Multi-turn TTFT:    {results['mt_ttft_ms']:.0f} ms")

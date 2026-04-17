@@ -1,6 +1,6 @@
 # Embeddings
 
-vllm-mlx supports text embeddings using [mlx-embeddings](https://github.com/Blaizzy/mlx-embeddings), providing an OpenAI-compatible `/v1/embeddings` endpoint.
+rapid-mlx supports text embeddings using [mlx-embeddings](https://github.com/Blaizzy/mlx-embeddings), providing an OpenAI-compatible `/v1/embeddings` endpoint.
 
 ## Installation
 
@@ -14,7 +14,7 @@ pip install mlx-embeddings>=0.0.5
 
 ```bash
 # Pre-load a specific embedding model at startup
-vllm-mlx serve my-llm-model --embedding-model mlx-community/all-MiniLM-L6-v2-4bit
+rapid-mlx serve my-llm-model --embedding-model mlx-community/all-MiniLM-L6-v2-4bit
 ```
 
 If you don't use `--embedding-model`, the embedding model is loaded lazily on the first request.
@@ -78,7 +78,7 @@ By default, the embedding model is loaded on the first `/v1/embeddings` request.
 Use `--embedding-model` to load a model at startup. When this flag is set, only that specific model can be used for embeddings:
 
 ```bash
-vllm-mlx serve my-llm-model --embedding-model mlx-community/all-MiniLM-L6-v2-4bit
+rapid-mlx serve my-llm-model --embedding-model mlx-community/all-MiniLM-L6-v2-4bit
 ```
 
 Requesting a different model will return a 400 error.

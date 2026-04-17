@@ -4,10 +4,10 @@
 
 ```bash
 # Full benchmark (10 resolutions)
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit
 
 # Quick benchmark (4 resolutions)
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --quick
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --quick
 ```
 
 ## Results - Qwen3-VL-8B-Instruct-4bit (M4 Max, 128GB)

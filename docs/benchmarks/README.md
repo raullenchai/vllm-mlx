@@ -1,6 +1,6 @@
 # Benchmarks
 
-Performance benchmarks for vllm-mlx on Apple Silicon.
+Performance benchmarks for rapid-mlx on Apple Silicon.
 
 ## Benchmark Types
 
@@ -12,13 +12,13 @@ Performance benchmarks for vllm-mlx on Apple Silicon.
 
 ```bash
 # LLM benchmark
-vllm-mlx-bench --model mlx-community/Qwen3-0.6B-8bit
+rapid-mlx-bench --model mlx-community/Qwen3-0.6B-8bit
 
 # Image benchmark
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit
 
 # Video benchmark
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video
 ```
 
 ## Standalone Test Defaults
@@ -57,7 +57,7 @@ Results will vary on different Apple Silicon chips.
 If you have a different Apple Silicon chip, please share your results:
 
 ```bash
-vllm-mlx-bench --model mlx-community/Qwen3-0.6B-8bit --output results.json
+rapid-mlx-bench --model mlx-community/Qwen3-0.6B-8bit --output results.json
 ```
 
 Open an issue with your results at [GitHub Issues](https://github.com/waybarrios/vllm-mlx/issues).

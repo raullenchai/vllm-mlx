@@ -126,13 +126,13 @@ Create `mcp.json`:
 ### Development (Single User)
 
 ```bash
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit
+rapid-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit
 ```
 
 ### Production (Multiple Users)
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-0.6B-8bit \
+rapid-mlx serve mlx-community/Qwen3-0.6B-8bit \
   --continuous-batching \
   --use-paged-cache \
   --api-key your-secret-key \
@@ -143,7 +143,7 @@ vllm-mlx serve mlx-community/Qwen3-0.6B-8bit \
 ### With Tool Calling
 
 ```bash
-vllm-mlx serve mlx-community/Devstral-Small-2507-4bit \
+rapid-mlx serve mlx-community/Devstral-Small-2507-4bit \
   --enable-auto-tool-choice \
   --tool-call-parser mistral \
   --continuous-batching
@@ -152,7 +152,7 @@ vllm-mlx serve mlx-community/Devstral-Small-2507-4bit \
 ### With MCP Tools
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-4B-4bit \
+rapid-mlx serve mlx-community/Qwen3-4B-4bit \
   --mcp-config mcp.json \
   --enable-auto-tool-choice \
   --tool-call-parser qwen \
@@ -162,7 +162,7 @@ vllm-mlx serve mlx-community/Qwen3-4B-4bit \
 ### Reasoning Model
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-8B-4bit \
+rapid-mlx serve mlx-community/Qwen3-8B-4bit \
   --reasoning-parser qwen3 \
   --continuous-batching
 ```
@@ -170,7 +170,7 @@ vllm-mlx serve mlx-community/Qwen3-8B-4bit \
 ### With Embeddings
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-4B-4bit \
+rapid-mlx serve mlx-community/Qwen3-4B-4bit \
   --embedding-model mlx-community/multilingual-e5-small-mlx \
   --continuous-batching
 ```
@@ -178,7 +178,7 @@ vllm-mlx serve mlx-community/Qwen3-4B-4bit \
 ### High Throughput
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-0.6B-8bit \
+rapid-mlx serve mlx-community/Qwen3-0.6B-8bit \
   --continuous-batching \
   --stream-interval 5 \
   --max-num-seqs 256

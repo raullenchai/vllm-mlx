@@ -161,7 +161,7 @@ vllm_mlx/
 
 ## Hardware Detection
 
-vllm-mlx auto-detects Apple Silicon:
+rapid-mlx auto-detects Apple Silicon:
 - Chip name (M1, M2, M3, M4)
 - Total memory
 - Neural engine cores

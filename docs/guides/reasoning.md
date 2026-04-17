@@ -1,6 +1,6 @@
 # Reasoning Models
 
-vllm-mlx supports reasoning models that show their thinking process before giving an answer. Models like Qwen3 and DeepSeek-R1 wrap their reasoning in `<think>...</think>` tags, and vllm-mlx can parse these tags to separate the reasoning from the final response.
+rapid-mlx supports reasoning models that show their thinking process before giving an answer. Models like Qwen3 and DeepSeek-R1 wrap their reasoning in `<think>...</think>` tags, and rapid-mlx can parse these tags to separate the reasoning from the final response.
 
 ## Why Use Reasoning Parsing?
 
@@ -24,10 +24,10 @@ Without reasoning parsing, you get the raw output with the tags included. With r
 
 ```bash
 # For Qwen3 models
-vllm-mlx serve mlx-community/Qwen3-8B-4bit --reasoning-parser qwen3
+rapid-mlx serve mlx-community/Qwen3-8B-4bit --reasoning-parser qwen3
 
 # For DeepSeek-R1 models
-vllm-mlx serve mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit --reasoning-parser deepseek_r1
+rapid-mlx serve mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit --reasoning-parser deepseek_r1
 ```
 
 ### API Response Format
@@ -116,7 +116,7 @@ For Qwen3 models that use explicit `<think>` and `</think>` tags.
 - Best for: Qwen3-0.6B, Qwen3-4B, Qwen3-8B and similar models
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-8B-4bit --reasoning-parser qwen3
+rapid-mlx serve mlx-community/Qwen3-8B-4bit --reasoning-parser qwen3
 ```
 
 ### DeepSeek-R1 Parser (`deepseek_r1`)
@@ -128,7 +128,7 @@ For DeepSeek-R1 models that may omit the opening `<think>` tag.
 - Content before `</think>` is treated as reasoning even without `<think>`
 
 ```bash
-vllm-mlx serve mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit --reasoning-parser deepseek_r1
+rapid-mlx serve mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit --reasoning-parser deepseek_r1
 ```
 
 ## How It Works

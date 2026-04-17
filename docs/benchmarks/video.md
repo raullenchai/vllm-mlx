@@ -4,13 +4,13 @@
 
 ```bash
 # Full benchmark (10 configurations, 2-64 frames)
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video
 
 # Quick benchmark (3 frame counts)
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video --quick
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video --quick
 
 # Custom video
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video --video-url https://example.com/video.mp4
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video --video-url https://example.com/video.mp4
 ```
 
 ## Results - Qwen3-VL-8B-Instruct-4bit (M4 Max, 128GB)

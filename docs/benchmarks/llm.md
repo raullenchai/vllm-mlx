@@ -3,7 +3,7 @@
 ## Running LLM Benchmarks
 
 ```bash
-vllm-mlx-bench --model mlx-community/Llama-3.2-1B-Instruct-4bit --prompts 5 --max-tokens 256
+rapid-mlx-bench --model mlx-community/Llama-3.2-1B-Instruct-4bit --prompts 5 --max-tokens 256
 ```
 
 ## Results (M4 Max, 128GB)
@@ -55,7 +55,7 @@ vllm-mlx-bench --model mlx-community/Llama-3.2-1B-Instruct-4bit --prompts 5 --ma
 
 ### Streaming Detokenizer (M1 Max, 64GB)
 
-`vllm-mlx bench-detok`:
+`rapid-mlx bench-detok`:
 
 | Tokens | Iterations | Naive Time | Streaming Time | Speedup |
 |--------|------------|------------|----------------|---------|
@@ -195,7 +195,7 @@ The naive approach calls `decode([token])` for each token. In theory, streaming 
 ### Isolated Benchmark Results
 
 ```bash
-vllm-mlx bench-detok
+rapid-mlx bench-detok
 ```
 
 When reusing the same detokenizer instance (with `reset()` between uses):
@@ -248,13 +248,13 @@ The streaming detokenizer is **not currently viable** for per-request usage due 
 
 ```bash
 # Basic benchmark
-vllm-mlx-bench --model mlx-community/Qwen3-0.6B-8bit
+rapid-mlx-bench --model mlx-community/Qwen3-0.6B-8bit
 
 # With more prompts
-vllm-mlx-bench --model mlx-community/Qwen3-0.6B-8bit --prompts 10
+rapid-mlx-bench --model mlx-community/Qwen3-0.6B-8bit --prompts 10
 
 # Save results
-vllm-mlx-bench --model mlx-community/Qwen3-0.6B-8bit --output results.json
+rapid-mlx-bench --model mlx-community/Qwen3-0.6B-8bit --output results.json
 
 # Continuous batching test
 python tests/test_continuous_batching.py
@@ -266,6 +266,6 @@ python tests/test_prefix_cache.py
 python tests/test_paged_cache_real_inference.py
 
 # Streaming detokenizer benchmark
-vllm-mlx bench-detok
-vllm-mlx bench-detok mlx-community/Llama-3.2-1B-Instruct-4bit --iterations 5
+rapid-mlx bench-detok
+rapid-mlx bench-detok mlx-community/Llama-3.2-1B-Instruct-4bit --iterations 5
 ```

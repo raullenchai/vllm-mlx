@@ -68,7 +68,7 @@ Browse thousands of pre-optimized models at: **https://huggingface.co/mlx-commun
 
 ## Model Detection
 
-vllm-mlx auto-detects multimodal models by name patterns:
+rapid-mlx auto-detects multimodal models by name patterns:
 - Contains "VL", "Vision", "vision"
 - Contains "llava", "idefics", "paligemma"
 - Contains "pixtral", "molmo", "deepseek-vl"
@@ -79,13 +79,13 @@ vllm-mlx auto-detects multimodal models by name patterns:
 ### From HuggingFace
 
 ```bash
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit
+rapid-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit
 ```
 
 ### Local Path
 
 ```bash
-vllm-mlx serve /path/to/local/model
+rapid-mlx serve /path/to/local/model
 ```
 
 ## Finding Models

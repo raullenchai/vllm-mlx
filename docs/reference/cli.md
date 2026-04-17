@@ -4,18 +4,18 @@
 
 | Command | Description |
 |---------|-------------|
-| `vllm-mlx serve` | Start OpenAI-compatible server |
-| `vllm-mlx-bench` | Run performance benchmarks |
-| `vllm-mlx-chat` | Start Gradio chat interface |
+| `rapid-mlx serve` | Start OpenAI-compatible server |
+| `rapid-mlx-bench` | Run performance benchmarks |
+| `rapid-mlx-chat` | Start Gradio chat interface |
 
-## `vllm-mlx serve`
+## `rapid-mlx serve`
 
 Start the OpenAI-compatible API server.
 
 ### Usage
 
 ```bash
-vllm-mlx serve <model> [options]
+rapid-mlx serve <model> [options]
 ```
 
 ### Options
@@ -50,52 +50,52 @@ vllm-mlx serve <model> [options]
 
 ```bash
 # Simple mode (single user, max throughput)
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit
+rapid-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit
 
 # Continuous batching (multiple users)
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --continuous-batching
+rapid-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --continuous-batching
 
 # With memory limit for large models
-vllm-mlx serve mlx-community/GLM-4.7-Flash-4bit \
+rapid-mlx serve mlx-community/GLM-4.7-Flash-4bit \
   --continuous-batching \
   --cache-memory-mb 2048
 
 # Production with paged cache
-vllm-mlx serve mlx-community/Qwen3-0.6B-8bit \
+rapid-mlx serve mlx-community/Qwen3-0.6B-8bit \
   --continuous-batching \
   --use-paged-cache \
   --port 8000
 
 # With MCP tools
-vllm-mlx serve mlx-community/Qwen3-4B-4bit --mcp-config mcp.json
+rapid-mlx serve mlx-community/Qwen3-4B-4bit --mcp-config mcp.json
 
 # Multimodal model
-vllm-mlx serve mlx-community/Qwen3-VL-4B-Instruct-3bit
+rapid-mlx serve mlx-community/Qwen3-VL-4B-Instruct-3bit
 
 # Reasoning model (separates thinking from answer)
-vllm-mlx serve mlx-community/Qwen3-8B-4bit --reasoning-parser qwen3
+rapid-mlx serve mlx-community/Qwen3-8B-4bit --reasoning-parser qwen3
 
 # DeepSeek reasoning model
-vllm-mlx serve mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit --reasoning-parser deepseek_r1
+rapid-mlx serve mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit --reasoning-parser deepseek_r1
 
 # Tool calling with Mistral/Devstral
-vllm-mlx serve mlx-community/Devstral-Small-2507-4bit \
+rapid-mlx serve mlx-community/Devstral-Small-2507-4bit \
   --enable-auto-tool-choice --tool-call-parser mistral
 
 # Tool calling with Granite
-vllm-mlx serve mlx-community/granite-4.0-tiny-preview-4bit \
+rapid-mlx serve mlx-community/granite-4.0-tiny-preview-4bit \
   --enable-auto-tool-choice --tool-call-parser granite
 
 # With API key authentication
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --api-key your-secret-key
+rapid-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --api-key your-secret-key
 
 # Large models (200GB+) — raise memory limit to avoid cache thrashing
-vllm-mlx serve mlx-community/Qwen3.5-397B-A17B-nvfp4 \
+rapid-mlx serve mlx-community/Qwen3.5-397B-A17B-nvfp4 \
   --continuous-batching \
   --gpu-memory-utilization 0.95
 
 # Production setup with security options
-vllm-mlx serve mlx-community/Qwen3-4B-4bit \
+rapid-mlx serve mlx-community/Qwen3-4B-4bit \
   --api-key your-secret-key \
   --rate-limit 60 \
   --timeout 120 \
@@ -122,14 +122,14 @@ curl http://localhost:8000/v1/models \
   -H "Authorization: Bearer your-secret-key"
 ```
 
-## `vllm-mlx-bench`
+## `rapid-mlx-bench`
 
 Run performance benchmarks.
 
 ### Usage
 
 ```bash
-vllm-mlx-bench --model <model> [options]
+rapid-mlx-bench --model <model> [options]
 ```
 
 ### Options
@@ -148,30 +148,30 @@ vllm-mlx-bench --model <model> [options]
 
 ```bash
 # LLM benchmark
-vllm-mlx-bench --model mlx-community/Llama-3.2-1B-Instruct-4bit
+rapid-mlx-bench --model mlx-community/Llama-3.2-1B-Instruct-4bit
 
 # Quick benchmark
-vllm-mlx-bench --model mlx-community/Llama-3.2-1B-Instruct-4bit --quick
+rapid-mlx-bench --model mlx-community/Llama-3.2-1B-Instruct-4bit --quick
 
 # Image benchmark (auto-detected for VLM models)
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit
 
 # Video benchmark
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video
 
 # Custom video
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit \
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit \
   --video --video-url https://example.com/video.mp4
 ```
 
-## `vllm-mlx-chat`
+## `rapid-mlx-chat`
 
 Start Gradio chat interface.
 
 ### Usage
 
 ```bash
-vllm-mlx-chat --model <model> [options]
+rapid-mlx-chat --model <model> [options]
 ```
 
 ### Options
@@ -186,10 +186,10 @@ vllm-mlx-chat --model <model> [options]
 
 ```bash
 # Multimodal chat (text + images + video)
-vllm-mlx-chat --model mlx-community/Qwen3-VL-4B-Instruct-3bit
+rapid-mlx-chat --model mlx-community/Qwen3-VL-4B-Instruct-3bit
 
 # Text-only chat
-vllm-mlx-chat --model mlx-community/Llama-3.2-3B-Instruct-4bit --text-only
+rapid-mlx-chat --model mlx-community/Llama-3.2-3B-Instruct-4bit --text-only
 ```
 
 ## Environment Variables

@@ -1,13 +1,13 @@
 # Tool Calling
 
-vllm-mlx supports OpenAI-compatible tool calling (function calling) with automatic parsing for many popular model families.
+rapid-mlx supports OpenAI-compatible tool calling (function calling) with automatic parsing for many popular model families.
 
 ## Quick Start
 
 Enable tool calling by adding the `--enable-auto-tool-choice` flag when starting the server:
 
 ```bash
-vllm-mlx serve mlx-community/Devstral-Small-2507-4bit \
+rapid-mlx serve mlx-community/Devstral-Small-2507-4bit \
   --enable-auto-tool-choice \
   --tool-call-parser mistral
 ```
@@ -70,11 +70,11 @@ Use `--tool-call-parser` to select a parser for your model family:
 
 ```bash
 # Devstral Small (optimized for coding and tool use)
-vllm-mlx serve mlx-community/Devstral-Small-2507-4bit \
+rapid-mlx serve mlx-community/Devstral-Small-2507-4bit \
   --enable-auto-tool-choice --tool-call-parser mistral
 
 # Mistral Instruct
-vllm-mlx serve mlx-community/Mistral-7B-Instruct-v0.3-4bit \
+rapid-mlx serve mlx-community/Mistral-7B-Instruct-v0.3-4bit \
   --enable-auto-tool-choice --tool-call-parser mistral
 ```
 
@@ -82,7 +82,7 @@ vllm-mlx serve mlx-community/Mistral-7B-Instruct-v0.3-4bit \
 
 ```bash
 # Qwen3
-vllm-mlx serve mlx-community/Qwen3-4B-4bit \
+rapid-mlx serve mlx-community/Qwen3-4B-4bit \
   --enable-auto-tool-choice --tool-call-parser qwen
 ```
 
@@ -90,7 +90,7 @@ vllm-mlx serve mlx-community/Qwen3-4B-4bit \
 
 ```bash
 # Llama 3.2
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit \
+rapid-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit \
   --enable-auto-tool-choice --tool-call-parser llama
 ```
 
@@ -98,7 +98,7 @@ vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit \
 
 ```bash
 # DeepSeek V3
-vllm-mlx serve mlx-community/DeepSeek-V3-0324-4bit \
+rapid-mlx serve mlx-community/DeepSeek-V3-0324-4bit \
   --enable-auto-tool-choice --tool-call-parser deepseek
 ```
 
@@ -106,7 +106,7 @@ vllm-mlx serve mlx-community/DeepSeek-V3-0324-4bit \
 
 ```bash
 # Granite 4.0
-vllm-mlx serve mlx-community/granite-4.0-tiny-preview-4bit \
+rapid-mlx serve mlx-community/granite-4.0-tiny-preview-4bit \
   --enable-auto-tool-choice --tool-call-parser granite
 ```
 
@@ -114,7 +114,7 @@ vllm-mlx serve mlx-community/granite-4.0-tiny-preview-4bit \
 
 ```bash
 # Nemotron 3 Nano
-vllm-mlx serve mlx-community/NVIDIA-Nemotron-3-Nano-30B-A3B-MLX-6Bit \
+rapid-mlx serve mlx-community/NVIDIA-Nemotron-3-Nano-30B-A3B-MLX-6Bit \
   --enable-auto-tool-choice --tool-call-parser nemotron
 ```
 
@@ -122,7 +122,7 @@ vllm-mlx serve mlx-community/NVIDIA-Nemotron-3-Nano-30B-A3B-MLX-6Bit \
 
 ```bash
 # GLM-4.7 Flash
-vllm-mlx serve lmstudio-community/GLM-4.7-Flash-MLX-8bit \
+rapid-mlx serve lmstudio-community/GLM-4.7-Flash-MLX-8bit \
   --enable-auto-tool-choice --tool-call-parser glm47
 ```
 
@@ -130,7 +130,7 @@ vllm-mlx serve lmstudio-community/GLM-4.7-Flash-MLX-8bit \
 
 ```bash
 # Kimi K2
-vllm-mlx serve mlx-community/Kimi-K2-Instruct-4bit \
+rapid-mlx serve mlx-community/Kimi-K2-Instruct-4bit \
   --enable-auto-tool-choice --tool-call-parser kimi
 ```
 
@@ -138,7 +138,7 @@ vllm-mlx serve mlx-community/Kimi-K2-Instruct-4bit \
 
 ```bash
 # xLAM
-vllm-mlx serve mlx-community/xLAM-2-fc-r-4bit \
+rapid-mlx serve mlx-community/xLAM-2-fc-r-4bit \
   --enable-auto-tool-choice --tool-call-parser xlam
 ```
 
@@ -147,7 +147,7 @@ vllm-mlx serve mlx-community/xLAM-2-fc-r-4bit \
 If you're not sure which parser to use, the `auto` parser tries to detect the format automatically:
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-4B-4bit \
+rapid-mlx serve mlx-community/Qwen3-4B-4bit \
   --enable-auto-tool-choice --tool-call-parser auto
 ```
 

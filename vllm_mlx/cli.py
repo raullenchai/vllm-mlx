@@ -779,12 +779,34 @@ def models_command(_args):
     """List available model aliases."""
     from vllm_mlx.model_aliases import list_aliases
 
+    # Hardcoded benchmark data: (size, speed, recommended Mac tier)
+    MODEL_INFO = {
+        "qwen3.5-4b": ("2.4 GB", "168 tok/s", "16GB+ Mac"),
+        "qwen3.5-9b": ("5.1 GB", "108 tok/s", "24GB+ Mac"),
+        "qwen3.5-27b": ("15.3 GB", "39 tok/s", "32GB+ Mac"),
+        "qwen3.5-35b": ("37 GB", "83 tok/s", "48GB+ Mac"),
+        "qwen3.5-122b": ("65 GB", "57 tok/s", "96GB+ Mac"),
+        "qwen3.6-35b": ("20 GB", "94 tok/s", "32GB+ Mac"),
+        "qwen3-coder": ("45 GB", "74 tok/s", "64GB+ Mac"),
+        "gemma-4-26b": ("14.4 GB", "85 tok/s", "24GB+ Mac"),
+        "gemma-4-31b": ("17 GB", "31 tok/s", "32GB+ Mac"),
+        "qwopus-27b": ("14.8 GB", "39 tok/s", "32GB+ Mac"),
+        "kimi-48b": ("~28 GB", "94 tok/s", "48GB+ Mac"),
+    }
+
     aliases = list_aliases()
     print()
     print("  Available model aliases")
-    print("  " + "─" * 50)
+    print("  " + "─" * 70)
+    print(f"  {'Alias':<20} {'Size':<10} {'Speed':<12} {'Recommended'}")
+    print("  " + "─" * 70)
     for short, full in sorted(aliases.items()):
-        print(f"  {short:<20} → {full}")
+        info = MODEL_INFO.get(short)
+        if info:
+            size, speed, rec = info
+            print(f"  {short:<20} {size:<10} {speed:<12} {rec}")
+        else:
+            print(f"  {short:<20} → {full}")
     print()
     print(f"  {len(aliases)} aliases available")
     print("  Usage: rapid-mlx serve <alias>")

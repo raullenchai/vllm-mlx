@@ -4,7 +4,7 @@
 
 ## What is vLLM-MLX?
 
-vllm-mlx brings native Apple Silicon GPU acceleration to vLLM by integrating:
+rapid-mlx brings native Apple Silicon GPU acceleration to vLLM by integrating:
 
 - **[MLX](https://github.com/ml-explore/mlx)**: Apple's ML framework with unified memory and Metal kernels
 - **[mlx-lm](https://github.com/ml-explore/mlx-lm)**: Optimized LLM inference with KV cache and quantization

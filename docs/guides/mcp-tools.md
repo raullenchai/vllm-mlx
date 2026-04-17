@@ -1,6 +1,6 @@
 # MCP & Tool Calling
 
-vllm-mlx supports the Model Context Protocol (MCP) for integrating external tools with LLMs.
+rapid-mlx supports the Model Context Protocol (MCP) for integrating external tools with LLMs.
 
 ## How Tool Calling Works
 
@@ -52,10 +52,10 @@ Create `mcp.json`:
 
 ```bash
 # Simple mode
-vllm-mlx serve mlx-community/Qwen3-4B-4bit --mcp-config mcp.json
+rapid-mlx serve mlx-community/Qwen3-4B-4bit --mcp-config mcp.json
 
 # Continuous batching
-vllm-mlx serve mlx-community/Qwen3-4B-4bit --mcp-config mcp.json --continuous-batching
+rapid-mlx serve mlx-community/Qwen3-4B-4bit --mcp-config mcp.json --continuous-batching
 ```
 
 ### 3. Verify MCP Status
@@ -228,11 +228,11 @@ python examples/mcp_chat.py
 
 ## Supported Tool Formats
 
-vllm-mlx supports 12 tool call parsers covering all major model families. See [Tool Calling](tool-calling.md) for the full list of parsers, aliases, and examples.
+rapid-mlx supports 12 tool call parsers covering all major model families. See [Tool Calling](tool-calling.md) for the full list of parsers, aliases, and examples.
 
 ## Security
 
-vllm-mlx includes security measures to prevent command injection attacks via MCP servers.
+rapid-mlx includes security measures to prevent command injection attacks via MCP servers.
 
 ### Command Whitelist
 
@@ -305,7 +305,7 @@ set_validator(validator)
 
 ## Tool Execution Sandboxing
 
-Beyond command validation, vllm-mlx provides runtime sandboxing for tool executions:
+Beyond command validation, rapid-mlx provides runtime sandboxing for tool executions:
 
 ### Sandbox Features
 

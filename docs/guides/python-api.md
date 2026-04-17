@@ -1,6 +1,6 @@
 # Python API
 
-Direct Python API for programmatic access to vllm-mlx.
+Direct Python API for programmatic access to rapid-mlx.
 
 ## Language Models
 

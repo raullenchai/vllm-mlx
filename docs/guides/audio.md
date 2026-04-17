@@ -1,6 +1,6 @@
 # Audio Support
 
-vllm-mlx supports audio processing using [mlx-audio](https://github.com/Blaizzy/mlx-audio), providing:
+rapid-mlx supports audio processing using [mlx-audio](https://github.com/Blaizzy/mlx-audio), providing:
 
 - **STT (Speech-to-Text)**: Whisper, Parakeet
 - **TTS (Text-to-Speech)**: Kokoro, Chatterbox, VibeVoice, VoxCPM

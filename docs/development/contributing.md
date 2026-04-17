@@ -1,6 +1,6 @@
 # Contributing
 
-We welcome contributions to vllm-mlx!
+We welcome contributions to rapid-mlx!
 
 ## Getting Started
 
@@ -43,13 +43,13 @@ mypy vllm_mlx/
 
 ```bash
 # LLM benchmark
-vllm-mlx-bench --model mlx-community/Qwen3-0.6B-8bit
+rapid-mlx-bench --model mlx-community/Qwen3-0.6B-8bit
 
 # Image benchmark
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit
 
 # Video benchmark
-vllm-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video
+rapid-mlx-bench --model mlx-community/Qwen3-VL-8B-Instruct-4bit --video
 ```
 
 ## Areas for Contribution
@@ -78,7 +78,7 @@ See [Architecture](architecture.md) for details on the codebase structure.
 If you have access to different Apple Silicon chips (M1, M2, M3, M4), benchmark results are valuable:
 
 ```bash
-vllm-mlx-bench --model mlx-community/Qwen3-0.6B-8bit --output results_m4.json
+rapid-mlx-bench --model mlx-community/Qwen3-0.6B-8bit --output results_m4.json
 ```
 
 ## Questions?

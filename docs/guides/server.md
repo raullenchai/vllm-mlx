@@ -1,6 +1,6 @@
 # OpenAI-Compatible Server
 
-vllm-mlx provides a FastAPI server with full OpenAI API compatibility.
+rapid-mlx provides a FastAPI server with full OpenAI API compatibility.
 
 ## Starting the Server
 
@@ -9,7 +9,7 @@ vllm-mlx provides a FastAPI server with full OpenAI API compatibility.
 Maximum throughput for single user:
 
 ```bash
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000
+rapid-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000
 ```
 
 ### Continuous Batching Mode
@@ -17,7 +17,7 @@ vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000
 For multiple concurrent users:
 
 ```bash
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000 --continuous-batching
+rapid-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000 --continuous-batching
 ```
 
 ### With Paged Cache
@@ -25,7 +25,7 @@ vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000 --continuous
 Memory-efficient caching for production:
 
 ```bash
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000 --continuous-batching --use-paged-cache
+rapid-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000 --continuous-batching --use-paged-cache
 ```
 
 ## Server Options
@@ -134,7 +134,7 @@ Returns server status.
 POST /v1/messages
 ```
 
-Anthropic-compatible endpoint that allows tools like Claude Code and OpenCode to connect directly to vllm-mlx. Internally it translates Anthropic requests to OpenAI format, runs inference through the engine, and converts the response back to Anthropic format.
+Anthropic-compatible endpoint that allows tools like Claude Code and OpenCode to connect directly to rapid-mlx. Internally it translates Anthropic requests to OpenAI format, runs inference through the engine, and converts the response back to Anthropic format.
 
 Capabilities:
 - Non-streaming and streaming responses (SSE)
@@ -412,11 +412,11 @@ Stop reasons:
 
 #### Using with Claude Code
 
-Point Claude Code directly at your vllm-mlx server:
+Point Claude Code directly at your rapid-mlx server:
 
 ```bash
 # Start the server
-vllm-mlx serve mlx-community/Qwen3-Coder-Next-235B-A22B-4bit \
+rapid-mlx serve mlx-community/Qwen3-Coder-Next-235B-A22B-4bit \
   --continuous-batching \
   --enable-auto-tool-choice \
   --tool-call-parser hermes
@@ -517,7 +517,7 @@ Per-request fields in `requests`:
 Enable OpenAI-compatible tool calling with `--enable-auto-tool-choice`:
 
 ```bash
-vllm-mlx serve mlx-community/Devstral-Small-2507-4bit \
+rapid-mlx serve mlx-community/Devstral-Small-2507-4bit \
   --enable-auto-tool-choice \
   --tool-call-parser mistral
 ```
@@ -570,10 +570,10 @@ For models that show their thinking process (Qwen3, DeepSeek-R1), use `--reasoni
 
 ```bash
 # Qwen3 models
-vllm-mlx serve mlx-community/Qwen3-8B-4bit --reasoning-parser qwen3
+rapid-mlx serve mlx-community/Qwen3-8B-4bit --reasoning-parser qwen3
 
 # DeepSeek-R1 models
-vllm-mlx serve mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit --reasoning-parser deepseek_r1
+rapid-mlx serve mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit --reasoning-parser deepseek_r1
 ```
 
 The API response includes a `reasoning` field with the model's thought process:
@@ -698,17 +698,17 @@ Control streaming behavior with `--stream-interval`:
 
 ```bash
 # Smooth streaming
-vllm-mlx serve model --continuous-batching --stream-interval 1
+rapid-mlx serve model --continuous-batching --stream-interval 1
 
 # Batched streaming (better for high-latency networks)
-vllm-mlx serve model --continuous-batching --stream-interval 5
+rapid-mlx serve model --continuous-batching --stream-interval 5
 ```
 
 ## Open WebUI Integration
 
 ```bash
-# 1. Start vllm-mlx server
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000
+# 1. Start rapid-mlx server
+rapid-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000
 
 # 2. Start Open WebUI
 docker run -d -p 3000:8080 \
@@ -724,7 +724,7 @@ docker run -d -p 3000:8080 \
 
 ### With systemd
 
-Create `/etc/systemd/system/vllm-mlx.service`:
+Create `/etc/systemd/system/rapid-mlx.service`:
 
 ```ini
 [Unit]
@@ -733,7 +733,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/vllm-mlx serve mlx-community/Qwen3-0.6B-8bit \
+ExecStart=/usr/local/bin/rapid-mlx serve mlx-community/Qwen3-0.6B-8bit \
   --continuous-batching --use-paged-cache --port 8000
 Restart=always
 
@@ -742,8 +742,8 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl enable vllm-mlx
-sudo systemctl start vllm-mlx
+sudo systemctl enable rapid-mlx
+sudo systemctl start rapid-mlx
 ```
 
 ### Recommended Settings
@@ -751,7 +751,7 @@ sudo systemctl start vllm-mlx
 For production with 50+ concurrent users:
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-0.6B-8bit \
+rapid-mlx serve mlx-community/Qwen3-0.6B-8bit \
   --continuous-batching \
   --use-paged-cache \
   --api-key your-secret-key \

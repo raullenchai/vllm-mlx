@@ -5,7 +5,7 @@ Continuous batching enables higher throughput when serving multiple concurrent u
 ## Enabling Continuous Batching
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-0.6B-8bit --continuous-batching
+rapid-mlx serve mlx-community/Qwen3-0.6B-8bit --continuous-batching
 ```
 
 ## With Paged Cache
@@ -13,7 +13,7 @@ vllm-mlx serve mlx-community/Qwen3-0.6B-8bit --continuous-batching
 For memory-efficient prefix sharing:
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-0.6B-8bit --continuous-batching --use-paged-cache
+rapid-mlx serve mlx-community/Qwen3-0.6B-8bit --continuous-batching --use-paged-cache
 ```
 
 ## How It Works
@@ -67,10 +67,10 @@ Control token delivery with `--stream-interval`:
 
 ```bash
 # Every token (smoothest)
-vllm-mlx serve model --continuous-batching --stream-interval 1
+rapid-mlx serve model --continuous-batching --stream-interval 1
 
 # Batch tokens (better for high-latency)
-vllm-mlx serve model --continuous-batching --stream-interval 5
+rapid-mlx serve model --continuous-batching --stream-interval 5
 ```
 
 | Value | Behavior |
@@ -85,13 +85,13 @@ For large models, the prefix cache can consume significant memory. The memory-aw
 
 ```bash
 # Auto-detect (uses 20% of available RAM)
-vllm-mlx serve model --continuous-batching
+rapid-mlx serve model --continuous-batching
 
 # Explicit limit
-vllm-mlx serve model --continuous-batching --cache-memory-mb 2048
+rapid-mlx serve model --continuous-batching --cache-memory-mb 2048
 
 # Custom percentage
-vllm-mlx serve model --continuous-batching --cache-memory-percent 0.10
+rapid-mlx serve model --continuous-batching --cache-memory-percent 0.10
 ```
 
 | Option | Description |
@@ -167,7 +167,7 @@ python tests/test_prefix_cache.py
 ## Production Setup
 
 ```bash
-vllm-mlx serve mlx-community/Qwen3-0.6B-8bit \
+rapid-mlx serve mlx-community/Qwen3-0.6B-8bit \
   --continuous-batching \
   --use-paged-cache \
   --port 8000

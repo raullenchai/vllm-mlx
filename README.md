@@ -28,6 +28,7 @@
 | | Your Mac | Model | Speed (tok/s = words/sec) | What works |
 |:---|:---:|:---:|:---:|:---:|
 | **16 GB** MacBook Air | Qwen3.5-4B | 168 tok/s | Chat, coding, tools |
+| **32+ GB** Mac Mini / Studio | Qwen3.6-35B | 94 tok/s | 🆕 256 experts, 262K context |
 | **64 GB** Mac Mini / Studio | Qwen3.5-35B | 83 tok/s | Best balance of smart + fast |
 | **96+ GB** Mac Studio / Pro | Qwen3.5-122B | 57 tok/s | Frontier-level intelligence |
 
@@ -50,15 +51,17 @@
 **Step 1 — Install** (pick one):
 
 ```bash
-# Homebrew (recommended)
+# Homebrew (recommended — just works, no Python version issues)
 brew install raullenchai/rapid-mlx/rapid-mlx
 
-# pip
+# pip (requires Python 3.10+ — macOS ships 3.9, so install Python first if needed)
 pip install rapid-mlx
 
-# Or one-liner with auto-setup
+# Or one-liner with auto-setup (installs Python if needed)
 curl -fsSL https://raullenchai.github.io/Rapid-MLX/install.sh | bash
 ```
+
+> **"No matching distribution" error?** Your Python is too old. Run `python3 --version` — if it says 3.9, install a newer Python: `brew install python@3.12` then `python3.12 -m pip install rapid-mlx`
 
 **Step 2 — Serve a model:**
 ```bash
@@ -346,6 +349,7 @@ The model has to fit in your Mac's RAM. If your Mac slows down or Activity Monit
 | **24 GB** MacBook Pro | [Qwen3.5-9B 4bit](https://huggingface.co/mlx-community/Qwen3.5-9B-4bit) | 5.1 GB | 108 tok/s | Great all-rounder |
 | **32 GB** Mac Mini / Studio | [Qwen3.5-27B 4bit](https://huggingface.co/mlx-community/Qwen3.5-27B-4bit) | 15.3 GB | 39 tok/s | Solid coding model |
 | **36 GB** MacBook Pro M3/M4 Pro | [Qwen3.5-27B 4bit](https://huggingface.co/mlx-community/Qwen3.5-27B-4bit) | 15.3 GB | 39 tok/s | Same as 32 GB — extra headroom for long contexts |
+| **32 GB** Mac Mini / Studio | 🆕 [Qwen3.6-35B-A3B 4bit](https://huggingface.co/mlx-community/Qwen3.6-35B-A3B-4bit) | 20 GB | 94 tok/s | 256 MoE experts, 262K context |
 | **48 GB** Mac Mini / Studio | [Qwen3.5-35B-A3B 8bit](https://huggingface.co/mlx-community/Qwen3.5-35B-A3B-8bit) | 37 GB | 83 tok/s | **Sweet spot** — smart + fast |
 | **64 GB** Mac Mini / Studio | [Qwen3.5-35B-A3B 8bit](https://huggingface.co/mlx-community/Qwen3.5-35B-A3B-8bit) | 37 GB | 83 tok/s | Same model, more room for KV cache |
 | **96 GB** Mac Studio / Pro | [Qwen3.5-122B mxfp4](https://huggingface.co/nightmedia/Qwen3.5-122B-A10B-Text-mxfp4-mlx) | 65 GB | 57 tok/s | Best model, fits comfortably |
@@ -366,6 +370,9 @@ rapid-mlx serve qwen3.5-9b --port 8000
 
 # 32 GB — solid coding model
 rapid-mlx serve qwen3.5-27b --port 8000
+
+# 32+ GB — NEW: Qwen 3.6 (256 experts, 262K context, day-0 support)
+rapid-mlx serve qwen3.6-35b --port 8000
 
 # 64 GB — sweet spot
 rapid-mlx serve qwen3.5-35b --prefill-step-size 8192 --port 8000  # faster first response
@@ -393,6 +400,7 @@ Parsers are **auto-detected from the model name** — you don't need to specify 
 | Model Family | Auto-detected `--tool-call-parser` | Auto-detected `--reasoning-parser` | Notes |
 |-------------|---------------------|---------------------|-------|
 | Qwen3.5 (all sizes) | `hermes` | `qwen3` | **Recommended** — 100% tool calling |
+| 🆕 Qwen3.6 | `qwen3_coder_xml` | `qwen3` | XML tool format, 262K context |
 | Qwen3-Coder-Next | `hermes` | *(none)* | Fast coding, non-thinking mode |
 | DeepSeek R1-0528 / V3.1 | `deepseek_v31` | `deepseek_r1` | Dedicated V3.1 parser |
 | DeepSeek R1 (older) | `deepseek` | `deepseek_r1` | With reasoning |
@@ -425,6 +433,7 @@ All 17 parsers include automatic recovery — if a quantized model outputs broke
 | **Kimi-Linear-48B** | **94** tok/s · 100% tools | — (only engine) | — |
 | 🆕 **Gemma 4 26B-A4B** | **85** tok/s · 100% tools | 68 (Ollama) | **1.3x** |
 | 🆕 **Gemma 4 E4B** | **83** tok/s · 100% tools | — | — |
+| 🆕 **Qwen3.6-35B-A3B** | **94** tok/s · 100% tools | — (day-0) | — |
 | **Qwen3.5-35B-A3B** | **83** tok/s · 100% tools | 75 (oMLX) | **1.1x** |
 | **Qwen3-Coder 80B** | **74** tok/s · 100% tools | 69 (mlx-lm serve) | **1.1x** |
 | **Qwen3.5-122B** | **44** tok/s · 100% tools | 43 (mlx-lm serve) | ~1.0x |

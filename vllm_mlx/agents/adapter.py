@@ -69,15 +69,16 @@ def get_setup_instructions(
 
     if profile.recommended_models:
         lines.append("```bash")
-        lines.append(
-            f"rapid-mlx serve {profile.recommended_models[0]}"
-            "  # or any model below"
-        )
+        cmd = f"rapid-mlx serve {profile.recommended_models[0]}"
+        if len(profile.recommended_models) > 1:
+            cmd += "  # or any model below"
+        lines.append(cmd)
         lines.append("```")
-        lines.append("")
-        lines.append("Recommended models:")
-        for m in profile.recommended_models:
-            lines.append(f"- `{m}`")
+        if len(profile.recommended_models) > 1:
+            lines.append("")
+            lines.append("Recommended models:")
+            for m in profile.recommended_models:
+                lines.append(f"- `{m}`")
     else:
         lines.append("```bash")
         lines.append("rapid-mlx serve <MODEL>")

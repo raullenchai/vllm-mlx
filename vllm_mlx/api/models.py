@@ -225,6 +225,18 @@ class AssistantMessage(BaseModel):
     )
     tool_calls: list[ToolCall] | None = None
 
+    def model_post_init(self, __context) -> None:
+        """Add deprecated 'reasoning' alias for backward compatibility."""
+        pass
+
+    def model_dump(self, **kwargs) -> dict:
+        """Include 'reasoning' as alias of reasoning_content for clients expecting it."""
+        d = super().model_dump(**kwargs)
+        # Add backward-compat alias — clients may read either field
+        if "reasoning_content" in d:
+            d["reasoning"] = d["reasoning_content"]
+        return d
+
 
 class ChatCompletionChoice(BaseModel):
     """A single choice in chat completion response."""

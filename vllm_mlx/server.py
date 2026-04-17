@@ -948,7 +948,9 @@ def load_model(
         _cloud_router, \
         _inference_lock
 
-    _inference_lock = asyncio.Lock()
+    # Only serialize requests for SimpleEngine (single prompt cache, no concurrency)
+    # BatchedEngine handles concurrency natively via Scheduler
+    _inference_lock = None if use_batching else asyncio.Lock()
     _default_max_tokens = max_tokens
     _model_path = model_name
     _model_name = served_model_name or model_name
@@ -2579,7 +2581,10 @@ async def create_anthropic_message(
     )
 
     chat_kwargs = {
-        "max_tokens": _resolve_max_tokens(openai_request.max_tokens),
+        "max_tokens": _resolve_max_tokens(
+            openai_request.max_tokens,
+            getattr(openai_request, "enable_thinking", None),
+        ),
         "temperature": openai_request.temperature,
         "top_p": openai_request.top_p,
     }
@@ -2806,7 +2811,10 @@ async def _stream_anthropic_messages(
     )
 
     chat_kwargs = {
-        "max_tokens": _resolve_max_tokens(openai_request.max_tokens),
+        "max_tokens": _resolve_max_tokens(
+            openai_request.max_tokens,
+            getattr(openai_request, "enable_thinking", None),
+        ),
         "temperature": openai_request.temperature,
         "top_p": openai_request.top_p,
     }

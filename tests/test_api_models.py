@@ -288,15 +288,13 @@ class TestChatCompletion:
     def test_assistant_message_reasoning(self):
         msg = AssistantMessage(
             content="The answer is 42.",
-            reasoning="I thought about it carefully.",
+            reasoning_content="I thought about it carefully.",
         )
         assert msg.content == "The answer is 42."
-        assert msg.reasoning == "I thought about it carefully."
         assert msg.reasoning_content == "I thought about it carefully."
 
     def test_assistant_message_no_reasoning(self):
         msg = AssistantMessage(content="Hello")
-        assert msg.reasoning is None
         assert msg.reasoning_content is None
 
     def test_assistant_message_with_tool_calls(self):
@@ -631,10 +629,9 @@ class TestModelSerialization:
     """Tests for model serialization (model_dump / JSON)."""
 
     def test_assistant_message_serializes_reasoning_content(self):
-        msg = AssistantMessage(content="Answer", reasoning="Thought")
+        msg = AssistantMessage(content="Answer", reasoning_content="Thought")
         data = msg.model_dump()
         assert data["reasoning_content"] == "Thought"
-        assert data["reasoning"] == "Thought"
 
     def test_chat_completion_response_json(self):
         resp = ChatCompletionResponse(
@@ -650,15 +647,14 @@ class TestModelSerialization:
         assert "Hi!" in json_str
 
     def test_chunk_delta_reasoning_field(self):
-        """Streaming chunk delta supports optional reasoning field."""
+        """Streaming chunk delta supports optional reasoning_content field."""
         delta = ChatCompletionChunkDelta(content="hello")
         data = delta.model_dump()
-        assert data["reasoning"] is None
-        assert "reasoning_content" not in data
+        assert data["reasoning_content"] is None
 
-        delta_with = ChatCompletionChunkDelta(reasoning="thinking...")
+        delta_with = ChatCompletionChunkDelta(reasoning_content="thinking...")
         data_with = delta_with.model_dump()
-        assert data_with["reasoning"] == "thinking..."
+        assert data_with["reasoning_content"] == "thinking..."
 
     def test_response_format_json_schema_alias(self):
         schema = ResponseFormatJsonSchema(

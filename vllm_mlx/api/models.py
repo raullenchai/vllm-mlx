@@ -12,7 +12,7 @@ These models define the request and response schemas for:
 import time
 import uuid
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field
 
 # =============================================================================
 # Content Types (for multimodal messages)
@@ -220,16 +220,10 @@ class AssistantMessage(BaseModel):
 
     role: str = "assistant"
     content: str | None = None
-    reasoning: str | None = (
+    reasoning_content: str | None = (
         None  # Reasoning/thinking content (when --reasoning-parser is used)
     )
     tool_calls: list[ToolCall] | None = None
-
-    @computed_field
-    @property
-    def reasoning_content(self) -> str | None:
-        """Alias for reasoning field. Serialized for backwards compatibility with clients expecting reasoning_content."""
-        return self.reasoning
 
 
 class ChatCompletionChoice(BaseModel):
@@ -471,7 +465,7 @@ class ChatCompletionChunkDelta(BaseModel):
 
     role: str | None = None
     content: str | None = None
-    reasoning: str | None = None
+    reasoning_content: str | None = None
     tool_calls: list[dict] | None = None
 
 

@@ -497,10 +497,11 @@ class TestAPIModelsIntegration:
         from vllm_mlx.api.models import AssistantMessage
 
         msg = AssistantMessage(
-            content="The answer is 42.", reasoning="Let me think step by step..."
+            content="The answer is 42.",
+            reasoning_content="Let me think step by step...",
         )
         assert msg.content == "The answer is 42."
-        assert msg.reasoning == "Let me think step by step..."
+        assert msg.reasoning_content == "Let me think step by step..."
         assert msg.role == "assistant"
 
     def test_assistant_message_reasoning_none(self):
@@ -509,19 +510,19 @@ class TestAPIModelsIntegration:
 
         msg = AssistantMessage(content="Simple response without reasoning.")
         assert msg.content == "Simple response without reasoning."
-        assert msg.reasoning is None
+        assert msg.reasoning_content is None
 
     def test_chat_completion_chunk_delta_with_reasoning(self):
-        """Test that ChatCompletionChunkDelta can hold reasoning."""
+        """Test that ChatCompletionChunkDelta can hold reasoning_content."""
         from vllm_mlx.api.models import ChatCompletionChunkDelta
 
-        delta = ChatCompletionChunkDelta(reasoning="thinking...")
-        assert delta.reasoning == "thinking..."
+        delta = ChatCompletionChunkDelta(reasoning_content="thinking...")
+        assert delta.reasoning_content == "thinking..."
         assert delta.content is None
 
         delta2 = ChatCompletionChunkDelta(content="response text")
         assert delta2.content == "response text"
-        assert delta2.reasoning is None
+        assert delta2.reasoning_content is None
 
     def test_delta_transition(self):
         """Test delta during transition from reasoning to content."""
@@ -529,9 +530,9 @@ class TestAPIModelsIntegration:
 
         # During transition, both might have values
         delta = ChatCompletionChunkDelta(
-            reasoning="final thought", content="starting answer"
+            reasoning_content="final thought", content="starting answer"
         )
-        assert delta.reasoning == "final thought"
+        assert delta.reasoning_content == "final thought"
         assert delta.content == "starting answer"
 
 

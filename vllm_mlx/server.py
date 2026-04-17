@@ -154,7 +154,7 @@ _model_path: str | None = (
     None  # Actual model path (for cache dir, not affected by --served-model-name)
 )
 _default_max_tokens: int = 4096
-_thinking_token_budget: int = 1024  # Extra tokens added for thinking models
+_thinking_token_budget: int = 2048  # Extra tokens added for thinking models
 _default_timeout: float = 300.0  # Default request timeout in seconds (5 minutes)
 _default_temperature: float | None = None  # Set via --default-temperature
 _default_top_p: float | None = None  # Set via --default-top-p
@@ -177,7 +177,7 @@ def _resolve_max_tokens(request_value: int | None) -> int:
     add extra headroom so <think>...</think> tokens don't eat into the content budget.
     """
     base = request_value if request_value is not None else _default_max_tokens
-    if _reasoning_parser_name and base > 0 and base < 2048:
+    if _reasoning_parser_name and base > 0 and base < 4096:
         return base + _thinking_token_budget
     return base
 
@@ -2435,7 +2435,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
             ChatCompletionChoice(
                 message=AssistantMessage(
                     content=final_content,
-                    reasoning=reasoning_text,
+                    reasoning_content=reasoning_text,
                     tool_calls=tool_calls,
                 ),
                 finish_reason=finish_reason,
@@ -3261,7 +3261,7 @@ async def stream_chat_completion(
                             yield _sse
                         continue
                     if reasoning and not content:
-                        yield _fast_sse_chunk(reasoning, "reasoning")
+                        yield _fast_sse_chunk(reasoning, "reasoning_content")
                         continue
 
                 chunk = ChatCompletionChunk(
@@ -3271,7 +3271,7 @@ async def stream_chat_completion(
                         ChatCompletionChunkChoice(
                             delta=ChatCompletionChunkDelta(
                                 content=sanitize_output(content) if content else None,
-                                reasoning=reasoning if reasoning else None,
+                                reasoning_content=reasoning if reasoning else None,
                             ),
                             finish_reason=finish_reason,
                         )
@@ -3410,7 +3410,7 @@ async def stream_chat_completion(
                             yield _sse
                         continue
                     if reasoning and not content:
-                        yield _fast_sse_chunk(reasoning, "reasoning")
+                        yield _fast_sse_chunk(reasoning, "reasoning_content")
                         continue
 
                 chunk = ChatCompletionChunk(
@@ -3420,7 +3420,7 @@ async def stream_chat_completion(
                         ChatCompletionChunkChoice(
                             delta=ChatCompletionChunkDelta(
                                 content=sanitize_output(content) if content else None,
-                                reasoning=reasoning if reasoning else None,
+                                reasoning_content=reasoning if reasoning else None,
                             ),
                             finish_reason=finish_reason,
                             logprobs=_build_chunk_logprobs(output),

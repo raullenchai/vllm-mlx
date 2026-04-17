@@ -12,7 +12,12 @@ Features:
 - Support for LLM and multimodal models
 """
 
-__version__ = "0.2.5"
+try:
+    from importlib.metadata import version as _get_version
+
+    __version__ = _get_version("rapid-mlx")
+except Exception:
+    __version__ = "0.0.0"  # fallback for editable installs without metadata
 
 # All imports are lazy to allow usage on non-Apple Silicon platforms
 # (e.g., CI running on Linux) where mlx_lm is not available.

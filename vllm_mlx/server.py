@@ -45,7 +45,6 @@ import json
 import logging
 import os
 import secrets
-import tempfile
 import threading
 import time
 import uuid
@@ -53,7 +52,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -76,21 +75,12 @@ from .api.models import (
     CompletionResponse,
     CompletionTokensDetails,  # noqa: F401
     ContentPart,  # noqa: F401
-    EmbeddingData,
-    EmbeddingRequest,
-    EmbeddingResponse,
-    EmbeddingUsage,
     FunctionCall,
     ImageUrl,  # noqa: F401
-    MCPExecuteRequest,
-    MCPExecuteResponse,
     MCPServerInfo,  # noqa: F401
-    MCPServersResponse,
     MCPToolInfo,  # noqa: F401
-    MCPToolsResponse,
     Message,  # noqa: F401
     ModelInfo,  # noqa: F401
-    ModelsResponse,
     TokenLogProb,
     ToolCall,
     TopLogProb,
@@ -1156,485 +1146,17 @@ def get_usage(output: GenerationOutput) -> Usage:
     )
 
 
-@app.get("/health")
-async def health():
-    """Health check endpoint."""
-    mcp_info = None
-    if _mcp_manager is not None:
-        connected = sum(
-            1 for s in _mcp_manager.get_server_status() if s.state.value == "connected"
-        )
-        total = len(_mcp_manager.get_server_status())
-        mcp_info = {
-            "enabled": True,
-            "servers_connected": connected,
-            "servers_total": total,
-            "tools_available": len(_mcp_manager.get_all_tools()),
-        }
-
-    engine_stats = _engine.get_stats() if _engine else {}
-
-    return {
-        "status": "healthy",
-        "model_loaded": _engine is not None,
-        "model_name": _model_name,
-        "model_type": "mllm" if (_engine and _engine.is_mllm) else "llm",
-        "engine_type": engine_stats.get("engine_type", "unknown"),
-        "mcp": mcp_info,
-    }
-
-
-@app.post("/v1/cache/clear")
-async def clear_cache():
-    """Clear the prompt KV cache (SimpleEngine only)."""
-    if _engine is None:
-        raise HTTPException(status_code=503, detail="Engine not loaded")
-    model = getattr(_engine, "_model", None)
-    if model is not None and hasattr(model, "_prompt_cache"):
-        model._prompt_cache = None
-        model._cached_token_ids = []
-        gc.collect()
-        return {"status": "ok", "message": "Prompt cache cleared"}
-    return {"status": "ok", "message": "No prompt cache to clear"}
-
-
-@app.get("/v1/status")
-async def status():
-    """Real-time status with per-request details for debugging and monitoring."""
-    if _engine is None:
-        return {"status": "not_loaded", "model": None, "requests": []}
-
-    stats = _engine.get_stats()
-
-    return {
-        "status": "generating" if stats.get("running") else "idle",
-        "model": _model_name,
-        "uptime_s": round(stats.get("uptime_seconds", 0), 1),
-        "steps_executed": stats.get("steps_executed", 0),
-        "num_running": stats.get("num_running", 0),
-        "num_waiting": stats.get("num_waiting", 0),
-        "total_requests_processed": stats.get("num_requests_processed", 0),
-        "total_prompt_tokens": stats.get("total_prompt_tokens", 0),
-        "total_completion_tokens": stats.get("total_completion_tokens", 0),
-        "metal": {
-            "active_memory_gb": stats.get("metal_active_memory_gb"),
-            "peak_memory_gb": stats.get("metal_peak_memory_gb"),
-            "cache_memory_gb": stats.get("metal_cache_memory_gb"),
-        },
-        "cache": stats.get("memory_aware_cache")
-        or stats.get("paged_cache")
-        or stats.get("prefix_cache"),
-        "requests": stats.get("requests", []),
-    }
-
-
-@app.get("/v1/cache/stats")
-async def cache_stats():
-    """Get cache statistics for debugging and monitoring."""
-    try:
-        from mlx_vlm.utils import (
-            get_multimodal_kv_cache_stats,
-            get_pil_cache_stats,
-            get_pixel_values_cache_stats,
-        )
-
-        return {
-            "multimodal_kv_cache": get_multimodal_kv_cache_stats(),
-            "pixel_values_cache": get_pixel_values_cache_stats(),
-            "pil_image_cache": get_pil_cache_stats(),
-        }
-    except ImportError:
-        return {
-            "message": "Vision cache stats not available (text-only model loaded). "
-            "Prompt cache is managed internally by the engine.",
-            "model_type": "llm",
-        }
-
-
-@app.delete("/v1/cache")
-async def clear_all_caches():
-    """Clear all caches."""
-    try:
-        from mlx_vlm.utils import (
-            clear_multimodal_kv_cache,
-            clear_pixel_values_cache,
-        )
-
-        clear_multimodal_kv_cache()
-        clear_pixel_values_cache()
-        return {
-            "status": "cleared",
-            "caches": ["multimodal_kv", "pixel_values", "pil_image"],
-        }
-    except ImportError:
-        return {"error": "Cache clear not available (mlx_vlm not loaded)"}
-
-
-@app.get("/v1/models", dependencies=[Depends(verify_api_key)])
-async def list_models() -> ModelsResponse:
-    """List available models (supports multi-model)."""
-    models = []
-    # Multi-model: list all registered models
-    if _model_registry:
-        for entry in _model_registry.list_entries():
-            models.append(ModelInfo(id=entry.model_name))
-            for alias in sorted(entry.aliases):
-                if alias != entry.model_name:
-                    models.append(ModelInfo(id=alias))
-    elif _model_name:
-        # Legacy single-model fallback
-        models.append(ModelInfo(id=_model_name))
-        if _model_alias and _model_alias != _model_name:
-            models.append(ModelInfo(id=_model_alias))
-    return ModelsResponse(data=models)
-
-
-@app.get("/v1/models/{model_id}", dependencies=[Depends(verify_api_key)])
-async def retrieve_model(model_id: str) -> ModelInfo:
-    """Retrieve a specific model by ID (OpenAI-compatible)."""
-    if _model_registry and model_id in _model_registry:
-        return ModelInfo(id=model_id)
-    if model_id in (_model_name, _model_alias):
-        return ModelInfo(id=model_id)
-    raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")
-
-
 # =============================================================================
-# Embeddings Endpoint
+# Embeddings — moved to routes/embeddings.py
+# Models — moved to routes/models.py
 # =============================================================================
 
 
-@app.post(
-    "/v1/embeddings",
-    dependencies=[Depends(verify_api_key), Depends(check_rate_limit)],
-)
-async def create_embeddings(request: EmbeddingRequest) -> EmbeddingResponse:
-    """
-    Create embeddings for the given input text(s).
-
-    OpenAI-compatible embeddings API supporting single or batch inputs.
-
-    Single text:
-    ```json
-    {
-      "model": "mlx-community/all-MiniLM-L6-v2-4bit",
-      "input": "The quick brown fox jumps over the lazy dog"
-    }
-    ```
-
-    Batch of texts:
-    ```json
-    {
-      "model": "mlx-community/embeddinggemma-300m-6bit",
-      "input": [
-        "I love machine learning",
-        "Deep learning is fascinating",
-        "Neural networks are powerful"
-      ]
-    }
-    ```
-
-    Response:
-    ```json
-    {
-      "object": "list",
-      "data": [
-        {"object": "embedding", "index": 0, "embedding": [0.023, -0.982, ...]},
-        {"object": "embedding", "index": 1, "embedding": [0.112, -0.543, ...]},
-        {"object": "embedding", "index": 2, "embedding": [0.876, 0.221, ...]}
-      ],
-      "model": "mlx-community/embeddinggemma-300m-6bit",
-      "usage": {"prompt_tokens": 24, "total_tokens": 24}
-    }
-    ```
-
-    Supported models:
-    - mlx-community/all-MiniLM-L6-v2-4bit (fast, compact)
-    - mlx-community/embeddinggemma-300m-6bit (high quality)
-    - mlx-community/bge-large-en-v1.5-4bit (best for English)
-    - Any BERT/XLM-RoBERTa/ModernBERT model from HuggingFace
-    """
-    global _embedding_engine
-
-    try:
-        # Resolve model name
-        model_name = request.model
-
-        # If an embedding model was pre-configured at startup, only allow that model
-        if (
-            _embedding_model_locked is not None
-            and model_name != _embedding_model_locked
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Embedding model '{model_name}' is not available. "
-                    f"This server was started with --embedding-model {_embedding_model_locked}. "
-                    f"Only '{_embedding_model_locked}' can be used for embeddings. "
-                    f"Restart the server with a different --embedding-model to use '{model_name}'."
-                ),
-            )
-
-        # Lazy-load or swap embedding engine
-        load_embedding_model(model_name, lock=False, reuse_existing=True)
-
-        # Normalise input to list
-        texts = request.input if isinstance(request.input, list) else [request.input]
-
-        if not texts:
-            raise HTTPException(status_code=400, detail="Input must not be empty")
-
-        start_time = time.perf_counter()
-
-        # Count tokens for usage reporting
-        prompt_tokens = _embedding_engine.count_tokens(texts)
-
-        # Generate embeddings (batch)
-        embeddings = _embedding_engine.embed(texts)
-
-        elapsed = time.perf_counter() - start_time
-        logger.info(
-            f"Embeddings: {len(texts)} inputs, {prompt_tokens} tokens in {elapsed:.2f}s"
-        )
-
-        # Build OpenAI-compatible response with ordered indices
-        data = [
-            EmbeddingData(index=i, embedding=vec) for i, vec in enumerate(embeddings)
-        ]
-
-        return EmbeddingResponse(
-            data=data,
-            model=model_name,
-            usage=EmbeddingUsage(
-                prompt_tokens=prompt_tokens,
-                total_tokens=prompt_tokens,
-            ),
-        )
-
-    except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "mlx-embeddings not installed. Install with: pip install 'rapid-mlx[embeddings]'"
-            ),
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Embedding generation failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 # =============================================================================
-# MCP Endpoints
+# Health/Cache — moved to routes/health.py
+# MCP — moved to routes/mcp_routes.py
+# Audio — moved to routes/audio.py
 # =============================================================================
-
-
-@app.get("/v1/mcp/tools", dependencies=[Depends(verify_api_key)])
-async def list_mcp_tools() -> MCPToolsResponse:
-    """List all available MCP tools."""
-    if _mcp_manager is None:
-        return MCPToolsResponse(tools=[], count=0)
-
-    tools = []
-    for tool in _mcp_manager.get_all_tools():
-        tools.append(
-            MCPToolInfo(
-                name=tool.full_name,
-                description=tool.description,
-                server=tool.server_name,
-                parameters=tool.input_schema,
-            )
-        )
-
-    return MCPToolsResponse(tools=tools, count=len(tools))
-
-
-@app.get("/v1/mcp/servers", dependencies=[Depends(verify_api_key)])
-async def list_mcp_servers() -> MCPServersResponse:
-    """Get status of all MCP servers."""
-    if _mcp_manager is None:
-        return MCPServersResponse(servers=[])
-
-    servers = []
-    for status in _mcp_manager.get_server_status():
-        servers.append(
-            MCPServerInfo(
-                name=status.name,
-                state=status.state.value,
-                transport=status.transport.value,
-                tools_count=status.tools_count,
-                error=status.error,
-            )
-        )
-
-    return MCPServersResponse(servers=servers)
-
-
-@app.post("/v1/mcp/execute", dependencies=[Depends(verify_api_key)])
-async def execute_mcp_tool(request: MCPExecuteRequest) -> MCPExecuteResponse:
-    """Execute an MCP tool."""
-    if _mcp_manager is None:
-        raise HTTPException(
-            status_code=503, detail="MCP not configured. Start server with --mcp-config"
-        )
-
-    result = await _mcp_manager.execute_tool(
-        request.tool_name,
-        request.arguments,
-    )
-
-    return MCPExecuteResponse(
-        tool_name=result.tool_name,
-        content=result.content,
-        is_error=result.is_error,
-        error_message=result.error_message,
-    )
-
-
-# =============================================================================
-# Audio Endpoints
-# =============================================================================
-
-# Global audio engines (lazy loaded)
-_stt_engine = None
-_tts_engine = None
-
-
-@app.post("/v1/audio/transcriptions", dependencies=[Depends(verify_api_key)])
-async def create_transcription(
-    file: UploadFile,
-    model: str = "whisper-large-v3",
-    language: str | None = None,
-    response_format: str = "json",
-):
-    """
-    Transcribe audio to text (OpenAI Whisper API compatible).
-
-    Supported models:
-    - whisper-large-v3 (multilingual, best quality)
-    - whisper-large-v3-turbo (faster)
-    - whisper-medium, whisper-small (lighter)
-    - parakeet-tdt-0.6b-v2 (English, fastest)
-    """
-    global _stt_engine
-
-    try:
-        from .audio.stt import STTEngine  # Lazy import - optional feature
-
-        # Map model aliases to full names
-        model_map = {
-            "whisper-large-v3": "mlx-community/whisper-large-v3-mlx",
-            "whisper-large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
-            "whisper-medium": "mlx-community/whisper-medium-mlx",
-            "whisper-small": "mlx-community/whisper-small-mlx",
-            "parakeet": "mlx-community/parakeet-tdt-0.6b-v2",
-            "parakeet-v3": "mlx-community/parakeet-tdt-0.6b-v3",
-        }
-        model_name = model_map.get(model, model)
-
-        # Load engine if needed
-        if _stt_engine is None or _stt_engine.model_name != model_name:
-            _stt_engine = STTEngine(model_name)
-            _stt_engine.load()
-
-        # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-            content = await file.read()
-            tmp.write(content)
-            tmp_path = tmp.name
-
-        try:
-            result = _stt_engine.transcribe(tmp_path, language=language)
-        finally:
-            os.unlink(tmp_path)
-
-        if response_format == "text":
-            return result.text
-
-        return {
-            "text": result.text,
-            "language": result.language,
-            "duration": result.duration,
-        }
-
-    except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="mlx-audio not installed. Install with: pip install mlx-audio",
-        )
-    except Exception as e:
-        logger.error(f"Transcription failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/v1/audio/speech", dependencies=[Depends(verify_api_key)])
-async def create_speech(
-    model: str = "kokoro",
-    input: str = "",
-    voice: str = "af_heart",
-    speed: float = 1.0,
-    response_format: str = "wav",
-):
-    """
-    Generate speech from text (OpenAI TTS API compatible).
-
-    Supported models:
-    - kokoro (fast, lightweight)
-    - chatterbox (multilingual, expressive)
-    - vibevoice (realtime)
-    - voxcpm (Chinese/English)
-    """
-    global _tts_engine
-
-    try:
-        from .audio.tts import TTSEngine  # Lazy import - optional feature
-
-        # Map model aliases to full names
-        model_map = {
-            "kokoro": "mlx-community/Kokoro-82M-bf16",
-            "kokoro-4bit": "mlx-community/Kokoro-82M-4bit",
-            "chatterbox": "mlx-community/chatterbox-turbo-fp16",
-            "chatterbox-4bit": "mlx-community/chatterbox-turbo-4bit",
-            "vibevoice": "mlx-community/VibeVoice-Realtime-0.5B-4bit",
-            "voxcpm": "mlx-community/VoxCPM1.5",
-        }
-        model_name = model_map.get(model, model)
-
-        # Load engine if needed
-        if _tts_engine is None or _tts_engine.model_name != model_name:
-            _tts_engine = TTSEngine(model_name)
-            _tts_engine.load()
-
-        audio = _tts_engine.generate(input, voice=voice, speed=speed)
-        audio_bytes = _tts_engine.to_bytes(audio, format=response_format)
-
-        content_type = (
-            "audio/wav" if response_format == "wav" else f"audio/{response_format}"
-        )
-        return Response(content=audio_bytes, media_type=content_type)
-
-    except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="mlx-audio not installed. Install with: pip install mlx-audio",
-        )
-    except Exception as e:
-        logger.error(f"TTS generation failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/v1/audio/voices", dependencies=[Depends(verify_api_key)])
-async def list_voices(model: str = "kokoro"):
-    """List available voices for a TTS model."""
-    from .audio.tts import CHATTERBOX_VOICES, KOKORO_VOICES
-
-    if "kokoro" in model.lower():
-        return {"voices": KOKORO_VOICES}
-    elif "chatterbox" in model.lower():
-        return {"voices": CHATTERBOX_VOICES}
-    else:
-        return {"voices": ["default"]}
 
 
 # =============================================================================
@@ -3708,6 +3230,23 @@ async def init_mcp(config_path: str):
     except Exception as e:
         logger.error(f"Failed to initialize MCP: {e}")
         raise
+
+
+# =============================================================================
+# Route modules — imported after all server globals are defined to avoid
+# circular imports (route modules import verify_api_key etc. from this module)
+# =============================================================================
+from .routes.audio import router as _audio_router
+from .routes.embeddings import router as _embeddings_router
+from .routes.health import router as _health_router
+from .routes.mcp_routes import router as _mcp_router
+from .routes.models import router as _models_router
+
+app.include_router(_health_router)
+app.include_router(_models_router)
+app.include_router(_embeddings_router)
+app.include_router(_mcp_router)
+app.include_router(_audio_router)
 
 
 # =============================================================================

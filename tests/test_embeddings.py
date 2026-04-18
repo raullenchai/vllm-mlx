@@ -146,6 +146,14 @@ class TestEmbeddingEngine:
 class TestEmbeddingsEndpoint:
     """Test the /v1/embeddings endpoint via TestClient."""
 
+    def _set_embedding_engine(self, engine):
+        """Set embedding engine in both server globals and config."""
+        import vllm_mlx.server as srv
+        from vllm_mlx.config import get_config
+
+        srv._embedding_engine = engine
+        get_config().embedding_engine = engine
+
     @pytest.fixture()
     def client(self):
         """Create a FastAPI test client with mocked embedding engine."""

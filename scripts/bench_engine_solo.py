@@ -74,6 +74,10 @@ def stream_request(base_url: str, model: str, messages: list, max_tokens: int = 
             if not line.startswith("data: ") or line == "data: [DONE]":
                 continue
             data = json.loads(line[6:])
+            if not data.get("choices"):
+                if "usage" in data and data["usage"]:
+                    usage = data["usage"]
+                continue
             delta = data["choices"][0].get("delta", {})
             if delta.get("content"):
                 if first_token_time is None:

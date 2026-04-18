@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
-  <a href="tests/"><img src="https://img.shields.io/badge/tests-1900%2B-brightgreen.svg" alt="Tests"></a>
+  <a href="tests/"><img src="https://img.shields.io/badge/tests-2100%2B-brightgreen.svg" alt="Tests"></a>
   <a href="https://support.apple.com/en-us/HT211814"><img src="https://img.shields.io/badge/Apple_Silicon-M1%20|%20M2%20|%20M3%20|%20M4-black.svg?logo=apple" alt="Apple Silicon"></a>
 </p>
 
@@ -366,7 +366,7 @@ The model has to fit in your Mac's RAM. If your Mac slows down or Activity Monit
 
 ### Copy-paste commands
 
-Pick the one that matches your Mac. Short aliases work — run `rapid-mlx models` to see all 20.
+Pick the one that matches your Mac. Short aliases work — run `rapid-mlx models` to see all available models.
 
 ```bash
 # 16 GB — lightweight, fast
@@ -432,15 +432,16 @@ All 17 parsers include automatic recovery — if a quantized model outputs broke
 
 ## Benchmarks
 
-22 models tested across 6 engines on **Mac Studio M3 Ultra (256GB)**. Rapid-MLX uses Apple's [MLX framework](https://github.com/ml-explore/mlx) — purpose-built for unified memory with native Metal compute kernels — which is why it beats C++-based engines (Ollama, llama.cpp) on most models. **#1 on 16 of 18 benchmarked models.** Ollama numbers tested with **v0.20.4** (latest, with MLX backend).
+Tested on **Mac Studio M3 Ultra (256GB)**. Rapid-MLX uses Apple's [MLX framework](https://github.com/ml-explore/mlx) — purpose-built for unified memory with native Metal compute kernels — which is why it beats C++-based engines (Ollama, llama.cpp) on most models. Ollama numbers tested with **v0.20.4** (latest, with MLX backend).
 
 | Model | Rapid-MLX | Best Alternative | Speedup |
 |-------|----------|-----------------|---------|
 | **Phi-4 Mini 14B** | **180** tok/s | 77 (mlx-lm) / 56 (Ollama) | **2.3x** / **3.2x** |
 | **Qwen3.5-4B** | **168** tok/s | 155 (mlx-lm serve) | **1.1x** |
+| **Nemotron-Nano 30B** | **141** tok/s · 100% tools | — | — |
 | **GPT-OSS 20B** | **127** tok/s · 100% tools | 79 (mlx-lm serve) | **1.6x** |
 | **Qwen3.5-9B** | **108** tok/s | 41 (Ollama) | **2.6x** |
-| 🆕 **Qwen3.6-35B-A3B** | **95** tok/s · 100% tools | — (day-0) | — |
+| **Qwen3.6-35B-A3B** | **95** tok/s · 100% tools | — | — |
 | **Kimi-Linear-48B** | **94** tok/s · 100% tools | — (only engine) | — |
 | 🆕 **Gemma 4 26B-A4B** | **85** tok/s · 100% tools | 68 (Ollama) | **1.3x** |
 | 🆕 **Gemma 4 E4B** | **83** tok/s · 100% tools | — | — |
@@ -518,7 +519,6 @@ Qwen3.5 uses Gated DeltaNet (75% RNN) + full attention (25% KV). Other engines r
 | **Hybrid cache sync** | Keep trimmable KV + non-trimmable RNN layers in sync | Qwen3.5 (Gated DeltaNet + attention) |
 | **Tool logits bias** | Jump-forward decoding — bias logits toward structured tokens | All models with `--enable-tool-logits-bias` |
 | **Auto tool recovery** | Detect broken text-format tool calls, convert to structured | All 18 parser formats (incl. Gemma 4) |
-| **Speculative decoding** | Draft model generates candidates, main model verifies | Any model + `--draft-model` |
 | **KV quantization** | 4/8-bit KV cache for longer contexts in less memory | All models with `--kv-bits` |
 | **Prefill chunking** | Configurable step size for large-prompt throughput | All models |
 | **Cloud routing** | Offload high-token requests to cloud LLM when local is slow | All models with `--cloud-model` |
@@ -591,9 +591,9 @@ Vision, audio (STT/TTS), video understanding, and text embeddings — all throug
 
 **Reasoning (3):** MiniMax/Qwen3/DeepSeek parsers, Chinese reasoning pattern recognition, clean `reasoning_content` field.
 
-**Performance (9):** Prompt cache (KV trim + DeltaNet state snapshots), SSE template pre-computation, MTP (multi-token prediction), configurable prefill step size, KV cache quantization (4/8 bit), speculative decoding, cloud routing, frequency-aware cache eviction.
+**Performance (8):** Prompt cache (KV trim + DeltaNet state snapshots), SSE template pre-computation, continuous batching, configurable prefill step size, KV cache quantization (4/8 bit), prefix cache, cloud routing, frequency-aware cache eviction.
 
-**Reliability (6):** Accurate `prompt_tokens` reporting, EOS cache fix, crash prevention on malformed `response_format`, GC control during generation, system prompt pinning, 1900+ tests.
+**Reliability (6):** Accurate `prompt_tokens` reporting, EOS cache fix, crash prevention on malformed `response_format`, GC control during generation, system prompt pinning, 2100+ tests.
 
 **Multimodal (4):** Vision (Qwen-VL), audio STT (Whisper), audio TTS (Kokoro), text embeddings.
 

@@ -44,18 +44,14 @@ import hashlib
 import json
 import logging
 import os
-import secrets
-import threading
 import time
 import uuid
-from collections import defaultdict
 from collections.abc import AsyncIterator
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 # Import from new modular API
 # Re-export for backwards compatibility with tests
@@ -522,7 +518,15 @@ async def serialize_inference(request: Request, call_next):
         return await call_next(request)
 
 
-security = HTTPBearer(auto_error=False)
+# Auth and rate limiting — moved to middleware/auth.py
+from .middleware.auth import (  # noqa: E402
+    RateLimiter,
+    check_rate_limit,
+    verify_api_key,
+)
+from .middleware.auth import (
+    rate_limiter as _rate_limiter,  # noqa: F401 — used in main()
+)
 
 
 @app.exception_handler(Exception)
@@ -542,98 +546,6 @@ async def _global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"error": {"message": str(exc), "type": type(exc).__name__}},
     )
-
-
-class RateLimiter:
-    """Simple in-memory rate limiter using sliding window."""
-
-    def __init__(self, requests_per_minute: int = 60, enabled: bool = False):
-        self.requests_per_minute = requests_per_minute
-        self.enabled = enabled
-        self.window_size = 60.0  # 1 minute window
-        self._requests: dict[str, list[float]] = defaultdict(list)
-        self._lock = threading.Lock()
-
-    def is_allowed(self, client_id: str) -> tuple[bool, int]:
-        """
-        Check if request is allowed for client.
-
-        Returns:
-            (is_allowed, retry_after_seconds)
-        """
-        if not self.enabled:
-            return True, 0
-
-        current_time = time.time()
-        window_start = current_time - self.window_size
-
-        with self._lock:
-            # Periodically purge stale client keys (every ~100 requests)
-            if len(self._requests) > 100:
-                stale = [
-                    k
-                    for k, v in self._requests.items()
-                    if not v or max(v) <= window_start
-                ]
-                for k in stale:
-                    del self._requests[k]
-
-            # Clean old requests outside window
-            self._requests[client_id] = [
-                t for t in self._requests[client_id] if t > window_start
-            ]
-
-            # Check rate limit
-            if len(self._requests[client_id]) >= self.requests_per_minute:
-                # Calculate retry-after
-                oldest = min(self._requests[client_id])
-                retry_after = int(oldest + self.window_size - current_time) + 1
-                return False, max(1, retry_after)
-
-            # Record this request
-            self._requests[client_id].append(current_time)
-            return True, 0
-
-
-# Global rate limiter (disabled by default)
-_rate_limiter = RateLimiter(requests_per_minute=60, enabled=False)
-
-
-async def check_rate_limit(request: Request):
-    """Rate limiting dependency."""
-    # Use API key as client ID if available, otherwise use IP
-    client_id = request.headers.get(
-        "Authorization", request.client.host if request.client else "unknown"
-    )
-
-    allowed, retry_after = _rate_limiter.is_allowed(client_id)
-    if not allowed:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Rate limit exceeded. Retry after {retry_after} seconds.",
-            headers={"Retry-After": str(retry_after)},
-        )
-
-
-async def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Verify API key if authentication is enabled."""
-    global _auth_warning_logged
-
-    if _api_key is None:
-        # Log once at debug level — local inference rarely needs auth
-        if not _auth_warning_logged:
-            logger.debug(
-                "No API key configured. Use --api-key to enable authentication."
-            )
-            _auth_warning_logged = True
-        return True  # No auth required
-
-    if credentials is None:
-        raise HTTPException(status_code=401, detail="API key required")
-    # Use constant-time comparison to prevent timing attacks
-    if not secrets.compare_digest(credentials.credentials, _api_key):
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    return True
 
 
 def get_engine(model_name: str | None = None) -> BaseEngine:
@@ -881,6 +793,13 @@ def load_embedding_model(
     _embedding_engine = EmbeddingEngine(model_name)
     _embedding_engine.load()
 
+    # Sync into config for route modules
+    from .config import get_config
+
+    cfg = get_config()
+    cfg.embedding_engine = _embedding_engine
+    cfg.embedding_model_locked = _embedding_model_locked
+
 
 def load_model(
     model_name: str,
@@ -1076,6 +995,44 @@ def load_model(
         max_tokens=_default_max_tokens,
     )
     _model_registry.add(entry, is_default=True)
+
+    # Sync globals into ServerConfig so route modules can use get_config()
+    _sync_config()
+
+
+def _sync_config() -> None:
+    """Copy server globals into the ServerConfig singleton.
+
+    Called after load_model() and whenever globals change.
+    Bridges the old global-variable pattern with the new config object.
+    """
+    from .config import get_config
+
+    cfg = get_config()
+    cfg.engine = _engine
+    cfg.model_name = _model_name
+    cfg.model_alias = _model_alias
+    cfg.model_path = _model_path
+    cfg.inference_lock = _inference_lock
+    cfg.default_max_tokens = _default_max_tokens
+    cfg.default_timeout = _default_timeout
+    cfg.default_temperature = _default_temperature
+    cfg.default_top_p = _default_top_p
+    cfg.enable_auto_tool_choice = _enable_auto_tool_choice
+    cfg.tool_call_parser = _tool_call_parser
+    cfg.tool_parser_instance = _tool_parser_instance
+    cfg.enable_tool_logits_bias = _enable_tool_logits_bias
+    cfg.reasoning_parser = _reasoning_parser
+    cfg.reasoning_parser_name = _reasoning_parser_name
+    cfg.mcp_manager = _mcp_manager
+    cfg.embedding_engine = _embedding_engine
+    cfg.embedding_model_locked = _embedding_model_locked
+    cfg.api_key = _api_key
+    cfg.cloud_router = _cloud_router
+    cfg.gc_control = _gc_control
+    cfg.no_thinking = _no_thinking
+    cfg.pin_system_prompt = _pin_system_prompt
+    cfg.model_registry = _model_registry
 
 
 def _extract_token_logprob(

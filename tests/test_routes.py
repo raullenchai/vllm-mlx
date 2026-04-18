@@ -11,6 +11,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from vllm_mlx.config import get_config
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -62,11 +64,26 @@ class TestHealthRoutes:
         app.include_router(router)
         return app
 
+    def _patch_config(self, **kwargs):
+        """Patch config fields for testing."""
+        from vllm_mlx.config import get_config
+        cfg = get_config()
+        originals = {}
+        for k, v in kwargs.items():
+            originals[k] = getattr(cfg, k)
+            setattr(cfg, k, v)
+        return originals
+
+    def _restore_config(self, originals):
+        from vllm_mlx.config import get_config
+        cfg = get_config()
+        for k, v in originals.items():
+            setattr(cfg, k, v)
+
     def test_health_no_engine(self, mock_engine):
         """Health endpoint works when no engine is loaded."""
-        with patch("vllm_mlx.server._engine", None), \
-             patch("vllm_mlx.server._mcp_manager", None), \
-             patch("vllm_mlx.server._model_name", None):
+        orig = self._patch_config(engine=None, mcp_manager=None, model_name=None)
+        try:
             app = self._make_app()
             client = TestClient(app)
             r = client.get("/health")
@@ -74,12 +91,13 @@ class TestHealthRoutes:
             data = r.json()
             assert data["status"] == "healthy"
             assert data["model_loaded"] is False
+        finally:
+            self._restore_config(orig)
 
     def test_health_with_engine(self, mock_engine):
         """Health endpoint returns engine info."""
-        with patch("vllm_mlx.server._engine", mock_engine), \
-             patch("vllm_mlx.server._mcp_manager", None), \
-             patch("vllm_mlx.server._model_name", "test-model"):
+        orig = self._patch_config(engine=mock_engine, mcp_manager=None, model_name="test-model")
+        try:
             app = self._make_app()
             client = TestClient(app)
             r = client.get("/health")
@@ -88,6 +106,8 @@ class TestHealthRoutes:
             assert data["model_loaded"] is True
             assert data["model_name"] == "test-model"
             assert data["engine_type"] == "batched"
+        finally:
+            self._restore_config(orig)
 
     def test_health_with_mcp(self, mock_engine):
         """Health endpoint includes MCP info."""
@@ -97,9 +117,8 @@ class TestHealthRoutes:
         mcp.get_server_status.return_value = [server_status]
         mcp.get_all_tools.return_value = [MagicMock(), MagicMock()]
 
-        with patch("vllm_mlx.server._engine", mock_engine), \
-             patch("vllm_mlx.server._mcp_manager", mcp), \
-             patch("vllm_mlx.server._model_name", "test-model"):
+        orig = self._patch_config(engine=mock_engine, mcp_manager=mcp, model_name="test-model")
+        try:
             app = self._make_app()
             client = TestClient(app)
             r = client.get("/health")
@@ -107,21 +126,25 @@ class TestHealthRoutes:
             assert data["mcp"]["enabled"] is True
             assert data["mcp"]["servers_connected"] == 1
             assert data["mcp"]["tools_available"] == 2
+        finally:
+            self._restore_config(orig)
 
     def test_status_no_engine(self):
         """Status returns not_loaded when no engine."""
-        with patch("vllm_mlx.server._engine", None), \
-             patch("vllm_mlx.server._model_name", None):
+        orig = self._patch_config(engine=None, model_name=None)
+        try:
             app = self._make_app()
             client = TestClient(app)
             r = client.get("/v1/status")
             assert r.status_code == 200
             assert r.json()["status"] == "not_loaded"
+        finally:
+            self._restore_config(orig)
 
     def test_status_with_engine(self, mock_engine):
         """Status returns engine stats."""
-        with patch("vllm_mlx.server._engine", mock_engine), \
-             patch("vllm_mlx.server._model_name", "test-model"):
+        orig = self._patch_config(engine=mock_engine, model_name="test-model")
+        try:
             app = self._make_app()
             client = TestClient(app)
             r = client.get("/v1/status")
@@ -130,24 +153,32 @@ class TestHealthRoutes:
             assert data["model"] == "test-model"
             assert data["steps_executed"] == 500
             assert data["metal"]["active_memory_gb"] == 8.5
+        finally:
+            self._restore_config(orig)
 
     def test_cache_clear_no_engine(self):
         """Cache clear returns 503 when no engine."""
-        with patch("vllm_mlx.server._engine", None):
+        orig = self._patch_config(engine=None)
+        try:
             app = self._make_app()
             client = TestClient(app)
             r = client.post("/v1/cache/clear")
             assert r.status_code == 503
+        finally:
+            self._restore_config(orig)
 
     def test_cache_clear_no_prompt_cache(self, mock_engine):
         """Cache clear works when no prompt cache exists."""
-        mock_engine._model = MagicMock(spec=[])  # no _prompt_cache attr
-        with patch("vllm_mlx.server._engine", mock_engine):
+        mock_engine._model = MagicMock(spec=[])
+        orig = self._patch_config(engine=mock_engine)
+        try:
             app = self._make_app()
             client = TestClient(app)
             r = client.post("/v1/cache/clear")
             assert r.status_code == 200
             assert "No prompt cache" in r.json()["message"]
+        finally:
+            self._restore_config(orig)
 
     def test_cache_stats_no_vlm(self):
         """Cache stats returns fallback when mlx_vlm not available."""
@@ -176,59 +207,72 @@ class TestModelsRoutes:
     def _make_app(self):
         from vllm_mlx.routes.models import router
         app = FastAPI()
-        # Mock the verify_api_key dependency
         app.include_router(router)
         return app
 
+    def _set_config(self, **kwargs):
+        from vllm_mlx.config import get_config
+        cfg = get_config()
+        orig = {}
+        for k, v in kwargs.items():
+            orig[k] = getattr(cfg, k)
+            setattr(cfg, k, v)
+        return orig
+
+    def _restore(self, orig):
+        from vllm_mlx.config import get_config
+        cfg = get_config()
+        for k, v in orig.items():
+            setattr(cfg, k, v)
+
     def test_list_models_single(self):
         """List models with single model loaded."""
-        with patch("vllm_mlx.server._model_registry", None), \
-             patch("vllm_mlx.server._model_name", "test-model"), \
-             patch("vllm_mlx.server._model_alias", "test-alias"), \
-             patch("vllm_mlx.server._api_key", None):
-            app = self._make_app()
-            client = TestClient(app)
+        orig = self._set_config(model_registry=None, model_name="test-model",
+                                model_alias="test-alias", api_key=None)
+        try:
+            client = TestClient(self._make_app())
             r = client.get("/v1/models")
             assert r.status_code == 200
-            models = r.json()["data"]
-            ids = [m["id"] for m in models]
+            ids = [m["id"] for m in r.json()["data"]]
             assert "test-model" in ids
             assert "test-alias" in ids
+        finally:
+            self._restore(orig)
 
     def test_list_models_registry(self, mock_registry):
         """List models with multi-model registry."""
-        with patch("vllm_mlx.server._model_registry", mock_registry), \
-             patch("vllm_mlx.server._model_name", "test-model"), \
-             patch("vllm_mlx.server._model_alias", None), \
-             patch("vllm_mlx.server._api_key", None):
-            app = self._make_app()
-            client = TestClient(app)
+        orig = self._set_config(model_registry=mock_registry, model_name="test-model",
+                                model_alias=None, api_key=None)
+        try:
+            client = TestClient(self._make_app())
             r = client.get("/v1/models")
             assert r.status_code == 200
             assert len(r.json()["data"]) >= 1
+        finally:
+            self._restore(orig)
 
     def test_retrieve_model_found(self):
         """Retrieve existing model returns 200."""
-        with patch("vllm_mlx.server._model_registry", None), \
-             patch("vllm_mlx.server._model_name", "test-model"), \
-             patch("vllm_mlx.server._model_alias", "test-alias"), \
-             patch("vllm_mlx.server._api_key", None):
-            app = self._make_app()
-            client = TestClient(app)
+        orig = self._set_config(model_registry=None, model_name="test-model",
+                                model_alias="test-alias", api_key=None)
+        try:
+            client = TestClient(self._make_app())
             r = client.get("/v1/models/test-model")
             assert r.status_code == 200
             assert r.json()["id"] == "test-model"
+        finally:
+            self._restore(orig)
 
     def test_retrieve_model_not_found(self):
         """Retrieve non-existent model returns 404."""
-        with patch("vllm_mlx.server._model_registry", None), \
-             patch("vllm_mlx.server._model_name", "test-model"), \
-             patch("vllm_mlx.server._model_alias", None), \
-             patch("vllm_mlx.server._api_key", None):
-            app = self._make_app()
-            client = TestClient(app)
+        orig = self._set_config(model_registry=None, model_name="test-model",
+                                model_alias=None, api_key=None)
+        try:
+            client = TestClient(self._make_app())
             r = client.get("/v1/models/nonexistent")
             assert r.status_code == 404
+        finally:
+            self._restore(orig)
 
 
 # ---------------------------------------------------------------------------
@@ -245,8 +289,8 @@ class TestMCPRoutes:
 
     def test_list_tools_no_mcp(self):
         """List tools returns empty when MCP not configured."""
-        with patch("vllm_mlx.server._mcp_manager", None), \
-             patch("vllm_mlx.server._api_key", None):
+        with patch.object(get_config(), "mcp_manager", None), \
+             patch.object(get_config(), "api_key", None):
             app = self._make_app()
             client = TestClient(app)
             r = client.get("/v1/mcp/tools")
@@ -264,8 +308,8 @@ class TestMCPRoutes:
         mcp = MagicMock()
         mcp.get_all_tools.return_value = [tool]
 
-        with patch("vllm_mlx.server._mcp_manager", mcp), \
-             patch("vllm_mlx.server._api_key", None):
+        with patch.object(get_config(), "mcp_manager", mcp), \
+             patch.object(get_config(), "api_key", None):
             app = self._make_app()
             client = TestClient(app)
             r = client.get("/v1/mcp/tools")
@@ -275,8 +319,8 @@ class TestMCPRoutes:
 
     def test_list_servers_no_mcp(self):
         """List servers returns empty when MCP not configured."""
-        with patch("vllm_mlx.server._mcp_manager", None), \
-             patch("vllm_mlx.server._api_key", None):
+        with patch.object(get_config(), "mcp_manager", None), \
+             patch.object(get_config(), "api_key", None):
             app = self._make_app()
             client = TestClient(app)
             r = client.get("/v1/mcp/servers")
@@ -285,8 +329,8 @@ class TestMCPRoutes:
 
     def test_execute_no_mcp(self):
         """Execute tool returns 503 when MCP not configured."""
-        with patch("vllm_mlx.server._mcp_manager", None), \
-             patch("vllm_mlx.server._api_key", None):
+        with patch.object(get_config(), "mcp_manager", None), \
+             patch.object(get_config(), "api_key", None):
             app = self._make_app()
             client = TestClient(app)
             r = client.post("/v1/mcp/execute", json={
@@ -305,8 +349,8 @@ class TestMCPRoutes:
         mcp = MagicMock()
         mcp.execute_tool = AsyncMock(return_value=result)
 
-        with patch("vllm_mlx.server._mcp_manager", mcp), \
-             patch("vllm_mlx.server._api_key", None):
+        with patch.object(get_config(), "mcp_manager", mcp), \
+             patch.object(get_config(), "api_key", None):
             app = self._make_app()
             client = TestClient(app)
             r = client.post("/v1/mcp/execute", json={
@@ -334,11 +378,11 @@ class TestEmbeddingsRoutes:
         mock_emb_engine.count_tokens.return_value = 5
         mock_emb_engine.embed.return_value = [[0.1, 0.2, 0.3]]
 
-        with patch("vllm_mlx.server._embedding_engine", mock_emb_engine), \
-             patch("vllm_mlx.server._embedding_model_locked", None), \
+        with patch.object(get_config(), "embedding_engine", mock_emb_engine), \
+             patch.object(get_config(), "embedding_model_locked", None), \
              patch("vllm_mlx.server.load_embedding_model"), \
-             patch("vllm_mlx.server._api_key", None), \
-             patch("vllm_mlx.server.check_rate_limit", return_value=None):
+             patch.object(get_config(), "api_key", None), \
+             patch("vllm_mlx.middleware.auth.check_rate_limit", return_value=None):
             app = self._make_app()
             client = TestClient(app)
             r = client.post("/v1/embeddings", json={
@@ -357,11 +401,11 @@ class TestEmbeddingsRoutes:
         mock_emb_engine.count_tokens.return_value = 10
         mock_emb_engine.embed.return_value = [[0.1], [0.2], [0.3]]
 
-        with patch("vllm_mlx.server._embedding_engine", mock_emb_engine), \
-             patch("vllm_mlx.server._embedding_model_locked", None), \
+        with patch.object(get_config(), "embedding_engine", mock_emb_engine), \
+             patch.object(get_config(), "embedding_model_locked", None), \
              patch("vllm_mlx.server.load_embedding_model"), \
-             patch("vllm_mlx.server._api_key", None), \
-             patch("vllm_mlx.server.check_rate_limit", return_value=None):
+             patch.object(get_config(), "api_key", None), \
+             patch("vllm_mlx.middleware.auth.check_rate_limit", return_value=None):
             app = self._make_app()
             client = TestClient(app)
             r = client.post("/v1/embeddings", json={
@@ -373,10 +417,10 @@ class TestEmbeddingsRoutes:
 
     def test_embeddings_locked_model_reject(self):
         """Embeddings rejects wrong model when locked."""
-        with patch("vllm_mlx.server._embedding_engine", MagicMock()), \
-             patch("vllm_mlx.server._embedding_model_locked", "locked-model"), \
-             patch("vllm_mlx.server._api_key", None), \
-             patch("vllm_mlx.server.check_rate_limit", return_value=None):
+        with patch.object(get_config(), "embedding_engine", MagicMock()), \
+             patch.object(get_config(), "embedding_model_locked", "locked-model"), \
+             patch.object(get_config(), "api_key", None), \
+             patch("vllm_mlx.middleware.auth.check_rate_limit", return_value=None):
             app = self._make_app()
             client = TestClient(app)
             r = client.post("/v1/embeddings", json={

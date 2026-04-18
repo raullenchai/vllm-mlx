@@ -12,7 +12,8 @@ from ..api.models import (
     EmbeddingResponse,
     EmbeddingUsage,
 )
-from ..server import check_rate_limit, verify_api_key
+from ..config import get_config
+from ..middleware.auth import check_rate_limit, verify_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -25,25 +26,33 @@ router = APIRouter()
 )
 async def create_embeddings(request: EmbeddingRequest) -> EmbeddingResponse:
     """Create embeddings for the given input text(s)."""
-    from ..server import (
-        _embedding_engine,
-        _embedding_model_locked,
-        load_embedding_model,
-    )
+    from ..server import load_embedding_model
+
+    cfg = get_config()
+    # Bridge: fall back to server globals if config not yet synced
+    if cfg.embedding_engine is None:
+        from ..server import _embedding_engine
+
+        cfg.embedding_engine = _embedding_engine
+    if cfg.embedding_model_locked is None:
+        from ..server import _embedding_model_locked
+
+        if _embedding_model_locked is not None:
+            cfg.embedding_model_locked = _embedding_model_locked
 
     try:
         model_name = request.model
 
         if (
-            _embedding_model_locked is not None
-            and model_name != _embedding_model_locked
+            cfg.embedding_model_locked is not None
+            and model_name != cfg.embedding_model_locked
         ):
             raise HTTPException(
                 status_code=400,
                 detail=(
                     f"Embedding model '{model_name}' is not available. "
-                    f"This server was started with --embedding-model {_embedding_model_locked}. "
-                    f"Only '{_embedding_model_locked}' can be used for embeddings. "
+                    f"This server was started with --embedding-model {cfg.embedding_model_locked}. "
+                    f"Only '{cfg.embedding_model_locked}' can be used for embeddings. "
                     f"Restart the server with a different --embedding-model to use '{model_name}'."
                 ),
             )
@@ -56,8 +65,8 @@ async def create_embeddings(request: EmbeddingRequest) -> EmbeddingResponse:
             raise HTTPException(status_code=400, detail="Input must not be empty")
 
         start_time = time.perf_counter()
-        prompt_tokens = _embedding_engine.count_tokens(texts)
-        embeddings = _embedding_engine.embed(texts)
+        prompt_tokens = cfg.embedding_engine.count_tokens(texts)
+        embeddings = cfg.embedding_engine.embed(texts)
         elapsed = time.perf_counter() - start_time
         logger.info(
             f"Embeddings: {len(texts)} inputs, {prompt_tokens} tokens in {elapsed:.2f}s"

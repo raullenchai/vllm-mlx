@@ -8,7 +8,7 @@ import tempfile
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from starlette.responses import Response
 
-from ..server import verify_api_key
+from ..middleware.auth import verify_api_key
 
 logger = logging.getLogger(__name__)
 

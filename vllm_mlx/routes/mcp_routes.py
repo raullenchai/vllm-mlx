@@ -11,7 +11,8 @@ from ..api.models import (
     MCPToolInfo,
     MCPToolsResponse,
 )
-from ..server import verify_api_key
+from ..config import get_config
+from ..middleware.auth import verify_api_key
 
 router = APIRouter()
 
@@ -19,13 +20,13 @@ router = APIRouter()
 @router.get("/v1/mcp/tools", dependencies=[Depends(verify_api_key)])
 async def list_mcp_tools() -> MCPToolsResponse:
     """List all available MCP tools."""
-    from ..server import _mcp_manager
+    cfg = get_config()
 
-    if _mcp_manager is None:
+    if cfg.mcp_manager is None:
         return MCPToolsResponse(tools=[], count=0)
 
     tools = []
-    for tool in _mcp_manager.get_all_tools():
+    for tool in cfg.mcp_manager.get_all_tools():
         tools.append(
             MCPToolInfo(
                 name=tool.full_name,
@@ -41,13 +42,13 @@ async def list_mcp_tools() -> MCPToolsResponse:
 @router.get("/v1/mcp/servers", dependencies=[Depends(verify_api_key)])
 async def list_mcp_servers() -> MCPServersResponse:
     """Get status of all MCP servers."""
-    from ..server import _mcp_manager
+    cfg = get_config()
 
-    if _mcp_manager is None:
+    if cfg.mcp_manager is None:
         return MCPServersResponse(servers=[])
 
     servers = []
-    for status in _mcp_manager.get_server_status():
+    for status in cfg.mcp_manager.get_server_status():
         servers.append(
             MCPServerInfo(
                 name=status.name,
@@ -64,14 +65,14 @@ async def list_mcp_servers() -> MCPServersResponse:
 @router.post("/v1/mcp/execute", dependencies=[Depends(verify_api_key)])
 async def execute_mcp_tool(request: MCPExecuteRequest) -> MCPExecuteResponse:
     """Execute an MCP tool."""
-    from ..server import _mcp_manager
+    cfg = get_config()
 
-    if _mcp_manager is None:
+    if cfg.mcp_manager is None:
         raise HTTPException(
             status_code=503, detail="MCP not configured. Start server with --mcp-config"
         )
 
-    result = await _mcp_manager.execute_tool(
+    result = await cfg.mcp_manager.execute_tool(
         request.tool_name,
         request.arguments,
     )

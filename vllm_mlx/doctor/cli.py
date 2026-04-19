@@ -51,16 +51,17 @@ def _require_source_checkout() -> None:
 
 
 def doctor_command(args) -> None:
-    """Dispatch to the requested tier."""
-    _require_source_checkout()
+    """Dispatch to the requested tier.
 
+    Default (no tier or 'smoke'): user-facing self-diagnostic that works
+    from a pip install — no pytest, ruff, or source checkout required.
+
+    Dev tiers (check/full/benchmark): require source checkout with tests/,
+    harness/, and dev tools installed.
+    """
     tier = getattr(args, "tier", None) or "smoke"
     update_baselines = getattr(args, "update_baselines", False)
 
-    # --update-baselines only makes sense for tiers that diff against a
-    # baseline.  Warn explicitly when it's used with smoke (no perf
-    # metrics) or benchmark (scorecard, no baseline contract) so users
-    # don't think they recorded something they didn't.
     if update_baselines and tier in ("smoke", "benchmark"):
         print(
             f"[doctor] --update-baselines has no effect for tier '{tier}' "
@@ -70,21 +71,25 @@ def doctor_command(args) -> None:
         update_baselines = False
 
     if tier == "smoke":
+        # User-facing: no source checkout required
         result = run_smoke_tier()
-    elif tier == "check":
-        result = run_check_tier(
-            model=getattr(args, "model", None) or DEFAULT_CHECK_MODEL,
-            update_baselines=update_baselines,
-        )
-    elif tier == "full":
-        result = run_full_tier(
-            models=getattr(args, "models", None) or DEFAULT_FULL_MODELS,
-            update_baselines=update_baselines,
-        )
-    elif tier == "benchmark":
-        result = run_benchmark_tier(
-            models=getattr(args, "models", None),
-        )
+    elif tier in ("check", "full", "benchmark"):
+        # Dev tiers: require source checkout
+        _require_source_checkout()
+        if tier == "check":
+            result = run_check_tier(
+                model=getattr(args, "model", None) or DEFAULT_CHECK_MODEL,
+                update_baselines=update_baselines,
+            )
+        elif tier == "full":
+            result = run_full_tier(
+                models=getattr(args, "models", None) or DEFAULT_FULL_MODELS,
+                update_baselines=update_baselines,
+            )
+        else:
+            result = run_benchmark_tier(
+                models=getattr(args, "models", None),
+            )
     else:
         print(f"[doctor] unknown tier: {tier}", file=sys.stderr)
         sys.exit(2)
@@ -98,18 +103,17 @@ def doctor_command(args) -> None:
 
 
 def run_smoke_tier():
-    """Static + import + CLI sanity. No model required."""
-    from .checks import smoke
+    """User-facing self-diagnostic. Works from pip install, no dev tools required."""
+    from .checks import user
 
-    print("Rapid-MLX Doctor — smoke tier")
+    print("Rapid-MLX Doctor")
     print("=" * 60)
 
     runner = DoctorRunner(tier="smoke")
-    runner.run_check("repo_layout", smoke.check_repo_layout)
-    runner.run_check("imports", smoke.check_imports)
-    runner.run_check("ruff", smoke.check_ruff)
-    runner.run_check("cli_sanity", smoke.check_cli_sanity)
-    runner.run_check("pytest", smoke.check_pytest_unit)
+    runner.run_check("metal", user.check_metal)
+    runner.run_check("imports", user.check_imports)
+    runner.run_check("cli", user.check_cli)
+    runner.run_check("model_load", user.check_model_load)
     return runner.finalize()
 
 

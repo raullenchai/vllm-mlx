@@ -246,50 +246,73 @@ def _install_chunked_prefill(
             return []
 
         tic_gen = _time.perf_counter()
-        y, logprobs = batch.y, batch.logprobs
-        for i, toks in enumerate(batch.tokens):
-            batch.tokens[i] = mx.concatenate((toks, y[i : i + 1]))
-        batch.y, batch.logprobs = self._step(
-            y[:, None],
-            batch.cache,
-            batch.samplers,
-            batch.logits_processors,
-            batch.tokens,
-        )
-        mx.async_eval(batch.y, batch.logprobs)
 
-        y = y.tolist()
-        self._stats.generation_time += _time.perf_counter() - tic_gen
+        if _USE_NEW_BATCH:
+            # mlx-lm 0.31+: GenerationBatch.next() handles step + stop
+            # detection + filtering internally. Convert its Response objects
+            # to our scheduler's Response namedtuple.
+            new_responses = batch.next()
+            self._stats.generation_time += _time.perf_counter() - tic_gen
 
-        keep_idx = []
-        end_idx = []
-        responses = []
-        for e, (t, uid, num_tok, max_tok) in enumerate(
-            zip(y, batch.uids, batch.num_tokens, batch.max_tokens)
-        ):
-            cache_out = None
-            num_tok += 1
-            batch.num_tokens[e] = num_tok
-            if t in self.stop_tokens:
-                finish_reason = "stop"
-                end_idx.append(e)
-            elif num_tok >= max_tok:
-                finish_reason = "length"
-                end_idx.append(e)
-            else:
-                finish_reason = None
-                keep_idx.append(e)
-            if finish_reason is not None:
-                cache_out = batch.extract_cache(e)
-            responses.append(
-                self.Response(uid, t, logprobs[e], finish_reason, cache_out)
-            )
+            responses = []
+            for r in new_responses:
+                cache_out = r.prompt_cache if r.finish_reason else None
+                responses.append(
+                    self.Response(
+                        r.uid, r.token, r.logprobs, r.finish_reason, cache_out
+                    )
+                )
 
-        if len(end_idx):
-            if len(keep_idx) > 0:
-                batch.filter(keep_idx)
-            else:
+            # If all sequences finished, clear active batch
+            if not batch.uids:
                 self.active_batch = None
+
+        else:
+            # Legacy mlx-lm <0.31: manual step + stop detection
+            y, logprobs = batch.y, batch.logprobs
+            for i, toks in enumerate(batch.tokens):
+                batch.tokens[i] = mx.concatenate((toks, y[i : i + 1]))
+            batch.y, batch.logprobs = self._step(
+                y[:, None],
+                batch.cache,
+                batch.samplers,
+                batch.logits_processors,
+                batch.tokens,
+            )
+            mx.async_eval(batch.y, batch.logprobs)
+
+            y = y.tolist()
+            self._stats.generation_time += _time.perf_counter() - tic_gen
+
+            keep_idx = []
+            end_idx = []
+            responses = []
+            for e, (t, uid, num_tok, max_tok) in enumerate(
+                zip(y, batch.uids, batch.num_tokens, batch.max_tokens)
+            ):
+                cache_out = None
+                num_tok += 1
+                batch.num_tokens[e] = num_tok
+                if t in self.stop_tokens:
+                    finish_reason = "stop"
+                    end_idx.append(e)
+                elif num_tok >= max_tok:
+                    finish_reason = "length"
+                    end_idx.append(e)
+                else:
+                    finish_reason = None
+                    keep_idx.append(e)
+                if finish_reason is not None:
+                    cache_out = batch.extract_cache(e)
+                responses.append(
+                    self.Response(uid, t, logprobs[e], finish_reason, cache_out)
+                )
+
+            if len(end_idx):
+                if len(keep_idx) > 0:
+                    batch.filter(keep_idx)
+                else:
+                    self.active_batch = None
 
         self._stats.generation_tokens += len(responses)
         return responses
@@ -1892,11 +1915,19 @@ class Scheduler:
                 if processor is not None:
                     request_logits_processors = [[processor]]
 
+            # Per-request sampler (temperature/top_p may differ per request)
+            request_sampler = make_sampler(
+                temp=request.sampling_params.temperature,
+                top_p=request.sampling_params.top_p,
+                min_p=request.sampling_params.min_p,
+            )
+
             try:
                 uids = self.batch_generator.insert(
                     [tokens_to_process],
                     max_tokens=[request.sampling_params.max_tokens],
                     caches=[cache_to_use] if cache_to_use else None,
+                    samplers=[request_sampler],
                     logits_processors=request_logits_processors,
                 )
             except Exception as e:
@@ -1914,6 +1945,7 @@ class Scheduler:
                         [tokens_to_process],
                         max_tokens=[request.sampling_params.max_tokens],
                         caches=None,
+                        samplers=[request_sampler],
                         logits_processors=request_logits_processors,
                     )
                 else:

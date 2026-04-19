@@ -213,6 +213,17 @@ def prompt_lookup_generate_step(
     if prompt_cache is None:
         prompt_cache = cache.make_prompt_cache(model)
 
+    # Guard: speculative decoding requires a trimmable cache to roll back
+    # rejected draft tokens. Recurrent caches (ArraysCache used by
+    # GatedDeltaNet/SSM models like Qwen3.5, MiniMax) cannot be trimmed —
+    # falling through would silently corrupt state. Mirrors mlx-lm#1109.
+    can_speculate = cache.can_trim_prompt_cache(prompt_cache)
+    if not can_speculate:
+        logger.info(
+            "Prompt-lookup speculation disabled: model uses a non-trimmable "
+            "cache (e.g. GatedDeltaNet/SSM). Falling back to standard decode."
+        )
+
     sampler = sampler or (lambda x: mx.argmax(x, axis=-1))
 
     # Initialize prompt lookup decoder
@@ -264,7 +275,8 @@ def prompt_lookup_generate_step(
         decoder.add_generated_token(current_token.item())
 
         # Try to get draft tokens via n-gram lookup
-        draft_tokens = decoder.get_draft_tokens()
+        # Skip speculation entirely on non-trimmable caches (recurrent models)
+        draft_tokens = decoder.get_draft_tokens() if can_speculate else None
 
         if draft_tokens and len(draft_tokens) > 0:
             # Speculative path: verify draft tokens

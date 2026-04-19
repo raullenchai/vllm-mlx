@@ -284,6 +284,8 @@ def serve_command(args):
             kv_cache_quantization_bits=args.kv_cache_quantization_bits,
             kv_cache_quantization_group_size=args.kv_cache_quantization_group_size,
             kv_cache_min_quantize_tokens=args.kv_cache_min_quantize_tokens,
+            # Prefill chunking
+            prefill_step_size=args.prefill_step_size,
         )
 
         print("Mode: Continuous batching (for multiple concurrent users)")
@@ -352,6 +354,8 @@ def serve_command(args):
             gpu_memory_utilization=args.gpu_memory_utilization,
             draft_model=args.draft_model,
             num_draft_tokens=args.num_draft_tokens,
+            # None passes through; SimpleEngine resolves to 2048 (LLM) or
+            # 1024 (MLLM/vision) based on auto-detected model type.
             prefill_step_size=args.prefill_step_size,
             kv_bits=args.kv_bits,
             kv_group_size=args.kv_group_size,
@@ -1102,9 +1106,10 @@ Examples:
     serve_parser.add_argument(
         "--prefill-step-size",
         type=int,
-        default=2048,
+        default=None,
         help="Chunk size for prompt prefill processing. Larger values use more memory "
-        "but can improve prefill throughput. (default: 2048)",
+        "but can improve prefill throughput. "
+        "(default: 2048 for LLM, 1024 for MLLM/vision; lower to reduce memory)",
     )
     # SpecPrefill (attention-based sparse prefill using draft model)
     serve_parser.add_argument(

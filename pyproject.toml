@@ -29,7 +29,7 @@ classifiers = [
 
 dependencies = [
     # Core — these are all you need for `rapid-mlx serve <text-model>`
-    "mlx>=0.29.0",
+    "mlx>=0.31.0",  # 0.31+ for SDPA/qmm Metal speedups (mlx#3023, #3120, #3119)
     "mlx-lm>=0.31.0",  # 0.31+ required for ArraysCache native batching (hybrid models)
     "mlx-vlm>=0.4.4",  # 0.4.4+ required for Gemma 4 support
     "transformers>=5.0.0",  # mlx-lm 0.30.5+ requires transformers 5.0 (rc3 bug fixed in stable)

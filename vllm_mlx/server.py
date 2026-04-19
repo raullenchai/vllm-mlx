@@ -818,7 +818,7 @@ def load_model(
     gpu_memory_utilization: float = 0.90,
     draft_model: str | None = None,
     num_draft_tokens: int = 4,
-    prefill_step_size: int = 2048,
+    prefill_step_size: int | None = None,
     kv_bits: int | None = None,
     kv_group_size: int = 64,
     cloud_model: str | None = None,
@@ -846,7 +846,8 @@ def load_model(
             limit and emergency threshold (0.0-1.0, default 0.90)
         draft_model: Optional draft model for speculative decoding
         num_draft_tokens: Number of tokens to generate speculatively per step
-        prefill_step_size: Tokens to process per prefill chunk (default: 2048)
+        prefill_step_size: Tokens to process per prefill chunk.
+            None = engine default (2048 for LLM, 1024 for MLLM/vision).
         kv_bits: KV cache quantization bits (None=no quantization, 4 or 8)
         kv_group_size: Group size for KV cache quantization (default: 64)
         mtp: Enable native MTP speculative decoding (SimpleEngine only)
@@ -2959,8 +2960,9 @@ Examples:
     parser.add_argument(
         "--prefill-step-size",
         type=int,
-        default=2048,
-        help="Tokens to process per prefill chunk (default: 2048). "
+        default=None,
+        help="Tokens to process per prefill chunk "
+        "(default: 2048 for LLM, 1024 for MLLM/vision). "
         "Larger values may improve TTFT on Apple Silicon with sufficient memory.",
     )
     parser.add_argument(

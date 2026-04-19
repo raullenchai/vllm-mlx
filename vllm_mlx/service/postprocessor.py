@@ -46,9 +46,11 @@ class StreamingPostProcessor:
         cfg: ServerConfig,
         tools_requested: bool = False,
         enable_thinking: bool | None = None,
+        json_mode: bool = False,
     ):
         self.cfg = cfg
         self.tools_requested = tools_requested
+        self.json_mode = json_mode
 
         # Per-request parser instances — each streaming request gets its
         # own parser to avoid state corruption under concurrent
@@ -81,6 +83,11 @@ class StreamingPostProcessor:
         # Nemotron thinking prefix
         self._is_thinking_model = False
         self._think_prefix_sent = False
+
+        # JSON mode: suppress thinking preamble before JSON content (#46).
+        # When json_mode=True and no reasoning parser, buffer content until
+        # the first JSON delimiter ({ or [) is seen, then emit from there.
+        self._json_preamble_stripped = False
 
     @staticmethod
     def _create_reasoning_parser(cfg: ServerConfig):
@@ -143,6 +150,7 @@ class StreamingPostProcessor:
         self.tool_calls_detected = False
         self.tool_markup_possible = False
         self._think_prefix_sent = False
+        self._json_preamble_stripped = False
 
         if self.reasoning_parser:
             self.reasoning_parser.reset_state()
@@ -309,6 +317,28 @@ class StreamingPostProcessor:
     ) -> list[StreamEvent]:
         """Handle standard models (no reasoning parser, no channel router)."""
         content = strip_special_tokens(delta_text)
+
+        # JSON mode preamble stripping (#46): when response_format is set and
+        # no reasoning parser is active, the model may emit a thinking preamble
+        # (e.g. "Let me think...\n{json}") before the actual JSON. Suppress
+        # everything before the first JSON delimiter.
+        if self.json_mode and not self.reasoning_parser and not self._json_preamble_stripped:
+            if content:
+                self.accumulated_text += content
+                # Look for JSON start in accumulated text
+                json_start = -1
+                for delim in ("{", "["):
+                    pos = self.accumulated_text.find(delim)
+                    if pos >= 0 and (json_start < 0 or pos < json_start):
+                        json_start = pos
+                if json_start >= 0:
+                    # Found JSON start — emit from there, discard preamble
+                    self._json_preamble_stripped = True
+                    content = self.accumulated_text[json_start:]
+                    self.accumulated_text = content
+                else:
+                    # Still in preamble — suppress
+                    return []
 
         # Nemotron thinking prefix
         if self._is_thinking_model and not self._think_prefix_sent and content:

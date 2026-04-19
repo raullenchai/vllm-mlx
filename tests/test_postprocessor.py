@@ -960,3 +960,124 @@ class TestCoverageGaps:
             # sanitize returned empty, no finish → empty list
             content_events = [e for e in events if e.type == "content"]
             assert len(content_events) == 0
+
+
+# =====================================================================
+# JSON mode preamble stripping (#46)
+# =====================================================================
+
+
+class TestJsonModePreambleStripping:
+    """Verify that json_mode=True strips thinking preamble in streaming."""
+
+    def test_preamble_stripped_before_json(self):
+        """Thinking text before JSON is suppressed."""
+        cfg = _make_cfg()
+        pp = StreamingPostProcessor(cfg, json_mode=True)
+        pp.reset()
+
+        # Model outputs thinking preamble
+        events1 = pp.process_chunk(_make_output("Let me think about this..."))
+        assert len(events1) == 0  # suppressed
+
+        events2 = pp.process_chunk(_make_output(" The answer is "))
+        assert len(events2) == 0  # still suppressed
+
+        # JSON starts
+        events3 = pp.process_chunk(_make_output('{"result": 42}'))
+        content_events = [e for e in events3 if e.type == "content"]
+        assert len(content_events) == 1
+        assert '{"result": 42}' in content_events[0].content
+
+    def test_json_starts_immediately(self):
+        """No preamble — JSON starts in first chunk."""
+        cfg = _make_cfg()
+        pp = StreamingPostProcessor(cfg, json_mode=True)
+        pp.reset()
+
+        events = pp.process_chunk(_make_output('{"key": "value"}'))
+        content_events = [e for e in events if e.type == "content"]
+        assert len(content_events) == 1
+        assert content_events[0].content == '{"key": "value"}'
+
+    def test_json_array_start(self):
+        """JSON array start also triggers emission."""
+        cfg = _make_cfg()
+        pp = StreamingPostProcessor(cfg, json_mode=True)
+        pp.reset()
+
+        events1 = pp.process_chunk(_make_output("thinking... "))
+        assert len(events1) == 0
+
+        events2 = pp.process_chunk(_make_output('[{"item": 1}]'))
+        content_events = [e for e in events2 if e.type == "content"]
+        assert len(content_events) == 1
+        assert content_events[0].content.startswith("[")
+
+    def test_preamble_with_think_tags(self):
+        """<think>...</think> before JSON is stripped."""
+        cfg = _make_cfg()
+        pp = StreamingPostProcessor(cfg, json_mode=True)
+        pp.reset()
+
+        events1 = pp.process_chunk(_make_output("<think>Let me reason"))
+        assert len(events1) == 0
+
+        events2 = pp.process_chunk(_make_output("</think>"))
+        assert len(events2) == 0
+
+        events3 = pp.process_chunk(_make_output('{"answer": true}'))
+        content_events = [e for e in events3 if e.type == "content"]
+        assert len(content_events) == 1
+        assert '{"answer": true}' in content_events[0].content
+
+    def test_json_mode_false_passes_through(self):
+        """Without json_mode, preamble is not stripped."""
+        cfg = _make_cfg()
+        pp = StreamingPostProcessor(cfg, json_mode=False)
+        pp.reset()
+
+        events = pp.process_chunk(_make_output("thinking text"))
+        content_events = [e for e in events if e.type == "content"]
+        assert len(content_events) == 1
+
+    def test_json_mode_with_reasoning_parser_skips_stripping(self):
+        """When reasoning parser is active, json_mode stripping is skipped."""
+        parser = MagicMock()
+        delta_msg = MagicMock()
+        delta_msg.content = "thinking preamble"
+        delta_msg.reasoning = "reasoning"
+        parser.extract_reasoning_streaming.return_value = delta_msg
+
+        cfg = _make_cfg(reasoning_parser=parser)
+        pp = StreamingPostProcessor(cfg, json_mode=True)
+        pp.reset()
+
+        # Should go through reasoning parser path, not standard path
+        events = pp.process_chunk(_make_output("thinking"))
+        # Content comes from reasoning parser, not json stripping
+        assert any(e.type in ("content", "reasoning") for e in events)
+
+    def test_json_delimiter_mid_chunk(self):
+        """JSON delimiter in the middle of a chunk — emit from delimiter."""
+        cfg = _make_cfg()
+        pp = StreamingPostProcessor(cfg, json_mode=True)
+        pp.reset()
+
+        events = pp.process_chunk(_make_output('preamble text {"key": 1}'))
+        content_events = [e for e in events if e.type == "content"]
+        assert len(content_events) == 1
+        assert content_events[0].content.startswith("{")
+        assert "preamble" not in content_events[0].content
+
+    def test_after_json_start_normal_streaming(self):
+        """After JSON start, subsequent chunks pass through normally."""
+        cfg = _make_cfg()
+        pp = StreamingPostProcessor(cfg, json_mode=True)
+        pp.reset()
+
+        pp.process_chunk(_make_output('{"key": '))
+        events = pp.process_chunk(_make_output('"value"}'))
+        content_events = [e for e in events if e.type == "content"]
+        assert len(content_events) == 1
+        assert content_events[0].content == '"value"}'

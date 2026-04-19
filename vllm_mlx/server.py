@@ -200,7 +200,6 @@ _pin_system_prompt: bool = False  # Auto-pin system prompt prefix cache blocks
 _pinned_system_prompt_hash: str | None = None  # Hash of pinned system prompt
 
 
-
 from .runtime.cache import (  # noqa: E402
     get_cache_dir as _get_cache_dir,  # noqa: F401
 )
@@ -1024,7 +1023,8 @@ Examples:
     # Load model before starting server
     load_model(
         args.model,
-        use_batching=args.continuous_batching and not getattr(args, "simple_engine", False),
+        use_batching=args.continuous_batching
+        and not getattr(args, "simple_engine", False),
         max_tokens=args.max_tokens,
         force_mllm=args.mllm,
         draft_model=args.draft_model,

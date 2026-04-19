@@ -166,8 +166,14 @@ class TestStreamingPostProcessorToolCalls:
         """Tool call detection emits tool_call event."""
         tool_parser = self._make_tool_parser()
         tool_parser.extract_tool_calls_streaming.return_value = {
-            "tool_calls": [{"index": 0, "id": "call_1", "type": "function",
-                           "function": {"name": "test", "arguments": "{}"}}]
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "test", "arguments": "{}"},
+                }
+            ]
         }
 
         cfg = _make_cfg(
@@ -187,8 +193,14 @@ class TestStreamingPostProcessorToolCalls:
         tool_parser = self._make_tool_parser()
         # First call: detect tool calls
         tool_parser.extract_tool_calls_streaming.return_value = {
-            "tool_calls": [{"index": 0, "id": "call_1", "type": "function",
-                           "function": {"name": "test", "arguments": "{}"}}]
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "test", "arguments": "{}"},
+                }
+            ]
         }
 
         cfg = _make_cfg(
@@ -203,7 +215,9 @@ class TestStreamingPostProcessorToolCalls:
         assert pp.tool_calls_detected
 
         # After detection, parser returns normal content but should be suppressed
-        tool_parser.extract_tool_calls_streaming.return_value = {"content": "extra text"}
+        tool_parser.extract_tool_calls_streaming.return_value = {
+            "content": "extra text"
+        }
         events = pp.process_chunk(_make_output("extra text"))
         assert len(events) == 0
 
@@ -309,9 +323,7 @@ class TestStreamingPostProcessorFinishMerging:
         pp = StreamingPostProcessor(cfg)
         pp.reset()
 
-        events = pp.process_chunk(
-            _make_output("raw", finished=True)
-        )
+        events = pp.process_chunk(_make_output("raw", finished=True))
         assert len(events) == 1
         assert events[0].type == "finish"
         assert events[0].reasoning == "thought"
@@ -352,8 +364,14 @@ class TestStreamingPostProcessorToolCallChannel:
         """Tool call channel content goes through tool parser."""
         tool_parser = MagicMock()
         tool_parser.extract_tool_calls_streaming.return_value = {
-            "tool_calls": [{"index": 0, "id": "call_1", "type": "function",
-                           "function": {"name": "test", "arguments": "{}"}}]
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "test", "arguments": "{}"},
+                }
+            ]
         }
         tool_parser.has_pending_tool_call.return_value = False
 
@@ -364,9 +382,7 @@ class TestStreamingPostProcessorToolCallChannel:
         pp = StreamingPostProcessor(cfg)
         pp.reset()
 
-        events = pp.process_chunk(
-            _make_output("<tool_call>", channel="tool_call")
-        )
+        events = pp.process_chunk(_make_output("<tool_call>", channel="tool_call"))
         assert len(events) == 1
         assert events[0].type == "tool_call"
 
@@ -443,9 +459,7 @@ class TestChannelRoutedEdgeCases:
         pp = StreamingPostProcessor(cfg)
         pp.reset()
 
-        events = pp.process_chunk(
-            _make_output("<tool_call>", channel="content")
-        )
+        events = pp.process_chunk(_make_output("<tool_call>", channel="content"))
         assert len(events) == 0
 
     def test_channel_content_passthrough_no_tool_parser(self):
@@ -454,9 +468,7 @@ class TestChannelRoutedEdgeCases:
         pp = StreamingPostProcessor(cfg)
         pp.reset()
 
-        events = pp.process_chunk(
-            _make_output("hello world", channel="content")
-        )
+        events = pp.process_chunk(_make_output("hello world", channel="content"))
         assert len(events) == 1
         assert events[0].type == "content"
 
@@ -467,9 +479,7 @@ class TestChannelRoutedEdgeCases:
         pp.reset()
 
         # Special tokens only → sanitize strips everything
-        events = pp.process_chunk(
-            _make_output("<|endoftext|>", channel="content")
-        )
+        events = pp.process_chunk(_make_output("<|endoftext|>", channel="content"))
         # May produce 0 events if sanitized to empty
         content_events = [e for e in events if e.type == "content"]
         for e in content_events:
@@ -479,8 +489,16 @@ class TestChannelRoutedEdgeCases:
         """After tool_calls detected via channel, subsequent content suppressed."""
         tool_parser = MagicMock()
         tool_parser.extract_tool_calls_streaming.side_effect = [
-            {"tool_calls": [{"index": 0, "id": "c1", "type": "function",
-                            "function": {"name": "t", "arguments": "{}"}}]},
+            {
+                "tool_calls": [
+                    {
+                        "index": 0,
+                        "id": "c1",
+                        "type": "function",
+                        "function": {"name": "t", "arguments": "{}"},
+                    }
+                ]
+            },
             {"content": "leftover"},
         ]
 
@@ -503,8 +521,14 @@ class TestChannelRoutedEdgeCases:
         """After tool_calls detected, finish chunk emits finish with tool_calls reason."""
         tool_parser = MagicMock()
         tool_parser.extract_tool_calls_streaming.return_value = {
-            "tool_calls": [{"index": 0, "id": "c1", "type": "function",
-                           "function": {"name": "t", "arguments": "{}"}}]
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "t", "arguments": "{}"},
+                }
+            ]
         }
 
         cfg = _make_cfg(
@@ -517,9 +541,7 @@ class TestChannelRoutedEdgeCases:
         pp.process_chunk(_make_output("<tc>", channel="content"))
 
         tool_parser.extract_tool_calls_streaming.return_value = {"content": ""}
-        events = pp.process_chunk(
-            _make_output("", finished=True, channel="content")
-        )
+        events = pp.process_chunk(_make_output("", finished=True, channel="content"))
         assert len(events) == 1
         assert events[0].type == "finish"
         assert events[0].finish_reason == "tool_calls"
@@ -554,14 +576,22 @@ class TestReasoningPathEdgeCases:
         """Reasoning path: after tool calls, finish emits tool_calls reason."""
         parser = MagicMock()
         delta_msg = MagicMock()
-        delta_msg.content = "<tool_call>markup"  # must contain < to trigger full parsing
+        delta_msg.content = (
+            "<tool_call>markup"  # must contain < to trigger full parsing
+        )
         delta_msg.reasoning = None
         parser.extract_reasoning_streaming.return_value = delta_msg
 
         tool_parser = MagicMock()
         tool_parser.extract_tool_calls_streaming.return_value = {
-            "tool_calls": [{"index": 0, "id": "c1", "type": "function",
-                           "function": {"name": "t", "arguments": "{}"}}]
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "t", "arguments": "{}"},
+                }
+            ]
         }
 
         cfg = _make_cfg(
@@ -803,8 +833,14 @@ class TestCoverageGaps:
         """Lines 199, 276-279: tool_calls_detected + finish in channel mode."""
         tool_parser = MagicMock()
         tool_parser.extract_tool_calls_streaming.return_value = {
-            "tool_calls": [{"index": 0, "id": "c1", "type": "function",
-                           "function": {"name": "f", "arguments": "{}"}}]
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "f", "arguments": "{}"},
+                }
+            ]
         }
         cfg = _make_cfg(tool_parser_instance=tool_parser)
         pp = StreamingPostProcessor(cfg)
@@ -826,7 +862,9 @@ class TestCoverageGaps:
         # Finish chunk with text after tool detected (line 199)
         out3 = _make_output("<final>", finished=True, channel="content")
         events3 = pp.process_chunk(out3)
-        assert any(e.type == "finish" and e.finish_reason == "tool_calls" for e in events3)
+        assert any(
+            e.type == "finish" and e.finish_reason == "tool_calls" for e in events3
+        )
 
     def test_channel_routed_sanitize_empty(self):
         """Line 216: content becomes None after sanitize_output."""
@@ -853,8 +891,14 @@ class TestCoverageGaps:
 
         tool_parser = MagicMock()
         tool_parser.extract_tool_calls_streaming.return_value = {
-            "tool_calls": [{"index": 0, "id": "c1", "type": "function",
-                           "function": {"name": "f", "arguments": "{}"}}]
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "f", "arguments": "{}"},
+                }
+            ]
         }
 
         cfg = _make_cfg(reasoning_parser=parser, tool_parser_instance=tool_parser)
@@ -911,8 +955,14 @@ class TestCoverageGaps:
         """Lines 334-335: tool_calls_detected + finish in standard path."""
         tool_parser = MagicMock()
         tool_parser.extract_tool_calls_streaming.return_value = {
-            "tool_calls": [{"index": 0, "id": "c1", "type": "function",
-                           "function": {"name": "f", "arguments": "{}"}}]
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "f", "arguments": "{}"},
+                }
+            ]
         }
 
         cfg = _make_cfg(tool_parser_instance=tool_parser)
@@ -932,7 +982,9 @@ class TestCoverageGaps:
         # Finish with text after tool detection (line 334)
         out = _make_output("<final>", finished=True)
         events3 = pp.process_chunk(out)
-        assert any(e.type == "finish" and e.finish_reason == "tool_calls" for e in events3)
+        assert any(
+            e.type == "finish" and e.finish_reason == "tool_calls" for e in events3
+        )
 
     def test_standard_path_empty_content_filtered(self):
         """Lines 340, 345: empty string content filtered out."""
@@ -943,7 +995,9 @@ class TestCoverageGaps:
         pp.reset()
 
         # strip_special_tokens returns empty string → content=None, no finish → []
-        with patch("vllm_mlx.service.postprocessor.strip_special_tokens", return_value=""):
+        with patch(
+            "vllm_mlx.service.postprocessor.strip_special_tokens", return_value=""
+        ):
             events = pp.process_chunk(_make_output("some_special_token"))
             assert len(events) == 0
 
@@ -955,6 +1009,7 @@ class TestCoverageGaps:
 
         # Text that sanitizes to nothing
         from unittest.mock import patch
+
         with patch("vllm_mlx.service.postprocessor.sanitize_output", return_value=""):
             events = pp.process_chunk(_make_output("some text"))
             # sanitize returned empty, no finish → empty list

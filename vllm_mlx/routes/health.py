@@ -18,7 +18,9 @@ async def health():
     mcp_info = None
     if cfg.mcp_manager is not None:
         connected = sum(
-            1 for s in cfg.mcp_manager.get_server_status() if s.state.value == "connected"
+            1
+            for s in cfg.mcp_manager.get_server_status()
+            if s.state.value == "connected"
         )
         total = len(cfg.mcp_manager.get_server_status())
         mcp_info = {

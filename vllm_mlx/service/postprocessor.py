@@ -32,12 +32,12 @@ def _find_json_start(text: str) -> int:
     i = 0
     while i < len(text):
         # Check for <think> open tag
-        if text[i:i + 7] == "<think>":
+        if text[i : i + 7] == "<think>":
             in_think = True
             i += 7
             continue
         # Check for </think> close tag
-        if text[i:i + 8] == "</think>":
+        if text[i : i + 8] == "</think>":
             in_think = False
             i += 8
             continue
@@ -223,18 +223,25 @@ class StreamingPostProcessor:
             if result is None:
                 return []  # suppressed (inside tool markup)
             if result.get("tool_calls"):
-                return [StreamEvent(
-                    type="tool_call",
-                    tool_calls=result["tool_calls"],
-                    finish_reason="tool_calls" if output.finished else None,
-                    tool_calls_detected=True,
-                )]
+                return [
+                    StreamEvent(
+                        type="tool_call",
+                        tool_calls=result["tool_calls"],
+                        finish_reason="tool_calls" if output.finished else None,
+                        tool_calls_detected=True,
+                    )
+                ]
             content = result.get("content", "")
 
         if self.tool_calls_detected:
             if output.finished:
-                return [StreamEvent(type="finish", finish_reason="tool_calls",
-                                    tool_calls_detected=True)]
+                return [
+                    StreamEvent(
+                        type="finish",
+                        finish_reason="tool_calls",
+                        tool_calls_detected=True,
+                    )
+                ]
             return []
 
         # Sanitize
@@ -255,9 +262,15 @@ class StreamingPostProcessor:
         # When finish_reason is set, emit ONE finish event with content/reasoning
         # merged in to avoid double-emission.
         if finish_reason:
-            return [StreamEvent(type="finish", finish_reason=finish_reason,
-                                content=content, reasoning=reasoning,
-                                tool_calls_detected=self.tool_calls_detected)]
+            return [
+                StreamEvent(
+                    type="finish",
+                    finish_reason=finish_reason,
+                    content=content,
+                    reasoning=reasoning,
+                    tool_calls_detected=self.tool_calls_detected,
+                )
+            ]
         events = []
         if content:
             events.append(StreamEvent(type="content", content=content))
@@ -301,18 +314,25 @@ class StreamingPostProcessor:
             if result is None:
                 return []
             if result.get("tool_calls"):
-                return [StreamEvent(
-                    type="tool_call",
-                    tool_calls=result["tool_calls"],
-                    finish_reason="tool_calls" if output.finished else None,
-                    tool_calls_detected=True,
-                )]
+                return [
+                    StreamEvent(
+                        type="tool_call",
+                        tool_calls=result["tool_calls"],
+                        finish_reason="tool_calls" if output.finished else None,
+                        tool_calls_detected=True,
+                    )
+                ]
             content = result.get("content", "")
 
         if self.tool_calls_detected:
             if output.finished:
-                return [StreamEvent(type="finish", finish_reason="tool_calls",
-                                    tool_calls_detected=True)]
+                return [
+                    StreamEvent(
+                        type="finish",
+                        finish_reason="tool_calls",
+                        tool_calls_detected=True,
+                    )
+                ]
             return []
 
         # Sanitize
@@ -331,9 +351,15 @@ class StreamingPostProcessor:
                 content = None
 
         if finish_reason:
-            return [StreamEvent(type="finish", finish_reason=finish_reason,
-                                content=content, reasoning=reasoning,
-                                tool_calls_detected=self.tool_calls_detected)]
+            return [
+                StreamEvent(
+                    type="finish",
+                    finish_reason=finish_reason,
+                    content=content,
+                    reasoning=reasoning,
+                    tool_calls_detected=self.tool_calls_detected,
+                )
+            ]
         events = []
         if content:
             events.append(StreamEvent(type="content", content=content))
@@ -351,7 +377,11 @@ class StreamingPostProcessor:
         # no reasoning parser is active, the model may emit a thinking preamble
         # (e.g. "Let me think...\n{json}") before the actual JSON. Suppress
         # everything before the first JSON delimiter.
-        if self.json_mode and not self.reasoning_parser and not self._json_preamble_stripped:
+        if (
+            self.json_mode
+            and not self.reasoning_parser
+            and not self._json_preamble_stripped
+        ):
             if content:
                 self._json_preamble_buffer += content
                 json_start = _find_json_start(self._json_preamble_buffer)
@@ -372,18 +402,25 @@ class StreamingPostProcessor:
             if result is None:
                 return []
             if result.get("tool_calls"):
-                return [StreamEvent(
-                    type="tool_call",
-                    tool_calls=result["tool_calls"],
-                    finish_reason="tool_calls" if output.finished else None,
-                    tool_calls_detected=True,
-                )]
+                return [
+                    StreamEvent(
+                        type="tool_call",
+                        tool_calls=result["tool_calls"],
+                        finish_reason="tool_calls" if output.finished else None,
+                        tool_calls_detected=True,
+                    )
+                ]
             content = strip_special_tokens(result.get("content", ""))
 
         if self.tool_calls_detected:
             if output.finished:
-                return [StreamEvent(type="finish", finish_reason="tool_calls",
-                                    tool_calls_detected=True)]
+                return [
+                    StreamEvent(
+                        type="finish",
+                        finish_reason="tool_calls",
+                        tool_calls_detected=True,
+                    )
+                ]
             return []
 
         # Filter empty
@@ -404,9 +441,14 @@ class StreamingPostProcessor:
         # Never emit separate content + finish events — that would cause
         # double-emission of the same content and duplicate logprobs.
         if finish_reason:
-            return [StreamEvent(type="finish", finish_reason=finish_reason,
-                                content=content,
-                                tool_calls_detected=self.tool_calls_detected)]
+            return [
+                StreamEvent(
+                    type="finish",
+                    finish_reason=finish_reason,
+                    content=content,
+                    tool_calls_detected=self.tool_calls_detected,
+                )
+            ]
         if content:
             return [StreamEvent(type="content", content=content)]
         return []
@@ -441,12 +483,14 @@ class StreamingPostProcessor:
                     }
                     for i, tc in enumerate(result.tool_calls)
                 ]
-                events.append(StreamEvent(
-                    type="tool_call",
-                    tool_calls=tc_list,
-                    finish_reason="tool_calls",
-                    tool_calls_detected=True,
-                ))
+                events.append(
+                    StreamEvent(
+                        type="tool_call",
+                        tool_calls=tc_list,
+                        finish_reason="tool_calls",
+                        tool_calls_detected=True,
+                    )
+                )
                 self.tool_calls_detected = True
 
         return events

@@ -267,9 +267,7 @@ def _parse_tool_calls_with_parser(
         parser_cls = ToolParserManager.get_tool_parser(cfg.tool_call_parser)
         parser = parser_cls(tokenizer)
     except Exception as e:
-        logger.warning(
-            f"Failed to create tool parser '{cfg.tool_call_parser}': {e}"
-        )
+        logger.warning(f"Failed to create tool parser '{cfg.tool_call_parser}': {e}")
         return parse_tool_calls(output_text, request_dict)
 
     try:
@@ -401,7 +399,10 @@ def _maybe_pin_system_prompt(messages: list) -> None:
         if not system_tokens or len(system_tokens) < 16:
             return
 
-        if hasattr(cfg.engine, "_prefix_cache") and cfg.engine._prefix_cache is not None:
+        if (
+            hasattr(cfg.engine, "_prefix_cache")
+            and cfg.engine._prefix_cache is not None
+        ):
             cache = cfg.engine._prefix_cache
             if hasattr(cache, "pin_prefix"):
                 if cache.pin_prefix(system_tokens):

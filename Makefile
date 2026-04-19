@@ -1,4 +1,4 @@
-.PHONY: help smoke check full benchmark update-baselines lint test clean
+.PHONY: help smoke check full benchmark update-baselines lint test stress soak clean
 
 # Pick the interpreter:
 #   1. Active venv ($VIRTUAL_ENV/bin/python) — wins so contributors using
@@ -23,26 +23,43 @@ PY ?= $(shell \
 HF_HUB_CACHE ?= $(shell echo $$HF_HUB_CACHE)
 DOCTOR := $(PY) -m vllm_mlx.cli doctor
 
+DEV_TEST := $(PY) scripts/dev_test.py
+
 help:
 	@echo "Rapid-MLX developer targets:"
 	@echo ""
-	@echo "  Doctor (regression harness — see harness/README.md):"
-	@echo "    make smoke              ~2 min,  no model required"
-	@echo "    make check              ~10 min, qwen3.5-4b"
-	@echo "    make full               ~1-2 hr, 3 models + 11 agents"
-	@echo "    make benchmark          overnight, all local models → scorecard"
-	@echo "    make update-baselines TIER=check  re-record baseline (after review)"
+	@echo "  Dev testing (scripts/dev_test.py):"
+	@echo "    make lint               ruff lint (~10s)"
+	@echo "    make test               pytest unit suite (~30s)"
+	@echo "    make smoke              lint + unit (~1 min)"
+	@echo "    make stress             8-scenario stress test (needs server)"
+	@echo "    make soak               10-min agent soak test (needs server)"
 	@echo ""
-	@echo "  Quick checks:"
-	@echo "    make lint               ruff over vllm_mlx/ + tests/"
-	@echo "    make test               pytest unit suite (excludes integration)"
+	@echo "  Doctor (regression harness — see harness/README.md):"
+	@echo "    make check              ~10 min, qwen3.5-4b (auto starts server)"
+	@echo "    make full               ~1-2 hr, 3 models + 11 agents"
+	@echo "    make benchmark          overnight, all local models"
+	@echo "    make update-baselines TIER=check  re-record baseline"
 	@echo ""
 	@echo "  Env: HF_HUB_CACHE=$(HF_HUB_CACHE)"
 
-# ---------- doctor tiers ----------
-smoke:
-	$(DOCTOR) smoke
+# ---------- dev testing (scripts/dev_test.py) ----------
+lint:
+	$(DEV_TEST) lint
 
+test:
+	$(DEV_TEST) unit
+
+smoke:
+	$(DEV_TEST) smoke
+
+stress:
+	$(DEV_TEST) stress
+
+soak:
+	$(DEV_TEST) soak
+
+# ---------- doctor tiers (regression harness) ----------
 check:
 	$(DOCTOR) check
 
@@ -52,29 +69,12 @@ full:
 benchmark:
 	$(DOCTOR) benchmark
 
-# Usage: make update-baselines TIER=check
-# Always inspect 'git diff harness/baselines/' before committing.
 update-baselines:
 	@if [ -z "$(TIER)" ]; then \
 		echo "error: TIER is required. Example: make update-baselines TIER=check"; \
 		exit 2; \
 	fi
 	$(DOCTOR) $(TIER) --update-baselines
-
-# ---------- quick checks ----------
-lint:
-	@if $(PY) -m ruff --version >/dev/null 2>&1; then \
-		$(PY) -m ruff check vllm_mlx/ tests/; \
-	elif command -v ruff >/dev/null 2>&1; then \
-		ruff check vllm_mlx/ tests/; \
-	else \
-		echo "ruff not installed — pip install ruff"; \
-		exit 1; \
-	fi
-
-test:
-	$(PY) -m pytest tests/ -q --ignore=tests/integrations \
-	    --deselect tests/test_event_loop.py
 
 clean:
 	rm -rf harness/runs/*

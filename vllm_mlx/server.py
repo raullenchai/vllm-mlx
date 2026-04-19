@@ -400,6 +400,9 @@ async def lifespan(app: FastAPI):
     if _engine is not None and hasattr(_engine, "_loaded") and not _engine._loaded:
         await _engine.start()
 
+    # Complete FSM setup now that tokenizer is available (BatchedEngine path)
+    _deferred_fsm_setup()
+
     # Warmup: generate one token to trigger Metal shader compilation.
     # Runs here (not in CLI) so all engine types are fully started first.
     if _engine is not None:
@@ -954,39 +957,161 @@ def load_model(
     if _engine.preserve_native_tool_format:
         logger.info(f"Native tool format enabled for parser: {_tool_call_parser}")
 
-    # Set up tool logits bias processor factory (jump-forward decoding)
+    # Set up FSM-based tool call constrained decoding.
+    # The FSM guarantees valid JSON tool calls by masking invalid tokens
+    # during generation.  Compilation happens at server startup (deferred
+    # to lifespan for BatchedEngine where tokenizer is available later).
     if _enable_tool_logits_bias and _enable_auto_tool_choice and _tool_call_parser:
-        try:
-            from .api.tool_logits import create_tool_logits_processor
-
-            tokenizer = None
-            if hasattr(_engine, "_tokenizer"):
-                tokenizer = _engine._tokenizer
-            elif hasattr(_engine, "tokenizer"):
-                tokenizer = _engine.tokenizer
-            if tokenizer is not None:
-                # Create factory that produces fresh processors per request
-                # Accepts optional tools for parameter value schema constraint
-                def _make_factory(parser_name, tok):
-                    def factory(tools=None):
-                        return create_tool_logits_processor(
-                            parser_name, tok, tools=tools
-                        )
-
-                    return factory
-
-                factory = _make_factory(_tool_call_parser, tokenizer)
-                # Set on BatchedEngine for use during scheduler init
-                if hasattr(_engine, "_tool_logits_processor_factory"):
-                    _engine._tool_logits_processor_factory = factory
-                logger.info(f"Tool logits bias enabled for parser: {_tool_call_parser}")
-            else:
-                logger.warning("Tool logits bias requested but tokenizer not available")
-        except Exception as e:
-            logger.warning(f"Failed to set up tool logits bias: {e}")
+        _setup_fsm_tool_calls()
 
     logger.info(f"Default max tokens: {_default_max_tokens}")
 
+    _register_model()
+
+
+def _setup_fsm_tool_calls() -> None:
+    """Set up FSM-based constrained decoding for tool calls.
+
+    Tries to initialize immediately (works for SimpleEngine where
+    tokenizer is available).  For BatchedEngine, the tokenizer is only
+    available after start() — the lifespan handler calls
+    ``_deferred_fsm_setup()`` to complete initialization.
+    """
+    global _engine
+
+    tokenizer = None
+    if hasattr(_engine, "tokenizer"):
+        try:
+            tokenizer = _engine.tokenizer
+        except Exception:
+            pass
+    if tokenizer is None and hasattr(_engine, "_tokenizer"):
+        tokenizer = _engine._tokenizer
+
+    if tokenizer is None:
+        logger.info(
+            "[FSM] Tokenizer not yet available — will complete setup "
+            "after engine.start() (BatchedEngine)"
+        )
+        return
+
+    _init_fsm_factory(tokenizer)
+
+
+def _deferred_fsm_setup() -> None:
+    """Complete FSM setup after engine.start() (for BatchedEngine)."""
+    global _engine
+
+    if not _enable_tool_logits_bias or not _enable_auto_tool_choice:
+        return
+    # Skip if already set up
+    if (
+        hasattr(_engine, "_tool_logits_processor_factory")
+        and _engine._tool_logits_processor_factory is not None
+    ):
+        return
+
+    tokenizer = None
+    if hasattr(_engine, "tokenizer"):
+        try:
+            tokenizer = _engine.tokenizer
+        except Exception:
+            pass
+    if tokenizer is None:
+        return
+
+    _init_fsm_factory(tokenizer)
+
+    # Propagate to Scheduler (which captured None at init time)
+    _async_core = getattr(_engine, "_engine", None)
+    _core = getattr(_async_core, "engine", None) if _async_core else None
+    _sched = getattr(_core, "scheduler", None) if _core else None
+    if _sched is not None and hasattr(_sched, "_tool_logits_processor_factory"):
+        _sched._tool_logits_processor_factory = _engine._tool_logits_processor_factory
+        logger.info("[FSM] Propagated FSM factory to Scheduler")
+
+
+def _init_fsm_factory(tokenizer) -> None:
+    """Build the FSM cache and processor factory, set on the engine."""
+    global _engine
+
+    try:
+        from .api.fsm_tool_call import (
+            create_fsm_processor,
+            get_fsm_cache,
+            is_fsm_available,
+        )
+
+        if not is_fsm_available():
+            logger.info(
+                "[FSM] outlines-core not installed. "
+                "Install with: pip install outlines-core"
+            )
+            # Fall back to old bias-based processor
+            _init_legacy_tool_logits(tokenizer)
+            return
+
+        # Initialize the FSM vocabulary (one-time)
+        cache = get_fsm_cache()
+        cache.set_vocabulary(tokenizer)
+
+        # Create factory: returns a fresh FSM processor per request
+        def _make_fsm_factory(parser_name, tok):
+            def factory(tools=None):
+                return create_fsm_processor(parser_name, tok, tools)
+
+            return factory
+
+        factory = _make_fsm_factory(_tool_call_parser, tokenizer)
+
+        # BatchedEngine: set on engine for Scheduler to pick up
+        if hasattr(_engine, "_tool_logits_processor_factory"):
+            _engine._tool_logits_processor_factory = factory
+
+        # SimpleEngine: set on the MLXLanguageModel for stream_generate
+        _model = getattr(_engine, "_model", None)
+        if _model is not None and hasattr(_model, "_logits_processor_factory"):
+            _model._logits_processor_factory = factory
+            logger.info("[FSM] Set logits processor factory on SimpleEngine model")
+
+        logger.info(
+            f"[FSM] Constrained decoding enabled for parser: {_tool_call_parser}"
+        )
+
+    except Exception as e:
+        logger.warning(f"[FSM] Setup failed, falling back to legacy: {e}")
+        _init_legacy_tool_logits(tokenizer)
+
+
+def _init_legacy_tool_logits(tokenizer) -> None:
+    """Fall back to the old bias-based tool logits processor."""
+    global _engine
+
+    try:
+        from .api.tool_logits import create_tool_logits_processor
+
+        def _make_factory(parser_name, tok):
+            def factory(tools=None):
+                return create_tool_logits_processor(parser_name, tok, tools=tools)
+
+            return factory
+
+        factory = _make_factory(_tool_call_parser, tokenizer)
+        if hasattr(_engine, "_tool_logits_processor_factory"):
+            _engine._tool_logits_processor_factory = factory
+        logger.info(
+            f"Tool logits bias (legacy) enabled for parser: {_tool_call_parser}"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to set up legacy tool logits: {e}")
+
+
+def _register_model() -> None:
+    """Register the loaded model in the multi-model registry.
+
+    Must be called at the end of ``load_model()`` after all engine
+    and tool setup is complete.
+    """
     # Register in multi-model registry
     aliases = set()
     if _model_alias and _model_alias != _model_name:
@@ -994,7 +1119,7 @@ def load_model(
     entry = ModelEntry(
         engine=_engine,
         model_name=_model_name,
-        model_path=_model_path or model_name,
+        model_path=_model_path or _model_name,
         aliases=aliases,
         tool_call_parser=_tool_call_parser,
         reasoning_parser=_reasoning_parser_name,
@@ -1526,6 +1651,20 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
             last_user_preview = content[:300]
     has_tools = bool(request.tools)
     n_tools = len(request.tools) if request.tools else 0
+
+    # Trigger FSM precompile on first request with tools (lazy, cached)
+    if has_tools and _enable_tool_logits_bias:
+        try:
+            from .api.fsm_tool_call import get_fsm_cache
+
+            tools_dicts = [
+                t.model_dump(exclude_none=True) if hasattr(t, "model_dump") else t
+                for t in request.tools
+            ]
+            get_fsm_cache().precompile(tools_dicts)
+        except Exception:
+            pass  # FSM is optional enhancement, never block requests
+
     logger.info(
         f"[REQUEST] POST /v1/chat/completions stream={request.stream} "
         f"model={request.model!r} max_tokens={request.max_tokens} "

@@ -1,4 +1,4 @@
-.PHONY: help smoke check full benchmark update-baselines lint test clean
+.PHONY: help smoke check full benchmark update-baselines lint test stress soak clean
 
 # Pick the interpreter:
 #   1. Active venv ($VIRTUAL_ENV/bin/python) — wins so contributors using

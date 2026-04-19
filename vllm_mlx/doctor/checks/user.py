@@ -121,7 +121,10 @@ def check_model_load() -> CheckResult:
             ):
                 out = o
             await e.stop()
-            print(f"OK: generated {out.completion_tokens} tokens")
+            if out is None:
+                print("OK: model loaded (0 tokens generated)")
+            else:
+                print(f"OK: generated {out.completion_tokens} tokens")
 
         asyncio.run(test())
     """)
@@ -144,7 +147,7 @@ def check_model_load() -> CheckResult:
             detail=stdout.strip(),
         )
     # Model download failure is expected — skip, don't fail
-    if "404" in stderr or "not found" in stderr.lower() or "does not appear" in stderr.lower():
+    if "HTTP 404" in stderr or "Repository Not Found" in stderr or "does not appear" in stderr.lower():
         return CheckResult(
             name="model_load",
             status=Status.SKIP,

@@ -32,11 +32,16 @@ def run(cmd, label, timeout=600):
     print(f"  {label}")
     print(f"{'─' * 60}")
     t0 = time.perf_counter()
-    result = subprocess.run(cmd, cwd=REPO_ROOT, timeout=timeout)
-    elapsed = time.perf_counter() - t0
-    status = "PASS" if result.returncode == 0 else "FAIL"
-    print(f"  [{status}] {label} ({elapsed:.1f}s)")
-    return result.returncode == 0
+    try:
+        result = subprocess.run(cmd, cwd=REPO_ROOT, timeout=timeout)
+        elapsed = time.perf_counter() - t0
+        status = "PASS" if result.returncode == 0 else "FAIL"
+        print(f"  [{status}] {label} ({elapsed:.1f}s)")
+        return result.returncode == 0
+    except subprocess.TimeoutExpired:
+        elapsed = time.perf_counter() - t0
+        print(f"  [FAIL] {label} (timeout after {elapsed:.0f}s)")
+        return False
 
 
 def run_lint():

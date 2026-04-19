@@ -517,7 +517,9 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if tool_calls and request.tools:
         _validate_tool_call_params(tool_calls, request.tools)
 
-    # Extract reasoning content FIRST
+    # Extract reasoning content FIRST.
+    # Note: extract_reasoning() is stateless (pure regex on full text),
+    # so using the singleton is safe here unlike the streaming variant.
     reasoning_text = None
     if cfg.reasoning_parser:
         text_to_parse = cleaned_text or output.text

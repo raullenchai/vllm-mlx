@@ -14,20 +14,13 @@ def check_stress(port: int) -> CheckResult:
 
     Parses the "N/8 passed" summary line to determine pass/fail.
     """
-    import os
 
     t0 = time.perf_counter()
     script = REPO_ROOT / "scripts" / "stress_test.py"
     py = python_executable()
-    env = os.environ.copy()
-    # stress_test.py uses BASE_URL = "http://localhost:8000/v1" by default;
-    # override via env so it targets the doctor-managed server port.
-    env["STRESS_TEST_PORT"] = str(port)
-
     rc, stdout, stderr = run_subprocess(
         [py, str(script), "--port", str(port)],
         timeout=600,
-        env=env,
     )
     elapsed = time.perf_counter() - t0
 

@@ -64,8 +64,8 @@ class TestStreamingPostProcessorBasic:
         # Should have content + finish
         content_events = [e for e in events if e.type == "content"]
         finish_events = [e for e in events if e.type == "finish"]
-        assert len(content_events) >= 0  # may or may not have content
-        assert any(e.finish_reason == "stop" for e in events)
+        assert len(finish_events) == 1
+        assert finish_events[0].finish_reason == "stop"
 
     def test_special_tokens_stripped(self):
         cfg = _make_cfg()
@@ -424,9 +424,8 @@ class TestToolParserInit:
             engine=MagicMock(_tokenizer=MagicMock()),
         )
         pp = StreamingPostProcessor(cfg, tools_requested=True)
-        # Should attempt to create a minimax parser
-        # May succeed or fail depending on parser registry
-        # The key is it doesn't crash
+        # MiniMax parser should be auto-inferred from reasoning_parser_name
+        assert pp.tool_parser is not None
 
 
 class TestChannelRoutedEdgeCases:

@@ -96,8 +96,12 @@ def get_setup_instructions(
         "",
     ]
 
-    serve_model = model_id if model_id != "default" else (
-        profile.recommended_models[0] if profile.recommended_models else "<MODEL>"
+    serve_model = (
+        model_id
+        if model_id != "default"
+        else (
+            profile.recommended_models[0] if profile.recommended_models else "<MODEL>"
+        )
     )
     if profile.recommended_models:
         lines.append("```bash")

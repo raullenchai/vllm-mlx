@@ -147,7 +147,11 @@ def check_model_load() -> CheckResult:
             detail=stdout.strip(),
         )
     # Model download failure is expected — skip, don't fail
-    if "HTTP 404" in stderr or "Repository Not Found" in stderr or "does not appear" in stderr.lower():
+    if (
+        "HTTP 404" in stderr
+        or "Repository Not Found" in stderr
+        or "does not appear" in stderr.lower()
+    ):
         return CheckResult(
             name="model_load",
             status=Status.SKIP,

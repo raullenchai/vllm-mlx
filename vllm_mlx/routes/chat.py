@@ -187,9 +187,11 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # local mutations (extract_multimodal_content, developer→system, suffix injection).
     if cfg.cloud_router:
         _cloud_original_messages = [
-            msg.model_dump(exclude_none=True)
-            if hasattr(msg, "model_dump")
-            else {k: v for k, v in dict(msg).items() if v is not None}
+            (
+                msg.model_dump(exclude_none=True)
+                if hasattr(msg, "model_dump")
+                else {k: v for k, v in dict(msg).items() if v is not None}
+            )
             for msg in request.messages
         ]
     else:

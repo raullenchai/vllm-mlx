@@ -251,7 +251,9 @@ def serve_command(args):
         print(f"Embedding model loaded: {args.embedding_model}")
 
     # Resolve engine mode: BatchedEngine is default, --simple-engine overrides
-    use_batching = args.continuous_batching and not getattr(args, "simple_engine", False)
+    use_batching = args.continuous_batching and not getattr(
+        args, "simple_engine", False
+    )
 
     # Build scheduler config for batched mode
     scheduler_config = None

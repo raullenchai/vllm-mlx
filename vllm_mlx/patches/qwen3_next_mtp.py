@@ -107,18 +107,22 @@ def inject_mtp_support(model: Any, model_path, config: dict) -> bool:
                     for proj_name in ["up_proj", "down_proj", "gate_proj"]:
                         proj = getattr(sm, proj_name, None)
                         if proj is not None and isinstance(proj, SwitchLinear):
-                            ne = proj.weight.shape[0]   # num_experts
-                            od = proj.weight.shape[1]    # output_dims
-                            id_ = proj.weight.shape[2]   # input_dims
+                            ne = proj.weight.shape[0]  # num_experts
+                            od = proj.weight.shape[1]  # output_dims
+                            id_ = proj.weight.shape[2]  # input_dims
                             q = QuantizedSwitchLinear(
-                                id_, od, ne,
+                                id_,
+                                od,
+                                ne,
                                 bias=False,
                                 group_size=group_size,
                                 bits=bits,
                                 mode=mode,
                             )
                             setattr(sm, proj_name, q)
-                    logger.info("[MTP inject] Replaced SwitchLinear → QuantizedSwitchLinear")
+                    logger.info(
+                        "[MTP inject] Replaced SwitchLinear → QuantizedSwitchLinear"
+                    )
         except ImportError:
             logger.warning("[MTP inject] Could not import QuantizedSwitchLinear")
 

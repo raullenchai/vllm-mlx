@@ -62,11 +62,20 @@ def run_lint():
 
 def run_unit():
     return run(
-        [PY, "-m", "pytest", "tests/", "-q",
-         "--ignore=tests/integrations",
-         "--deselect", "tests/test_event_loop.py",
-         "--deselect", "tests/test_batching_deterministic.py",
-         "--deselect", "tests/test_reasoning_parsers.py"],
+        [
+            PY,
+            "-m",
+            "pytest",
+            "tests/",
+            "-q",
+            "--ignore=tests/integrations",
+            "--deselect",
+            "tests/test_event_loop.py",
+            "--deselect",
+            "tests/test_batching_deterministic.py",
+            "--deselect",
+            "tests/test_reasoning_parsers.py",
+        ],
         "Unit tests (pytest)",
         timeout=120,
     )
@@ -81,9 +90,14 @@ def run_stress(port=8000):
 
 def run_soak(port=8000, duration=600):
     return run(
-        [PY, os.path.join(SCRIPTS_DIR, "agent_soak_test.py"),
-         "--url", f"http://localhost:{port}/v1",
-         "--duration", str(duration)],
+        [
+            PY,
+            os.path.join(SCRIPTS_DIR, "agent_soak_test.py"),
+            "--url",
+            f"http://localhost:{port}/v1",
+            "--duration",
+            str(duration),
+        ],
         f"Agent soak test ({duration}s)",
         timeout=duration + 1200,  # generous buffer for slow models
     )
@@ -100,6 +114,7 @@ def run_cross_model():
 def check_server(port=8000):
     """Check if a server is running."""
     import urllib.request
+
     try:
         urllib.request.urlopen(f"http://localhost:{port}/health", timeout=3)
         return True
@@ -115,11 +130,24 @@ def main():
     )
     parser.add_argument(
         "tier",
-        choices=["lint", "unit", "smoke", "stress", "soak", "cross-model", "all", "full"],
+        choices=[
+            "lint",
+            "unit",
+            "smoke",
+            "stress",
+            "soak",
+            "cross-model",
+            "all",
+            "full",
+        ],
         help="Test tier to run",
     )
-    parser.add_argument("--port", type=int, default=8000, help="Server port for stress/soak")
-    parser.add_argument("--duration", type=int, default=600, help="Soak test duration (seconds)")
+    parser.add_argument(
+        "--port", type=int, default=8000, help="Server port for stress/soak"
+    )
+    parser.add_argument(
+        "--duration", type=int, default=600, help="Soak test duration (seconds)"
+    )
     args = parser.parse_args()
 
     print(f"\n{'=' * 60}")
@@ -137,7 +165,9 @@ def main():
     if args.tier in ("stress", "all", "full"):
         if not check_server(args.port):
             print(f"\n  ⚠ No server on port {args.port}. Start one first:")
-            print(f"    rapid-mlx serve mlx-community/Qwen3.5-4B-MLX-4bit --port {args.port}")
+            print(
+                f"    rapid-mlx serve mlx-community/Qwen3.5-4B-MLX-4bit --port {args.port}"
+            )
             results["stress"] = False
         else:
             results["stress"] = run_stress(args.port)

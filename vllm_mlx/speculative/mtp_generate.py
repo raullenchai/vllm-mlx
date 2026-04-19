@@ -66,9 +66,7 @@ def _snapshot_rnn_state(cache: list) -> dict[int, Any]:
         if not (hasattr(c, "is_trimmable") and c.is_trimmable()):
             if hasattr(c, "state"):
                 orig_state = c.state
-                copied = [
-                    mx.array(s) if s is not None else None for s in orig_state
-                ]
+                copied = [mx.array(s) if s is not None else None for s in orig_state]
                 if isinstance(orig_state, tuple):
                     copied = tuple(copied)
                 snapshots[ci] = copied
@@ -123,10 +121,9 @@ def mtp_generate_step(
     stats = MTPStats()
 
     # Detect hybrid cache (mix of trimmable KV + non-trimmable RNN)
-    is_hybrid = (
-        any(hasattr(c, "is_trimmable") and c.is_trimmable() for c in cache)
-        and any(hasattr(c, "is_trimmable") and not c.is_trimmable() for c in cache)
-    )
+    is_hybrid = any(
+        hasattr(c, "is_trimmable") and c.is_trimmable() for c in cache
+    ) and any(hasattr(c, "is_trimmable") and not c.is_trimmable() for c in cache)
 
     # Prefill with return_hidden
     model_output = model(prompt_tokens, cache=cache, return_hidden=True)
@@ -173,7 +170,9 @@ def mtp_generate_step(
 
         # --- Step 3: MTP draft ---
         try:
-            h_for_mtp = hidden_states[:, -1:, :] if hidden_states.ndim == 3 else hidden_states
+            h_for_mtp = (
+                hidden_states[:, -1:, :] if hidden_states.ndim == 3 else hidden_states
+            )
             draft_logits = model.mtp_forward(
                 h_for_mtp,
                 primary[:, None],
@@ -186,9 +185,7 @@ def mtp_generate_step(
             rnn_snapshots = _snapshot_rnn_state(cache) if is_hybrid else {}
 
             # --- Step 5: Verify [primary, draft] in one forward pass ---
-            verify_input = mx.concatenate(
-                [primary[:, None], draft[:, None]], axis=1
-            )
+            verify_input = mx.concatenate([primary[:, None], draft[:, None]], axis=1)
             verify_output = model(verify_input, cache=cache, return_hidden=True)
             if isinstance(verify_output, tuple):
                 verify_logits, verify_hidden = verify_output
@@ -207,7 +204,9 @@ def mtp_generate_step(
                         "logits": verify_logits[:, 1, :],
                         "hidden": verify_hidden[:, -1:, :],
                     }
-                    mx.async_eval(skip_state["logits"], skip_state["hidden"], draft, draft_lp)
+                    mx.async_eval(
+                        skip_state["logits"], skip_state["hidden"], draft, draft_lp
+                    )
                 yield MTPOutput(token=draft.item(), logprobs=draft_lp[0], is_draft=True)
                 token_count += 1
                 stats.accepted += 1
@@ -227,7 +226,9 @@ def mtp_generate_step(
                             "hidden": verify_hidden[:, -1:, :],
                         }
                         mx.async_eval(skip_state["logits"], skip_state["hidden"])
-                    yield MTPOutput(token=draft.item(), logprobs=draft_lp[0], is_draft=True)
+                    yield MTPOutput(
+                        token=draft.item(), logprobs=draft_lp[0], is_draft=True
+                    )
                     token_count += 1
                     stats.accepted += 1
                 else:
@@ -236,7 +237,9 @@ def mtp_generate_step(
                         # Hybrid: undo both P and D, restore RNN, re-advance with P
                         _trim_cache(cache, 2)
                         _restore_rnn_state(cache, rnn_snapshots)
-                        rerun_out = model(primary[:, None], cache=cache, return_hidden=True)
+                        rerun_out = model(
+                            primary[:, None], cache=cache, return_hidden=True
+                        )
                         if isinstance(rerun_out, tuple):
                             rerun_logits, rerun_hidden = rerun_out
                             skip_state = {

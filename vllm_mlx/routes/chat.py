@@ -640,7 +640,12 @@ async def stream_chat_completion(
 
         # Initialize post-processor
         processor = StreamingPostProcessor(
-            cfg, tools_requested=bool(request.tools)
+            cfg,
+            tools_requested=bool(request.tools),
+            json_mode=bool(
+                request.response_format
+                and getattr(request.response_format, "type", "text") != "text"
+            ),
         )
         processor.set_thinking_model(request.model)
         processor.reset()

@@ -164,11 +164,6 @@ _default_temperature: float | None = None  # Set via --default-temperature
 _default_top_p: float | None = None  # Set via --default-top-p
 
 
-# _FALLBACK_TEMPERATURE, _FALLBACK_TOP_P — moved to service/helpers.py
-# _resolve_model_name, _resolve_max_tokens, _build_usage,
-# _resolve_temperature, _resolve_top_p — moved to service/helpers.py
-
-
 # Global MCP manager
 _mcp_manager = None
 _mcp_executor = None
@@ -204,57 +199,17 @@ _no_thinking: bool = (
 _pin_system_prompt: bool = False  # Auto-pin system prompt prefix cache blocks
 _pinned_system_prompt_hash: str | None = None  # Hash of pinned system prompt
 
-# _TOOL_USE_SYSTEM_SUFFIX — moved to service/helpers.py
 
 
-# _maybe_pin_system_prompt — moved to service/helpers.py
-
-
-def _load_prefix_cache_from_disk() -> None:
-    """Load prefix cache from disk during startup."""
-    try:
-        d = _get_cache_dir()
-        logger.info(f"[lifespan] Loading prefix cache from {d}")
-        loaded = _engine.load_cache_from_disk(d)
-        if loaded > 0:
-            logger.info(f"[lifespan] Loaded {loaded} prefix cache entries")
-        else:
-            logger.info("[lifespan] No prefix cache entries found on disk")
-    except Exception as e:
-        logger.warning(f"[lifespan] Failed to load cache from disk: {e}", exc_info=True)
-
-
-def _save_prefix_cache_to_disk() -> None:
-    """Save prefix cache to disk during shutdown."""
-    try:
-        d = _get_cache_dir()
-        logger.info(f"[lifespan] Saving prefix cache to {d}")
-        saved = _engine.save_cache_to_disk(d)
-        if saved:
-            logger.info(f"[lifespan] Saved prefix cache to {d}")
-        else:
-            logger.info("[lifespan] No cache to save")
-    except Exception as e:
-        logger.warning(f"[lifespan] Failed to save cache to disk: {e}", exc_info=True)
-
-
-def _get_cache_dir() -> str:
-    """Get cache persistence directory based on actual model path."""
-    # Use _model_path (actual model path) not _model_name (which may be overridden
-    # by --served-model-name). This ensures cache is shared regardless of served name.
-    model_name = (
-        _model_path if _model_path else (_model_name if _model_name else "default")
-    )
-    logger.info(
-        f"[_get_cache_dir] _model_path={_model_path!r} type={type(_model_path)}"
-    )
-    # Sanitize model name for filesystem
-    safe_name = str(model_name).replace("/", "--").replace("\\", "--")
-    cache_dir = os.path.join(
-        os.path.expanduser("~"), ".cache", "vllm-mlx", "prefix_cache", safe_name
-    )
-    logger.info(f"[_get_cache_dir] cache_dir={cache_dir!r}")
-    return cache_dir
+from .runtime.cache import (  # noqa: E402
+    get_cache_dir as _get_cache_dir,  # noqa: F401
+)
+from .runtime.cache import (
+    load_prefix_cache_from_disk as _load_prefix_cache_from_disk,
+)
+from .runtime.cache import (
+    save_prefix_cache_to_disk as _save_prefix_cache_to_disk,
+)
 
 
 async def lifespan(app: FastAPI):
@@ -422,12 +377,6 @@ async def _global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"error": {"message": str(exc), "type": type(exc).__name__}},
     )
-
-
-# get_engine, _validate_model_name — moved to service/helpers.py
-
-
-# _parse_tool_calls_with_parser, _validate_tool_call_params — moved to service/helpers.py
 
 
 def _detect_native_tool_support() -> bool:
@@ -728,38 +677,8 @@ def _sync_config() -> None:
     cfg.model_registry = _model_registry
 
 
-# _extract_token_logprob, get_usage — moved to service/helpers.py
-
-
-# =============================================================================
-# Embeddings — moved to routes/embeddings.py
-# Models — moved to routes/models.py
-# =============================================================================
-
-
-# =============================================================================
-# Health/Cache — moved to routes/health.py
-# MCP — moved to routes/mcp_routes.py
-# Audio — moved to routes/audio.py
-# =============================================================================
-
-
-# _disconnect_guard, _wait_with_disconnect — moved to service/helpers.py
-
-
-# Completion Endpoints — moved to routes/completions.py
-
-
-# Chat Completion Endpoints — moved to routes/chat.py
-# _inject_json_instruction — moved to service/helpers.py
-
-
-# Anthropic Messages API — moved to routes/anthropic.py
 # Re-export for backward compatibility (test_streaming_pipeline_integration)
 from .routes.anthropic import _emit_content_pieces  # noqa: F401, E402
-
-# Streaming Helpers — moved to routes/completions.py and routes/chat.py
-
 
 # =============================================================================
 # MCP Initialization

@@ -21,6 +21,33 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _find_json_start(text: str) -> int:
+    """Find the first `{` or `[` that is NOT inside `<think>...</think>` tags.
+
+    Returns the index in ``text``, or -1 if no JSON delimiter found outside
+    think blocks.  Handles unclosed `<think>` (still accumulating) by
+    treating everything after it as inside the block.
+    """
+    in_think = False
+    i = 0
+    while i < len(text):
+        # Check for <think> open tag
+        if text[i:i + 7] == "<think>":
+            in_think = True
+            i += 7
+            continue
+        # Check for </think> close tag
+        if text[i:i + 8] == "</think>":
+            in_think = False
+            i += 8
+            continue
+        # Outside think block — check for JSON delimiter
+        if not in_think and text[i] in ("{", "["):
+            return i
+        i += 1
+    return -1
+
+
 class StreamingPostProcessor:
     """Processes streaming engine output into StreamEvents.
 
@@ -46,9 +73,11 @@ class StreamingPostProcessor:
         cfg: ServerConfig,
         tools_requested: bool = False,
         enable_thinking: bool | None = None,
+        json_mode: bool = False,
     ):
         self.cfg = cfg
         self.tools_requested = tools_requested
+        self.json_mode = json_mode
 
         # Per-request parser instances — each streaming request gets its
         # own parser to avoid state corruption under concurrent
@@ -81,6 +110,12 @@ class StreamingPostProcessor:
         # Nemotron thinking prefix
         self._is_thinking_model = False
         self._think_prefix_sent = False
+
+        # JSON mode: suppress thinking preamble before JSON content (#46).
+        # When json_mode=True and no reasoning parser, buffer content until
+        # the first JSON delimiter ({ or [) is seen, then emit from there.
+        self._json_preamble_stripped = False
+        self._json_preamble_buffer = ""
 
     @staticmethod
     def _create_reasoning_parser(cfg: ServerConfig):
@@ -143,6 +178,8 @@ class StreamingPostProcessor:
         self.tool_calls_detected = False
         self.tool_markup_possible = False
         self._think_prefix_sent = False
+        self._json_preamble_stripped = False
+        self._json_preamble_buffer = ""
 
         if self.reasoning_parser:
             self.reasoning_parser.reset_state()
@@ -309,6 +346,20 @@ class StreamingPostProcessor:
     ) -> list[StreamEvent]:
         """Handle standard models (no reasoning parser, no channel router)."""
         content = strip_special_tokens(delta_text)
+
+        # JSON mode preamble stripping (#46): when response_format is set and
+        # no reasoning parser is active, the model may emit a thinking preamble
+        # (e.g. "Let me think...\n{json}") before the actual JSON. Suppress
+        # everything before the first JSON delimiter.
+        if self.json_mode and not self.reasoning_parser and not self._json_preamble_stripped:
+            if content:
+                self._json_preamble_buffer += content
+                json_start = _find_json_start(self._json_preamble_buffer)
+                if json_start >= 0:
+                    self._json_preamble_stripped = True
+                    content = self._json_preamble_buffer[json_start:]
+                else:
+                    return []
 
         # Nemotron thinking prefix
         if self._is_thinking_model and not self._think_prefix_sent and content:

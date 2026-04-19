@@ -153,44 +153,32 @@ MHI measures how well a model works with a specific agent harness. It combines t
 
 **MHI = 0.50 × ToolCalling + 0.30 × HumanEval + 0.20 × MMLU** (scale 0-100)
 
+| Model | Best MHI | Best Harness | Tool Calling |
+|---|---|---|---|
+| **Qwopus 27B** | **92** | All (Hermes, PydanticAI, LangChain, smolagents) | 100% |
+| **Qwen3.5 27B** | **82** | Hermes / PydanticAI / LangChain | 100% |
+| **Llama 3.3 70B** | **83** | smolagents (text-based) | 100% |
+| **Nemotron Nano 30B** | **59** | PydanticAI / LangChain | 91-93% |
+| **Gemma 4 26B** | **62** | Hermes / smolagents | 100% |
+
+<details>
+<summary>Full MHI table (25 model-harness combinations) + methodology</summary>
+
+**MHI = 0.50 × ToolCalling + 0.30 × HumanEval + 0.20 × MMLU** (scale 0-100)
+
+Run `rapid-mlx agents` to see all supported agents and `python3 scripts/mhi_eval.py` to compute MHI on your own setup.
+
 | Model + Harness | Tool Calling | HumanEval | MMLU | **MHI** |
 |---|---|---|---|---|
 | **Qwopus 27B** + Hermes | 100% | 80% | 90% | **92** |
 | **Qwopus 27B** + PydanticAI | 100% | 80% | 90% | **92** |
-| **Qwopus 27B** + LangChain | 100% | 80% | 90% | **92** |
-| **Qwopus 27B** + smolagents | 100% | 80% | 90% | **92** |
-| **Qwopus 27B** + Anthropic SDK | 100% | 80% | 90% | **92** |
-| **Llama 3.3 70B** + smolagents | 100% | 50% | 90% | **83** |
 | **Qwen3.5 27B** + Hermes | 100% | 40% | 100% | **82** |
-| **Qwen3.5 27B** + PydanticAI | 100% | 40% | 100% | **82** |
-| **Qwen3.5 27B** + LangChain | 100% | 40% | 100% | **82** |
+| **Llama 3.3 70B** + smolagents | 100% | 50% | 90% | **83** |
 | **DeepSeek-R1 32B** + smolagents | 100% | 30% | 100% | **79** |
-| **Llama 3.3 70B** + PydanticAI | 67% | 50% | 90% | **67** |
-| **Llama 3.3 70B** + LangChain | 67% | 50% | 90% | **67** |
 | **Gemma 4 26B** + Hermes | 100% | 0% | 60% | **62** |
-| **Gemma 4 26B** + smolagents | 100% | 0% | 60% | **62** |
 | **Nemotron Nano 30B** + PydanticAI | 93% | 0% | 60% | **59** |
-| **Nemotron Nano 30B** + LangChain | 93% | 0% | 60% | **59** |
-| **Nemotron Nano 30B** + Hermes | 91% | 0% | 60% | **58** |
-| **Nemotron Nano 30B** + smolagents | 91% | 0% | 60% | **58** |
-| **Nemotron Nano 30B** + Anthropic SDK | 90% | 0% | 60% | **57** |
-| **DeepSeek-R1 32B** + Hermes | 55% | 30% | 100% | **57** |
-| **Llama 3.3 70B** + Hermes | 45% | 50% | 90% | **56** |
-| **DeepSeek-R1 32B** + PydanticAI | 50% | 30% | 100% | **54** |
-| **Gemma 4 26B** + Anthropic SDK | 80% | 0% | 60% | **52** |
-| **DeepSeek-R1 32B** + Anthropic SDK | 40% | 30% | 100% | **49** |
-| **Gemma 4 26B** + PydanticAI | 67% | 0% | 60% | **45** |
 
-<details>
-<summary>How MHI works</summary>
-
-- **Tool Calling** scores come from `rapid-mlx agents <harness> --test`, which runs real tool call scenarios (single, multi-turn, parallel, streaming, stress test) through each harness
-- **HumanEval** and **MMLU** are model-level baselines (same for all harnesses of the same model) — they verify the model's raw coding and knowledge capability
-- A model that scores 100% on tool calling but 0% on HumanEval may be great for simple agent tasks but will struggle with coding agents like Aider
-- Run `python3 scripts/mhi_eval.py --label "your-model+harness"` to compute MHI on your own setup
 </details>
-
-> **Qwopus 27B** = MHI 92 across all harnesses — the best agentic model for local use. **Qwen3.5 27B** is a close second (MHI 82) with perfect MMLU. **DeepSeek-R1** and **Llama 70B** perform much better with smolagents (text-based) than FC-dependent frameworks. Run `rapid-mlx agents` to see all supported agents and setup guides.
 
 **Quick setup for popular apps:**
 
@@ -526,39 +514,21 @@ Qwen3.5 uses Gated DeltaNet (75% RNN) + full attention (25% KV). Other engines r
 </details>
 
 <details>
-<summary><strong>Eval benchmarks (17 models, 4 suites)</strong></summary>
+<summary><strong>Eval benchmarks (20 models, 4 suites)</strong></summary>
 
-20 models across tool calling (30 scenarios), coding (HumanEval+), reasoning (MATH-500), and general knowledge (MMLU-Pro). All with `enable_thinking: false` on M3 Ultra. 🆕 = Gemma 4 (day-0 support).
+Tool calling (30 scenarios), coding (HumanEval+), reasoning (MATH-500), general knowledge (MMLU-Pro). Top models:
 
-| Model | Quant | RAM | Decode | Tools | Code | Reason | General | Avg |
-|-------|-------|-----|--------|-------|------|--------|---------|-----|
-| 🆕 Gemma 4 26B-A4B | 4bit | 14.4 GB | 94 t/s | **100%** | — | — | — | — |
-| 🆕 Gemma 4 E4B | 4bit | 6.4 GB | 83 t/s | **100%** | — | — | — | — |
-| 🆕 Gemma 4 31B | 4bit | 17.0 GB | 31 t/s | **100%** | — | — | — | — |
-| Qwopus 3.5-27B | 4bit | 14.8 GB | 39 t/s | **100%** | — | — | — | — |
-| Qwen3.5-122B-A10B | 8bit | 129.8 GB | 44 t/s | 87% | **90%** | **90%** | **90%** | **89%** |
-| Qwen3.5-122B-A10B | mxfp4 | 65.0 GB | 57 t/s | **90%** | **90%** | 80% | **90%** | 88% |
-| Qwen3.5-35B-A3B | 8bit | 36.9 GB | 83 t/s | **90%** | **90%** | 80% | 80% | 85% |
-| Qwen3-Coder-Next | 6bit | 64.8 GB | 66 t/s | 87% | **90%** | 80% | 70% | 82% |
-| Qwen3-Coder-Next | 4bit | 44.9 GB | 74 t/s | **90%** | **90%** | 70% | 70% | 80% |
-| GLM-4.5-Air | 4bit | 60.3 GB | 46 t/s | 73% | **90%** | 70% | 80% | 78% |
-| GLM-4.7-Flash | 8bit | 31.9 GB | 58 t/s | 73% | **100%** | **90%** | 50% | 78% |
-| Qwen3.5-27B | 4bit | 15.3 GB | 39 t/s | 83% | **90%** | 50% | 80% | 76% |
-| Qwen3.5-35B-A3B | 4bit | 19.6 GB | 95 t/s | 87% | **90%** | 50% | 70% | 74% |
-| Qwen3.5-9B | 4bit | 5.1 GB | 108 t/s | 83% | 70% | 60% | 70% | 71% |
-| MiniMax-M2.5 | 4bit | 128.9 GB | 52 t/s | 87% | 10%\* | 80% | **90%** | 67% |
-| Devstral-Small-2 | 4bit | 13.4 GB | 49 t/s | 17% | **90%** | 70% | 70% | 62% |
-| GPT-OSS-20B | mxfp4-q8 | 12.1 GB | 127 t/s | 80% | 20% | 60% | **90%** | 62% |
-| Qwen3.5-4B | 4bit | 2.4 GB | 168 t/s | 73% | 50% | 50% | 50% | 56% |
-| Mistral-Small-3.2 | 4bit | 13.4 GB | 49 t/s | 17% | 80% | 60% | 60% | 54% |
-| Hermes-3-Llama-8B | 4bit | 4.6 GB | 127 t/s | 17% | 20% | 30% | 40% | 27% |
-| Qwen3-0.6B | 4bit | 0.4 GB | 365 t/s | 30% | 20% | 20% | 30% | 25% |
+| Model | Decode | Tools | Code | Reason | General | Avg |
+|-------|--------|-------|------|--------|---------|-----|
+| Qwen3.5-122B 8bit | 44 t/s | 87% | 90% | 90% | 90% | **89%** |
+| Qwen3.5-35B 8bit | 83 t/s | 90% | 90% | 80% | 80% | **85%** |
+| Qwen3-Coder-Next 4bit | 74 t/s | 90% | 90% | 70% | 70% | **80%** |
+| Qwen3.5-27B 4bit | 39 t/s | 83% | 90% | 50% | 80% | **76%** |
+| Qwen3.5-9B 4bit | 108 t/s | 83% | 70% | 60% | 70% | **71%** |
 
-\* *MiniMax coding score likely affected by a code extraction parser issue, not model capability.*
+Run your own: `python scripts/benchmark_engines.py --engine rapid-mlx ollama --runs 3`
 
 </details>
-
-*Benchmark script: [`scripts/benchmark_engines.py`](scripts/benchmark_engines.py). Run your own: `python scripts/benchmark_engines.py --engine rapid-mlx ollama --runs 3`. Eval suites: [evals/](evals/)*
 
 ---
 
@@ -584,20 +554,7 @@ Large-context requests auto-route to a cloud LLM (GPT-5, Claude, etc.) when loca
 
 Vision, audio (STT/TTS), video understanding, and text embeddings — all through the same OpenAI-compatible API.
 
-<details>
-<summary><strong>All features (37 total)</strong></summary>
-
-**Tool Calling (15):** Text-format recovery, 17 parsers, streaming, tool logits bias (2-5x faster structured output), disconnect guard, think-tag filter, chunk-boundary leak fix, developer role normalization, logprobs API, system prompt tool injection fallback for incompatible chat templates, end-to-end agent simulation tests.
-
-**Reasoning (3):** MiniMax/Qwen3/DeepSeek parsers, Chinese reasoning pattern recognition, clean `reasoning_content` field.
-
-**Performance (8):** Prompt cache (KV trim + DeltaNet state snapshots), SSE template pre-computation, continuous batching, configurable prefill step size, KV cache quantization (4/8 bit), prefix cache, cloud routing, frequency-aware cache eviction.
-
-**Reliability (6):** Accurate `prompt_tokens` reporting, EOS cache fix, crash prevention on malformed `response_format`, GC control during generation, system prompt pinning, 2100+ tests.
-
-**Multimodal (4):** Vision (Qwen-VL), audio STT (Whisper), audio TTS (Kokoro), text embeddings.
-
-</details>
+Also: logprobs API, structured JSON output (`response_format`), continuous batching, KV cache quantization (`--kv-bits 4`), and [2100+ tests](tests/).
 
 ---
 
@@ -654,21 +611,120 @@ Vision, audio (STT/TTS), video understanding, and text embeddings — all throug
 </details>
 
 <details>
-<summary><strong>Troubleshooting</strong></summary>
+<summary><strong>Common Issues</strong></summary>
 
 **"parameters not found in model" warnings at startup** — Normal for VLMs. Vision weights are auto-skipped.
 
-**Out of memory / very slow (<5 tok/s)** — Model too big. Check [What fits my Mac?](#what-fits-my-mac) Use `--kv-bits 4` for long contexts. Close other apps.
+**Out of memory / very slow (<5 tok/s)** — Model too big. Check [What fits my Mac?](#what-fits-my-mac) Use `--kv-bits 4` for long contexts.
 
-**Empty responses** — Remove `--reasoning-parser` for non-thinking models. Only use it with Qwen3 (thinking), MiniMax, DeepSeek-R1.
+**Empty responses** — Remove `--reasoning-parser` for non-thinking models.
 
 **Tool calls as plain text** — Set the correct `--tool-call-parser` for your model. Even without it, Rapid-MLX auto-recovers most cases.
+
+**Other issues?** Run `rapid-mlx doctor` for self-diagnostics.
 
 **Slow first response** — Two different causes: (1) Qwen3.5 models reason before answering — add `--no-thinking` to skip reasoning for faster responses, or (2) cold start on long prompts — add `--prefill-step-size 8192` to speed up processing. Subsequent turns hit prompt cache and are 10-30x faster.
 
 **Server hangs after client disconnect** — Fixed in v0.3.0+. Upgrade to latest.
 
 </details>
+
+---
+
+## Troubleshooting
+
+Run the built-in self-diagnostic (works from `pip install`, no dev tools needed):
+
+```bash
+rapid-mlx doctor
+```
+
+```
+Rapid-MLX Doctor
+============================================================
+  [metal] OK        # Apple Silicon Metal GPU available
+  [imports] OK      # Core modules import cleanly
+  [cli] OK          # CLI commands respond
+  [model_load] OK   # Inference pipeline works
+Result: PASS
+```
+
+---
+
+## Development
+
+### Quick start
+
+```bash
+git clone https://github.com/raullenchai/Rapid-MLX.git
+cd Rapid-MLX
+pip install -e ".[dev]"
+```
+
+### Testing
+
+Two layers: **user-facing doctor** (ships with pip) and **dev test suite** (source checkout only).
+
+#### Dev test commands
+
+| Command | What | Time | Needs server? |
+|---------|------|------|---------------|
+| `make lint` | ruff lint | ~10s | No |
+| `make test` | pytest unit suite (2000+ tests) | ~30s | No |
+| `make smoke` | lint + unit | ~1 min | No |
+| `make stress` | 8-scenario stress test | ~5 min | Yes |
+| `make soak` | 10-min agent soak test | 10 min | Yes |
+
+For stress/soak, start a server first:
+```bash
+rapid-mlx serve mlx-community/Qwen3.5-4B-MLX-4bit --enable-auto-tool-choice --tool-call-parser hermes
+# In another terminal:
+make stress
+```
+
+Or use the script directly for more options:
+```bash
+python scripts/dev_test.py smoke              # lint + unit
+python scripts/dev_test.py stress --port 8000 # custom port
+python scripts/dev_test.py full               # everything
+```
+
+#### Regression harness (multi-model)
+
+```bash
+make check              # 1 model (~10 min, auto starts server)
+make full               # 3 models + 11 agent profiles (~1 hr)
+make benchmark          # all local models (overnight)
+```
+
+### Architecture
+
+```
+vllm_mlx/
+  server.py              # App factory + model loading + CLI (1047 lines)
+  config/                # ServerConfig singleton
+  service/
+    helpers.py           # Shared request helpers
+    postprocessor.py     # Streaming pipeline (100% test coverage)
+  routes/
+    chat.py              # /v1/chat/completions
+    completions.py       # /v1/completions
+    anthropic.py         # /v1/messages (Anthropic API)
+    health.py, models.py, embeddings.py, audio.py, mcp_routes.py
+  engine/                # SimpleEngine, BatchedEngine, HybridEngine
+  reasoning/             # 7 reasoning parsers (Qwen3, DeepSeek, MiniMax, ...)
+  tool_parsers/          # 20+ tool call parsers
+  agents/                # 11 agent profiles (YAML)
+  runtime/               # Model registry, cache persistence
+  doctor/                # User self-diagnostic
+scripts/                 # Dev-only (NOT shipped with pip)
+  dev_test.py            # Unified test entry point
+  stress_test.py         # 8-scenario stress test
+  agent_soak_test.py     # 10-min agent soak test
+  cross_model_stress.py  # Multi-model validation
+tests/                   # pytest unit tests (2000+)
+harness/                 # Regression baselines + thresholds
+```
 
 ---
 

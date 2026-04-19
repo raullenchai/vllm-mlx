@@ -154,7 +154,6 @@ class TestStreamingPostProcessorToolCalls:
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -173,7 +172,6 @@ class TestStreamingPostProcessorToolCalls:
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -195,7 +193,6 @@ class TestStreamingPostProcessorToolCalls:
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -221,7 +218,6 @@ class TestStreamingPostProcessorToolCalls:
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -339,7 +335,6 @@ class TestStreamingPostProcessorMiniMaxRedirect:
         cfg = _make_cfg(
             reasoning_parser=parser,
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -364,7 +359,6 @@ class TestStreamingPostProcessorToolCallChannel:
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -398,17 +392,19 @@ class TestStreamingPostProcessorToolCallChannel:
 class TestToolParserInit:
     """Tests for _init_tool_parser paths (lines 72-99)."""
 
-    def test_init_uses_existing_parser_instance(self):
-        """Tool parser uses cfg.tool_parser_instance when already set."""
-        mock_parser = MagicMock()
+    def test_init_creates_fresh_parser_not_singleton(self):
+        """Tool parser is a fresh per-request instance, NOT cfg singleton."""
+        singleton = MagicMock()
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
             tool_call_parser="hermes",
-            tool_parser_instance=mock_parser,
+            tool_parser_instance=singleton,
         )
         pp = StreamingPostProcessor(cfg, tools_requested=True)
-        assert pp.tool_parser is mock_parser
+        # Must NOT be the singleton — should be a fresh HermesToolParser
+        assert pp.tool_parser is not singleton
+        assert pp.tool_parser is not None
 
     def test_init_parser_failure_returns_none(self):
         """Failed tool parser init returns None gracefully."""
@@ -443,7 +439,6 @@ class TestChannelRoutedEdgeCases:
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -492,7 +487,6 @@ class TestChannelRoutedEdgeCases:
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -516,7 +510,6 @@ class TestChannelRoutedEdgeCases:
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -550,7 +543,6 @@ class TestReasoningPathEdgeCases:
         cfg = _make_cfg(
             reasoning_parser=parser,
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -576,7 +568,6 @@ class TestReasoningPathEdgeCases:
         cfg = _make_cfg(
             reasoning_parser=parser,
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -623,7 +614,6 @@ class TestReasoningPathEdgeCases:
         cfg = _make_cfg(
             reasoning_parser=parser,
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -645,7 +635,6 @@ class TestStandardPathEdgeCases:
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -665,7 +654,6 @@ class TestStandardPathEdgeCases:
 
         cfg = _make_cfg(
             enable_auto_tool_choice=True,
-            tool_call_parser="hermes",
             tool_parser_instance=tool_parser,
         )
         pp = StreamingPostProcessor(cfg)
@@ -673,3 +661,112 @@ class TestStandardPathEdgeCases:
 
         events = pp.process_chunk(_make_output("before <tag>"))
         assert tool_parser.extract_tool_calls_streaming.called
+
+
+# =====================================================================
+# Per-request parser isolation (P1 singleton fix)
+# =====================================================================
+
+
+class TestPerRequestParserIsolation:
+    """Verify that each PostProcessor gets its own parser instances,
+    not references to the global singleton from ServerConfig."""
+
+    def test_reasoning_parser_is_per_request(self):
+        """Two PostProcessors must have different reasoning parser instances."""
+        cfg = _make_cfg(reasoning_parser_name="qwen3")
+        # cfg.reasoning_parser is the singleton — should NOT be used
+        cfg.reasoning_parser = MagicMock()
+
+        pp1 = StreamingPostProcessor(cfg)
+        pp2 = StreamingPostProcessor(cfg)
+
+        # Each must have its OWN parser, not the singleton
+        assert pp1.reasoning_parser is not cfg.reasoning_parser
+        assert pp2.reasoning_parser is not cfg.reasoning_parser
+        assert pp1.reasoning_parser is not pp2.reasoning_parser
+
+    def test_reasoning_parser_none_when_no_name(self):
+        """No parser created when reasoning_parser_name is not set."""
+        cfg = _make_cfg(reasoning_parser_name=None)
+        pp = StreamingPostProcessor(cfg)
+        assert pp.reasoning_parser is None
+
+    def test_tool_parser_is_per_request(self):
+        """Two PostProcessors must have different tool parser instances."""
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_call_parser="hermes",
+        )
+        # cfg.tool_parser_instance is the singleton — should NOT be used
+        cfg.tool_parser_instance = MagicMock()
+
+        pp1 = StreamingPostProcessor(cfg, tools_requested=True)
+        pp2 = StreamingPostProcessor(cfg, tools_requested=True)
+
+        assert pp1.tool_parser is not cfg.tool_parser_instance
+        assert pp2.tool_parser is not cfg.tool_parser_instance
+        assert pp1.tool_parser is not pp2.tool_parser
+
+    def test_tool_parser_auto_infer_is_per_request(self):
+        """Auto-inferred tool parsers are also per-request."""
+        cfg = _make_cfg(reasoning_parser_name="minimax")
+        pp1 = StreamingPostProcessor(cfg, tools_requested=True)
+        pp2 = StreamingPostProcessor(cfg, tools_requested=True)
+
+        if pp1.tool_parser is not None:
+            assert pp1.tool_parser is not pp2.tool_parser
+
+    def test_concurrent_reset_does_not_corrupt(self):
+        """Simulating concurrent usage: reset on one doesn't affect other."""
+        cfg = _make_cfg(reasoning_parser_name="qwen3")
+
+        pp1 = StreamingPostProcessor(cfg)
+        pp2 = StreamingPostProcessor(cfg)
+
+        # Simulate pp1 accumulating state
+        pp1.reset()
+        pp1.process_chunk(_make_output("Hello"))
+        assert pp1.accumulated_text == "Hello"
+
+        # pp2 resets independently
+        pp2.reset()
+        pp2.process_chunk(_make_output("World"))
+
+        # pp1's state should be untouched
+        assert pp1.accumulated_text == "Hello"
+        assert pp2.accumulated_text == "World"
+
+    def test_reasoning_parser_state_isolated(self):
+        """Reasoning parser internal state is isolated between instances."""
+        cfg = _make_cfg(reasoning_parser_name="qwen3")
+
+        pp1 = StreamingPostProcessor(cfg)
+        pp2 = StreamingPostProcessor(cfg)
+
+        pp1.reset()
+        pp2.reset()
+
+        # Process a thinking chunk on pp1 — mutates pp1's parser state
+        pp1.process_chunk(_make_output("<think>reasoning"))
+
+        # pp2's parser should NOT have any accumulated state from pp1
+        assert pp2.reasoning_parser is not pp1.reasoning_parser
+        # Verify pp2's parser has clean internal state
+        if hasattr(pp2.reasoning_parser, "_buffer"):
+            assert pp2.reasoning_parser._buffer == ""
+
+    def test_graceful_fallback_on_bad_parser_name(self):
+        """Invalid parser name results in None, not crash."""
+        cfg = _make_cfg(reasoning_parser_name="nonexistent_parser_xyz")
+        pp = StreamingPostProcessor(cfg)
+        assert pp.reasoning_parser is None
+
+    def test_graceful_fallback_on_bad_tool_parser(self):
+        """Invalid tool parser name results in None, not crash."""
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_call_parser="nonexistent_parser_xyz",
+        )
+        pp = StreamingPostProcessor(cfg, tools_requested=True)
+        assert pp.tool_parser is None

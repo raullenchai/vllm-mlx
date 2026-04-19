@@ -223,9 +223,17 @@ def _validate_model_name(request_model: str) -> None:
 def _parse_tool_calls_with_parser(
     output_text: str, request=None
 ) -> tuple[str, list | None]:
-    """Parse tool calls from model output using the configured parser."""
+    """Parse tool calls from model output using the configured parser.
+
+    Creates a per-call parser instance to avoid state corruption under
+    concurrent BatchedEngine requests.
+    """
     cfg = get_config()
     request_dict = request.model_dump() if request else None
+
+    tokenizer = None
+    if cfg.engine is not None and hasattr(cfg.engine, "_tokenizer"):
+        tokenizer = cfg.engine._tokenizer
 
     if not cfg.enable_auto_tool_choice or not cfg.tool_call_parser:
         if cfg.reasoning_parser_name and request and request.tools:
@@ -234,7 +242,6 @@ def _parse_tool_calls_with_parser(
             if inferred:
                 try:
                     parser_cls = ToolParserManager.get_tool_parser(inferred)
-                    tokenizer = getattr(cfg.engine, "_tokenizer", None)
                     parser = parser_cls(tokenizer)
                     parser.reset()
                     result = parser.extract_tool_calls(output_text, request_dict)
@@ -255,24 +262,19 @@ def _parse_tool_calls_with_parser(
                     logger.debug(f"Auto-infer tool parser failed: {e}")
         return parse_tool_calls(output_text, request_dict)
 
-    if cfg.tool_parser_instance is None:
-        try:
-            parser_cls = ToolParserManager.get_tool_parser(cfg.tool_call_parser)
-            tokenizer = None
-            if cfg.engine is not None and hasattr(cfg.engine, "_tokenizer"):
-                tokenizer = cfg.engine._tokenizer
-            cfg.tool_parser_instance = parser_cls(tokenizer)
-            logger.info(f"Initialized tool call parser: {cfg.tool_call_parser}")
-        except Exception as e:
-            logger.warning(
-                f"Failed to initialize tool parser '{cfg.tool_call_parser}': {e}"
-            )
-            logger.warning("Falling back to generic parser")
-            return parse_tool_calls(output_text, request_dict)
+    # Per-call parser instance (not cfg.tool_parser_instance singleton)
+    try:
+        parser_cls = ToolParserManager.get_tool_parser(cfg.tool_call_parser)
+        parser = parser_cls(tokenizer)
+    except Exception as e:
+        logger.warning(
+            f"Failed to create tool parser '{cfg.tool_call_parser}': {e}"
+        )
+        return parse_tool_calls(output_text, request_dict)
 
     try:
-        cfg.tool_parser_instance.reset()
-        result = cfg.tool_parser_instance.extract_tool_calls(output_text, request_dict)
+        parser.reset()
+        result = parser.extract_tool_calls(output_text, request_dict)
         if result.tools_called:
             tool_calls = [
                 ToolCall(

@@ -350,8 +350,18 @@ async def _stream_anthropic_messages(
     current_block_type = None
     block_index = 0
 
-    if cfg.reasoning_parser:
-        cfg.reasoning_parser.reset_state()
+    # Per-request reasoning parser instance (not the singleton from cfg).
+    # Avoids state corruption under concurrent BatchedEngine requests.
+    reasoning_parser = None
+    if cfg.reasoning_parser_name:
+        try:
+            from ..reasoning import get_parser
+
+            reasoning_parser = get_parser(cfg.reasoning_parser_name)()
+        except Exception:
+            pass
+    if reasoning_parser:
+        reasoning_parser.reset_state()
 
     async for output in engine.stream_chat(messages=messages, **chat_kwargs):
         delta_text = output.new_text
@@ -365,10 +375,10 @@ async def _stream_anthropic_messages(
             accumulated_text += delta_text
             content = None
 
-            if cfg.reasoning_parser:
+            if reasoning_parser:
                 previous_raw = accumulated_raw
                 accumulated_raw += delta_text
-                delta_msg = cfg.reasoning_parser.extract_reasoning_streaming(
+                delta_msg = reasoning_parser.extract_reasoning_streaming(
                     previous_raw, accumulated_raw, delta_text
                 )
                 if delta_msg is not None:
@@ -413,10 +423,10 @@ async def _stream_anthropic_messages(
         block_index += 1
 
     # Handle reasoning parser finalization
-    if cfg.reasoning_parser and accumulated_raw:
+    if reasoning_parser and accumulated_raw:
         final_msg = (
-            cfg.reasoning_parser.finalize_streaming(accumulated_raw)
-            if hasattr(cfg.reasoning_parser, "finalize_streaming")
+            reasoning_parser.finalize_streaming(accumulated_raw)
+            if hasattr(reasoning_parser, "finalize_streaming")
             else None
         )
         if final_msg and final_msg.content:
@@ -435,7 +445,6 @@ async def _stream_anthropic_messages(
                 yield f"event: content_block_delta\ndata: {json.dumps(delta_event)}\n\n"
                 yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': block_index})}\n\n"
                 block_index += 1
-        cfg.reasoning_parser.reset_state()
 
     # Check for tool calls in accumulated text
     _, tool_calls = _parse_tool_calls_with_parser(accumulated_text, openai_request)

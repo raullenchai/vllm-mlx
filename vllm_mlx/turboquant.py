@@ -57,26 +57,30 @@ def auto_select_bits(head_dim: int) -> int:
 # Lloyd-Max codebooks (precomputed for unit Gaussian)
 # ---------------------------------------------------------------------------
 
-# Optimal reconstruction levels for N(0,1) data.
-# These are the well-known Lloyd-Max quantizer centroids.
+# Optimal Lloyd-Max quantizer for N(0,1) data.
+# Centroids = conditional expectations E[X | X in bin_i].
+# Boundaries = decision thresholds between adjacent centroids.
+# Reference: Lloyd (1982), Max (1960). Values from scipy Lloyd-Max solver.
 # fmt: off
+
+# 3-bit: 8 centroids, 7 boundaries
 _LLOYD_MAX_3BIT = mx.array([
-    -1.7479, -1.0500, -0.5005, 0.0000, 0.0000, 0.5005, 1.0500, 1.7479
+    -2.1519, -1.3440, -0.7560, -0.2451, 0.2451, 0.7560, 1.3440, 2.1519
 ], dtype=mx.float16)
 
-_LLOYD_MAX_4BIT = mx.array([
-    -2.4008, -1.8435, -1.4371, -1.0993, -0.7979, -0.5224, -0.2582, 0.0000,
-     0.0000,  0.2582,  0.5224,  0.7979,  1.0993,  1.4371,  1.8435,  2.4008
-], dtype=mx.float16)
-
-# Decision boundaries (midpoints between centroids) for nearest-centroid lookup.
 _LLOYD_MAX_3BIT_BOUNDS = mx.array([
-    -1.3990, -0.7753, -0.2503, 0.0000, 0.2503, 0.7753, 1.3990
+    -1.7479, -1.0500, -0.5005, 0.0000, 0.5005, 1.0500, 1.7479
+], dtype=mx.float16)
+
+# 4-bit: 16 centroids, 15 boundaries
+_LLOYD_MAX_4BIT = mx.array([
+    -2.7326, -2.0690, -1.6180, -1.2562, -0.9423, -0.6568, -0.3881, -0.1284,
+     0.1284,  0.3881,  0.6568,  0.9423,  1.2562,  1.6180,  2.0690,  2.7326
 ], dtype=mx.float16)
 
 _LLOYD_MAX_4BIT_BOUNDS = mx.array([
-    -2.1222, -1.6403, -1.2682, -0.9486, -0.6602, -0.3903, -0.1291, 0.0000,
-     0.1291,  0.3903,  0.6602,  0.9486,  1.2682,  1.6403,  2.1222
+    -2.4008, -1.8435, -1.4371, -1.0993, -0.7996, -0.5224, -0.2582, 0.0000,
+     0.2582,  0.5224,  0.7996,  1.0993,  1.4371,  1.8435,  2.4008
 ], dtype=mx.float16)
 # fmt: on
 
@@ -104,7 +108,9 @@ def generate_rotation_matrix(dim: int, seed: int = 42) -> mx.array:
     rng = np.random.RandomState(seed)
     random_matrix = rng.randn(dim, dim).astype(np.float32)
     q, _ = np.linalg.qr(random_matrix)
-    rotation = mx.array(q, dtype=mx.float16)
+    # Keep float32 for rotation to preserve orthogonality during matmul.
+    # The V data is upcast to float32 for rotation, then back to float16.
+    rotation = mx.array(q, dtype=mx.float32)
 
     _rotation_cache[key] = rotation
     return rotation
@@ -135,8 +141,8 @@ def turboquant_encode(
         - scales: float16, shape (..., seq_len, n_groups) — per-group scale
         - zeros: float16, shape (..., seq_len, n_groups) — per-group mean
     """
-    # 1. Rotate along head_dim: V @ Q^T
-    rotated = values @ rotation.T
+    # 1. Rotate along head_dim: V @ Q^T (in float32 for precision)
+    rotated = values.astype(mx.float32) @ rotation.T
 
     # 2. Per-group normalize to unit Gaussian
     orig_shape = rotated.shape
@@ -236,8 +242,8 @@ def turboquant_decode(
     if head_dim < padded_dim:
         rotated = rotated[..., :head_dim]
 
-    # 5. Inverse rotation: V_reconstructed = rotated @ Q
-    values = rotated @ rotation
+    # 5. Inverse rotation: V_reconstructed = rotated @ Q (float32 for precision)
+    values = rotated.astype(mx.float32) @ rotation
 
     return values.astype(mx.float16)
 

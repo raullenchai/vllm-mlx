@@ -111,7 +111,7 @@ class TestRotationMatrix:
         Q = generate_rotation_matrix(128, seed=42)
         Q_np = np.array(Q, dtype=np.float32)
         product = Q_np @ Q_np.T
-        np.testing.assert_allclose(product, np.eye(128), atol=0.02)
+        np.testing.assert_allclose(product, np.eye(128), atol=1e-5)
 
     def test_deterministic(self):
         """Same seed and dim should produce same matrix."""

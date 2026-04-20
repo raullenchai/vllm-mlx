@@ -240,7 +240,7 @@ async def lifespan(app: FastAPI):
                 _model = getattr(_engine, "_model", None) or getattr(
                     _engine, "_shared_model", None
                 )
-                # Unwrap MLXLanguageModel if needed
+                # Unwrap model wrapper if needed
                 if (
                     _model
                     and hasattr(_model, "model")

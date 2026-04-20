@@ -350,7 +350,7 @@ def serve_command(args):
 
     # Start server
     # Note: Metal shader warmup runs in the FastAPI lifespan hook (server.py)
-    # so it works for all engine types including batched/hybrid which start later.
+    # so it works for all engine types.
     print()
     host_display = "localhost" if args.host == "0.0.0.0" else args.host
     print(f"  Ready: http://{host_display}:{args.port}/v1")

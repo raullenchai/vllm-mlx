@@ -85,6 +85,11 @@ class SchedulerConfig:
     kv_cache_quantization_group_size: int = 64
     kv_cache_min_quantize_tokens: int = 256
 
+    # TurboQuant V-only compression (asymmetric: K=FP16, V=3-4bit rotated Lloyd-Max)
+    kv_cache_turboquant: bool = False
+    kv_cache_turboquant_bits: int | None = None  # None = auto-select by head_dim
+    kv_cache_turboquant_group_size: int = 32
+
     # Paged cache settings (experimental - for memory efficiency)
     use_paged_cache: bool = (
         False  # Use BlockAwarePrefixCache instead of PrefixCacheManager
@@ -1107,6 +1112,9 @@ class Scheduler:
                     kv_bits=self.config.kv_cache_quantization_bits,
                     kv_group_size=self.config.kv_cache_quantization_group_size,
                     kv_min_quantize_tokens=self.config.kv_cache_min_quantize_tokens,
+                    kv_turboquant=self.config.kv_cache_turboquant,
+                    kv_turboquant_bits=self.config.kv_cache_turboquant_bits,
+                    kv_turboquant_group_size=self.config.kv_cache_turboquant_group_size,
                 )
                 self.memory_aware_cache = MemoryAwarePrefixCache(
                     model=model,

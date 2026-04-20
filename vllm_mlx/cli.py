@@ -266,6 +266,14 @@ def serve_command(args):
     if getattr(args, "specprefill", False):
         print("\n  ⚠ --specprefill is deprecated and has no effect.\n")
 
+    # Mutual exclusion: turboquant vs standard quantization
+    if args.kv_cache_turboquant and args.kv_cache_quantization:
+        print(
+            "\n  Error: --kv-cache-turboquant and --kv-cache-quantization are "
+            "mutually exclusive. Choose one.\n"
+        )
+        sys.exit(1)
+
     # Build scheduler config
     enable_prefix_cache = args.enable_prefix_cache and not args.disable_prefix_cache
 
@@ -294,6 +302,10 @@ def serve_command(args):
         kv_cache_quantization_bits=args.kv_cache_quantization_bits,
         kv_cache_quantization_group_size=args.kv_cache_quantization_group_size,
         kv_cache_min_quantize_tokens=args.kv_cache_min_quantize_tokens,
+        # TurboQuant V-only compression
+        kv_cache_turboquant=args.kv_cache_turboquant,
+        kv_cache_turboquant_bits=args.kv_cache_turboquant_bits,
+        kv_cache_turboquant_group_size=args.kv_cache_turboquant_group_size,
     )
 
     print("Mode: Continuous batching (for multiple concurrent users)")
@@ -313,7 +325,17 @@ def serve_command(args):
             else f"{args.cache_memory_percent * 100:.0f}% of RAM"
         )
         print(f"Memory-aware cache: {cache_info}")
-        if args.kv_cache_quantization:
+        if args.kv_cache_turboquant:
+            bits_str = (
+                str(args.kv_cache_turboquant_bits)
+                if args.kv_cache_turboquant_bits
+                else "auto"
+            )
+            print(
+                f"TurboQuant V-cache: {bits_str}-bit, "
+                f"group_size={args.kv_cache_turboquant_group_size} (K stays FP16)"
+            )
+        elif args.kv_cache_quantization:
             print(
                 f"KV cache quantization: {args.kv_cache_quantization_bits}-bit, "
                 f"group_size={args.kv_cache_quantization_group_size}"
@@ -1008,6 +1030,28 @@ Examples:
         type=int,
         default=256,
         help="Minimum tokens for quantization to apply (default: 256)",
+    )
+    # TurboQuant KV cache compression (V-only, experimental)
+    serve_parser.add_argument(
+        "--kv-cache-turboquant",
+        action="store_true",
+        help="Enable TurboQuant V-cache compression (3-4 bit, ~86%% prefix cache savings "
+        "on dense models). K stays FP16. Experimental — mutually exclusive with "
+        "--kv-cache-quantization.",
+    )
+    serve_parser.add_argument(
+        "--kv-cache-turboquant-bits",
+        type=int,
+        default=None,
+        choices=[3, 4],
+        help="Bit width for TurboQuant (default: auto-select by head_dim — "
+        "3-bit for head_dim>=96, 4-bit for head_dim=64)",
+    )
+    serve_parser.add_argument(
+        "--kv-cache-turboquant-group-size",
+        type=int,
+        default=32,
+        help="Group size for TurboQuant quantization (default: 32)",
     )
     serve_parser.add_argument(
         "--stream-interval",

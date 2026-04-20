@@ -109,6 +109,12 @@ def estimate_kv_cache_memory(cache: list[Any]) -> int:
     for layer_cache in cache:
         if layer_cache is None:
             continue
+        # TurboQuantKVCache: has values_compressed instead of values
+        from .turboquant import TurboQuantKVCache
+
+        if isinstance(layer_cache, TurboQuantKVCache):
+            total_bytes += layer_cache.memory_bytes
+            continue
         # Handle different cache object types
         # Check dict first since dicts have .keys() method that would match below
         if isinstance(layer_cache, dict) and "state" in layer_cache:
@@ -170,6 +176,10 @@ class MemoryCacheConfig:
     kv_bits: int = 8
     kv_group_size: int = 64
     kv_min_quantize_tokens: int = 256
+    # TurboQuant V-only compression (asymmetric: K=FP16, V=3-4bit)
+    kv_turboquant: bool = False
+    kv_turboquant_bits: int | None = None  # None = auto-select by head_dim
+    kv_turboquant_group_size: int = 32
 
     def __post_init__(self) -> None:
         if not 0.0 < self.max_memory_percent <= 1.0:
@@ -289,6 +299,11 @@ def _trim_cache_offset(cache: list[Any], trim_by: int) -> list[Any]:
             tc.group_size = layer_cache.group_size
             tc.bits = layer_cache.bits
             trimmed.append(tc)
+        elif hasattr(layer_cache, "values_compressed"):
+            # TurboQuantKVCache — use its trim method on a copy
+            tc = copy.copy(layer_cache)
+            tc.trim(trim_by)
+            trimmed.append(tc)
         elif (
             hasattr(layer_cache, "offset")
             and hasattr(layer_cache, "keys")
@@ -406,6 +421,53 @@ def _dequantize_cache(cache: list[Any]) -> list[Any]:
     return result
 
 
+def _turboquant_compress_cache(
+    cache: list[Any], bits: int | None, group_size: int
+) -> list[Any]:
+    """Compress KVCache V tensors using TurboQuant (K stays FP16)."""
+    from mlx_lm.models.cache import KVCache
+
+    from .turboquant import TurboQuantConfig, TurboQuantKVCache, auto_select_bits
+
+    compressed_count = 0
+    result = []
+    for layer in cache:
+        if layer is None:
+            result.append(layer)
+            continue
+        if isinstance(layer, KVCache) and layer.keys is not None:
+            head_dim = layer.values.shape[-1] if layer.values is not None else 128
+            actual_bits = bits if bits is not None else auto_select_bits(head_dim)
+            config = TurboQuantConfig(bits=actual_bits, group_size=group_size)
+            result.append(TurboQuantKVCache.from_kv_cache(layer, config))
+            compressed_count += 1
+        else:
+            result.append(layer)
+
+    if compressed_count > 0:
+        logger.debug(
+            f"TurboQuant compressed {compressed_count}/{len(cache)} layers "
+            f"({bits or 'auto'}-bit, group_size={group_size})"
+        )
+    return result
+
+
+def _turboquant_decompress_cache(cache: list[Any]) -> list[Any]:
+    """Decompress TurboQuantKVCache layers back to regular KVCache."""
+    from .turboquant import TurboQuantKVCache
+
+    result = []
+    for layer in cache:
+        if layer is None:
+            result.append(layer)
+            continue
+        if isinstance(layer, TurboQuantKVCache) and layer.keys is not None:
+            result.append(layer.to_kv_cache())
+        else:
+            result.append(layer)
+    return result
+
+
 class MemoryAwarePrefixCache:
     """
     Prefix cache with memory-based eviction.
@@ -464,6 +526,14 @@ class MemoryAwarePrefixCache:
             f"max_entries={self._config.max_entries}"
         )
 
+    def _decompress_cache(self, cache: list[Any]) -> list[Any]:
+        """Decompress cache layers (TurboQuant or standard quantization)."""
+        if self._config.kv_turboquant:
+            return _turboquant_decompress_cache(cache)
+        elif self._config.kv_quantize:
+            return _dequantize_cache(cache)
+        return cache
+
     def fetch(self, tokens: list[int]) -> tuple[list[Any] | None, list[int]]:
         """
         Find cached KV state for the given tokens.
@@ -500,8 +570,7 @@ class MemoryAwarePrefixCache:
             # Deep copy: cache objects have mutable offset/state that
             # generation modifies in-place, corrupting the stored entry.
             cache_out = copy.deepcopy(entry.cache)
-            if self._config.kv_quantize:
-                cache_out = _dequantize_cache(cache_out)
+            cache_out = self._decompress_cache(cache_out)
             return cache_out, []
 
         # --- O(log N) prefix & supersequence match via sorted index ---
@@ -576,11 +645,7 @@ class MemoryAwarePrefixCache:
                 self._stats.hits += 1
                 self._stats.tokens_saved += n_requested
                 self._last_match_type = "supersequence"
-                trimmed_cache = (
-                    _dequantize_cache(trimmed_cache)
-                    if self._config.kv_quantize
-                    else trimmed_cache
-                )
+                trimmed_cache = self._decompress_cache(trimmed_cache)
                 return trimmed_cache, []
             else:
                 self._entries.move_to_end(best_super.tokens)
@@ -588,8 +653,7 @@ class MemoryAwarePrefixCache:
                 self._stats.tokens_saved += n_requested
                 self._last_match_type = "supersequence"
                 cache_out = copy.deepcopy(best_super.cache)
-                if self._config.kv_quantize:
-                    cache_out = _dequantize_cache(cache_out)
+                cache_out = self._decompress_cache(cache_out)
                 return cache_out, []
 
         # --- Prefix match ---
@@ -600,8 +664,7 @@ class MemoryAwarePrefixCache:
             remaining = tokens[best_length:]
             self._last_match_type = "prefix"
             cache_out = copy.deepcopy(best_match.cache)
-            if self._config.kv_quantize:
-                cache_out = _dequantize_cache(cache_out)
+            cache_out = self._decompress_cache(cache_out)
             return cache_out, remaining
 
         # --- LCP (Longest Common Prefix) for divergent sequences ---
@@ -668,11 +731,7 @@ class MemoryAwarePrefixCache:
                     f"trimmed={excess} remaining={len(remaining)}"
                 )
                 self._last_match_type = "lcp"
-                trimmed_cache = (
-                    _dequantize_cache(trimmed_cache)
-                    if self._config.kv_quantize
-                    else trimmed_cache
-                )
+                trimmed_cache = self._decompress_cache(trimmed_cache)
                 return trimmed_cache, remaining
 
         self._stats.misses += 1
@@ -715,8 +774,17 @@ class MemoryAwarePrefixCache:
         # Trim oversized KV arrays to actual used size
         cache = _trim_to_offset(cache)
 
-        # Quantize if enabled and sequence is long enough
+        # Compress cache for storage (TurboQuant or standard quantization)
         if (
+            self._config.kv_turboquant
+            and len(tokens) >= self._config.kv_min_quantize_tokens
+        ):
+            cache = _turboquant_compress_cache(
+                cache,
+                self._config.kv_turboquant_bits,
+                self._config.kv_turboquant_group_size,
+            )
+        elif (
             self._config.kv_quantize
             and len(tokens) >= self._config.kv_min_quantize_tokens
         ):

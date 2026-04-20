@@ -422,6 +422,7 @@ def _turboquant_compress_cache(
 
     from .turboquant import TurboQuantConfig, TurboQuantKVCache, auto_select_bits
 
+    compressed_count = 0
     result = []
     for layer in cache:
         if layer is None:
@@ -432,8 +433,15 @@ def _turboquant_compress_cache(
             actual_bits = bits if bits is not None else auto_select_bits(head_dim)
             config = TurboQuantConfig(bits=actual_bits, group_size=group_size)
             result.append(TurboQuantKVCache.from_kv_cache(layer, config))
+            compressed_count += 1
         else:
             result.append(layer)
+
+    if compressed_count > 0:
+        logger.debug(
+            f"TurboQuant compressed {compressed_count}/{len(cache)} layers "
+            f"({bits or 'auto'}-bit, group_size={group_size})"
+        )
     return result
 
 

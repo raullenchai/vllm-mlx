@@ -1035,8 +1035,9 @@ Examples:
     serve_parser.add_argument(
         "--kv-cache-turboquant",
         action="store_true",
-        help="Enable TurboQuant V-cache compression (3-4 bit, ~44%% V-cache savings). "
-        "K stays FP16. Experimental — mutually exclusive with --kv-cache-quantization.",
+        help="Enable TurboQuant V-cache compression (3-4 bit, ~86%% prefix cache savings "
+        "on dense models). K stays FP16. Experimental — mutually exclusive with "
+        "--kv-cache-quantization.",
     )
     serve_parser.add_argument(
         "--kv-cache-turboquant-bits",

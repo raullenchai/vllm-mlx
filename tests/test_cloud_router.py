@@ -4,9 +4,6 @@ Tests for cloud routing feature.
 
 Tests cover:
 - CloudRouter class (vllm_mlx/cloud_router.py)
-- MLXLanguageModel.estimate_new_tokens (vllm_mlx/models/llm.py)
-- SimpleEngine.build_prompt and .model (vllm_mlx/engine/simple.py)
-- Integration scenarios
 """
 
 import json
@@ -428,4 +425,3 @@ class TestCloudRouterStreamCompletion:
         assert result_chunks == ["data: [DONE]\n\n"]
 
 
-# MLXLanguageModel and SimpleEngine tests removed (SimpleEngine deprecated)

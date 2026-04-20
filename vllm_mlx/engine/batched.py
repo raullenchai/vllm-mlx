@@ -955,7 +955,6 @@ class BatchedEngine(BaseEngine):
             model: Pre-loaded MLX model
             tokenizer: Pre-loaded tokenizer
             start_engine: Whether to start the engine loop immediately.
-                         Set to False for HybridEngine (lazy start on first use).
         """
         from ..engine_core import AsyncEngineCore, EngineConfig
         from ..scheduler import SchedulerConfig
@@ -979,7 +978,7 @@ class BatchedEngine(BaseEngine):
             config=engine_config,
         )
 
-        # Only start engine loop if requested (HybridEngine starts lazily)
+        # Only start engine loop if requested
         if start_engine:
             await self._engine.engine.start()
 

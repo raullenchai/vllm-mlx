@@ -1892,11 +1892,21 @@ class Scheduler:
                 if processor is not None:
                     request_logits_processors = [[processor]]
 
+            # Per-request sampler (temperature/top_p may differ per request).
+            # Without this, all requests use the BatchGenerator's default
+            # sampler (argmax), ignoring the requested temperature.
+            request_sampler = make_sampler(
+                temp=request.sampling_params.temperature,
+                top_p=request.sampling_params.top_p,
+                min_p=request.sampling_params.min_p,
+            )
+
             try:
                 uids = self.batch_generator.insert(
                     [tokens_to_process],
                     max_tokens=[request.sampling_params.max_tokens],
                     caches=[cache_to_use] if cache_to_use else None,
+                    samplers=[request_sampler],
                     logits_processors=request_logits_processors,
                 )
             except Exception as e:
@@ -1914,6 +1924,7 @@ class Scheduler:
                         [tokens_to_process],
                         max_tokens=[request.sampling_params.max_tokens],
                         caches=None,
+                        samplers=[request_sampler],
                         logits_processors=request_logits_processors,
                     )
                 else:

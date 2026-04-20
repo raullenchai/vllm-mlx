@@ -697,6 +697,18 @@ Examples:
         default=True,
         help="Enable continuous batching (default: on).",
     )
+    # Deprecated flags — accepted silently to avoid breaking user scripts
+    import argparse as _ap
+
+    parser.add_argument(
+        "--simple-engine", action="store_true", default=False, help=_ap.SUPPRESS
+    )
+    parser.add_argument(
+        "--kv-bits", type=int, default=None, choices=[4, 8], help=_ap.SUPPRESS
+    )
+    parser.add_argument("--kv-group-size", type=int, default=64, help=_ap.SUPPRESS)
+    parser.add_argument("--draft-model", type=str, default=None, help=_ap.SUPPRESS)
+    parser.add_argument("--num-draft-tokens", type=int, default=4, help=_ap.SUPPRESS)
     parser.add_argument(
         "--mcp-config",
         type=str,

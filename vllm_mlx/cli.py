@@ -246,6 +246,26 @@ def serve_command(args):
         server.load_embedding_model(args.embedding_model, lock=True)
         print(f"Embedding model loaded: {args.embedding_model}")
 
+    # Warn about deprecated flags
+    if getattr(args, "simple_engine", False):
+        print(
+            "\n  ⚠ --simple-engine is deprecated and has no effect."
+            "\n    BatchedEngine is now the sole engine — it handles both"
+            "\n    single-user and multi-user workloads with equal performance.\n"
+        )
+    if getattr(args, "kv_bits", None) is not None:
+        print(
+            "\n  ⚠ --kv-bits is deprecated and has no effect."
+            "\n    For prefix cache quantization, use --kv-cache-quantization instead.\n"
+        )
+    if getattr(args, "draft_model", None):
+        print(
+            "\n  ⚠ --draft-model is deprecated and has no effect."
+            "\n    For speculative decoding, use --enable-mtp (requires model with MTP head).\n"
+        )
+    if getattr(args, "specprefill", False):
+        print("\n  ⚠ --specprefill is deprecated and has no effect.\n")
+
     # Build scheduler config
     enable_prefix_cache = args.enable_prefix_cache and not args.disable_prefix_cache
 
@@ -1006,6 +1026,62 @@ Examples:
         action="store_true",
         default=True,
         help="Enable continuous batching (default: on).",
+    )
+    # Deprecated flags — accepted silently to avoid breaking user scripts
+    serve_parser.add_argument(
+        "--simple-engine",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--kv-bits",
+        type=int,
+        default=None,
+        choices=[4, 8],
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--kv-group-size",
+        type=int,
+        default=64,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--draft-model",
+        type=str,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--num-draft-tokens",
+        type=int,
+        default=4,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--specprefill",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--specprefill-threshold",
+        type=int,
+        default=8192,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--specprefill-keep-pct",
+        type=float,
+        default=0.3,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--specprefill-draft-model",
+        type=str,
+        default=None,
+        help=argparse.SUPPRESS,
     )
     serve_parser.add_argument(
         "--gpu-memory-utilization",

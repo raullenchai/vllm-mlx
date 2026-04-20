@@ -556,3 +556,56 @@ class TestMemoryCacheIntegration:
         assert isinstance(compressed[0], TurboQuantKVCache)
         assert compressed[1] is mamba  # Passed through
         assert compressed[2] is None  # Passed through
+
+    def test_trim_cache_offset_with_turboquant(self):
+        """_trim_cache_offset should trim TurboQuantKVCache without mutating original."""
+        from vllm_mlx.memory_cache import (
+            _trim_cache_offset,
+            _turboquant_compress_cache,
+        )
+
+        cache = self._make_cache_list(n_layers=2, seq_len=32)
+        compressed = _turboquant_compress_cache(cache, bits=4, group_size=32)
+
+        # Save original offsets
+        orig_offsets = [c.offset for c in compressed]
+        orig_keys_shapes = [c.keys.shape for c in compressed]
+
+        # Trim 10 tokens
+        trimmed = _trim_cache_offset(compressed, trim_by=10)
+
+        # Trimmed copies should have reduced offset
+        for tc in trimmed:
+            assert tc.offset == 22  # 32 - 10
+
+        # Original entries must NOT be mutated
+        for i, c in enumerate(compressed):
+            assert c.offset == orig_offsets[i]
+            assert c.keys.shape == orig_keys_shapes[i]
+
+    def test_trim_cache_offset_mixed_layers(self):
+        """_trim_cache_offset handles mixed TurboQuantKVCache + other layers."""
+        from unittest.mock import MagicMock
+
+        from mlx_lm.models.cache import KVCache
+
+        from vllm_mlx.memory_cache import (
+            _trim_cache_offset,
+            _turboquant_compress_cache,
+        )
+
+        # Create KVCache + non-KVCache
+        kv = KVCache()
+        kv.keys = mx.array(np.random.randn(1, 4, 20, 128).astype(np.float16))
+        kv.values = mx.array(np.random.randn(1, 4, 20, 128).astype(np.float16))
+        kv.offset = 20
+
+        other = MagicMock()
+
+        compressed = _turboquant_compress_cache([kv], bits=4, group_size=32)
+        mixed = compressed + [other, None]
+
+        trimmed = _trim_cache_offset(mixed, trim_by=5)
+        assert len(trimmed) == 3
+        assert trimmed[0].offset == 15  # TurboQuantKVCache trimmed
+        assert trimmed[2] is None

@@ -709,6 +709,14 @@ Examples:
     parser.add_argument("--kv-group-size", type=int, default=64, help=_ap.SUPPRESS)
     parser.add_argument("--draft-model", type=str, default=None, help=_ap.SUPPRESS)
     parser.add_argument("--num-draft-tokens", type=int, default=4, help=_ap.SUPPRESS)
+    # TurboQuant flags — accepted but only functional via rapid-mlx serve (cli.py)
+    parser.add_argument("--kv-cache-turboquant", action="store_true", help=_ap.SUPPRESS)
+    parser.add_argument(
+        "--kv-cache-turboquant-bits", type=int, default=None, help=_ap.SUPPRESS
+    )
+    parser.add_argument(
+        "--kv-cache-turboquant-group-size", type=int, default=32, help=_ap.SUPPRESS
+    )
     parser.add_argument(
         "--mcp-config",
         type=str,

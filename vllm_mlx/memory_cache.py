@@ -109,8 +109,10 @@ def estimate_kv_cache_memory(cache: list[Any]) -> int:
     for layer_cache in cache:
         if layer_cache is None:
             continue
-        # TurboQuantKVCache (and any cache with memory_bytes property)
-        if hasattr(layer_cache, "values_compressed"):
+        # TurboQuantKVCache: has values_compressed instead of values
+        from .turboquant import TurboQuantKVCache
+
+        if isinstance(layer_cache, TurboQuantKVCache):
             total_bytes += layer_cache.memory_bytes
             continue
         # Handle different cache object types

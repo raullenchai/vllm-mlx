@@ -121,7 +121,6 @@ def _unpack_nibbles(packed: mx.array, original_len: int) -> mx.array:
     low = packed & 0x0F
     *batch, n_packed = packed.shape
     # Interleave high and low nibbles
-    unpacked = mx.zeros((*batch, n_packed * 2), dtype=mx.uint8)
     unpacked = mx.concatenate(
         [mx.expand_dims(high, -1), mx.expand_dims(low, -1)], axis=-1
     ).reshape(*batch, n_packed * 2)

@@ -89,6 +89,46 @@ LLOYD_MAX_BOUNDARIES = {3: _LLOYD_MAX_3BIT_BOUNDS, 4: _LLOYD_MAX_4BIT_BOUNDS}
 
 
 # ---------------------------------------------------------------------------
+# Bit-packing: 2 indices per uint8 (nibble packing)
+# ---------------------------------------------------------------------------
+
+
+def _pack_nibbles(indices: mx.array) -> mx.array:
+    """Pack pairs of 4-bit indices into uint8 (2 per byte).
+
+    Input shape: (..., N) where N is even. Values in [0, 15].
+    Output shape: (..., N//2) dtype uint8.
+    """
+    # Pad to even length if needed
+    *batch, n = indices.shape
+    if n % 2 != 0:
+        indices = mx.pad(indices, [(0, 0)] * len(batch) + [(0, 1)])
+        n += 1
+
+    reshaped = indices.reshape(*batch, n // 2, 2)
+    high = reshaped[..., 0].astype(mx.uint8) << 4
+    low = reshaped[..., 1].astype(mx.uint8) & 0x0F
+    return (high | low).astype(mx.uint8)
+
+
+def _unpack_nibbles(packed: mx.array, original_len: int) -> mx.array:
+    """Unpack uint8 nibble-packed array back to individual indices.
+
+    Input shape: (..., N//2) dtype uint8.
+    Output shape: (..., original_len) dtype uint8.
+    """
+    high = (packed >> 4) & 0x0F
+    low = packed & 0x0F
+    *batch, n_packed = packed.shape
+    # Interleave high and low nibbles
+    unpacked = mx.zeros((*batch, n_packed * 2), dtype=mx.uint8)
+    unpacked = mx.concatenate(
+        [mx.expand_dims(high, -1), mx.expand_dims(low, -1)], axis=-1
+    ).reshape(*batch, n_packed * 2)
+    return unpacked[..., :original_len]
+
+
+# ---------------------------------------------------------------------------
 # Rotation matrix (cached per head_dim)
 # ---------------------------------------------------------------------------
 
@@ -136,8 +176,8 @@ def turboquant_encode(
         rotation: Orthogonal matrix, shape (head_dim, head_dim).
 
     Returns:
-        (indices, scales, zeros) where:
-        - indices: uint8, shape (..., seq_len, head_dim) — codebook indices
+        (packed_indices, scales, zeros) where:
+        - packed_indices: uint8, shape (..., seq_len, ceil(head_dim/2)) — nibble-packed
         - scales: float16, shape (..., seq_len, n_groups) — per-group scale
         - zeros: float16, shape (..., seq_len, n_groups) — per-group mean
     """
@@ -188,11 +228,14 @@ def turboquant_encode(
     scales = group_std.squeeze(-1)  # (..., seq_len, n_groups)
     zeros = group_mean.squeeze(-1)  # (..., seq_len, n_groups)
 
-    return indices, scales, zeros
+    # 4. Bit-pack indices: 2 per uint8 (halves index memory)
+    packed_indices = _pack_nibbles(indices)
+
+    return packed_indices, scales, zeros
 
 
 def turboquant_decode(
-    indices: mx.array,
+    packed_indices: mx.array,
     scales: mx.array,
     zeros: mx.array,
     bits: int,
@@ -203,7 +246,7 @@ def turboquant_decode(
     """Decompress V tensor from TurboQuant format.
 
     Args:
-        indices: uint8 codebook indices, shape (..., seq_len, head_dim)
+        packed_indices: nibble-packed uint8 indices, shape (..., seq_len, head_dim//2)
         scales: float16 per-group scale, shape (..., seq_len, n_groups)
         zeros: float16 per-group mean, shape (..., seq_len, n_groups)
         bits: 3 or 4
@@ -217,8 +260,8 @@ def turboquant_decode(
     codebook = LLOYD_MAX_CODEBOOKS[bits]
     n_groups = scales.shape[-1]
 
-    # 1. Look up codebook values
-    # indices shape: (..., seq_len, head_dim)
+    # 1. Unpack nibble-packed indices and look up codebook values
+    indices = _unpack_nibbles(packed_indices, head_dim)
     dequantized = codebook[indices]  # (..., seq_len, head_dim)
 
     # 2. Pad if needed, reshape to groups

@@ -16,7 +16,6 @@ from vllm_mlx.turboquant import (
     turboquant_encode,
 )
 
-
 # ---------------------------------------------------------------------------
 # TurboQuantConfig
 # ---------------------------------------------------------------------------
@@ -169,8 +168,13 @@ class TestEncodeDecode:
             gaussian_data_128, bits=4, group_size=32, rotation=rotation_128
         )
         reconstructed = turboquant_decode(
-            indices, scales, zeros, bits=4, group_size=32,
-            rotation=rotation_128, head_dim=128,
+            indices,
+            scales,
+            zeros,
+            bits=4,
+            group_size=32,
+            rotation=rotation_128,
+            head_dim=128,
         )
 
         # Cosine similarity per vector
@@ -187,8 +191,13 @@ class TestEncodeDecode:
             gaussian_data_128, bits=3, group_size=32, rotation=rotation_128
         )
         reconstructed = turboquant_decode(
-            indices, scales, zeros, bits=3, group_size=32,
-            rotation=rotation_128, head_dim=128,
+            indices,
+            scales,
+            zeros,
+            bits=3,
+            group_size=32,
+            rotation=rotation_128,
+            head_dim=128,
         )
 
         orig = np.array(gaussian_data_128.reshape(-1, 128), dtype=np.float32)
@@ -205,8 +214,13 @@ class TestEncodeDecode:
             gaussian_data_64, bits=4, group_size=32, rotation=rotation_64
         )
         reconstructed = turboquant_decode(
-            indices, scales, zeros, bits=4, group_size=32,
-            rotation=rotation_64, head_dim=64,
+            indices,
+            scales,
+            zeros,
+            bits=4,
+            group_size=32,
+            rotation=rotation_64,
+            head_dim=64,
         )
 
         orig = np.array(gaussian_data_64.reshape(-1, 64), dtype=np.float32)
@@ -223,8 +237,13 @@ class TestEncodeDecode:
             gaussian_data_128, bits=4, group_size=32, rotation=rotation_128
         )
         reconstructed = turboquant_decode(
-            indices, scales, zeros, bits=4, group_size=32,
-            rotation=rotation_128, head_dim=128,
+            indices,
+            scales,
+            zeros,
+            bits=4,
+            group_size=32,
+            rotation=rotation_128,
+            head_dim=128,
         )
         mse = float(mx.mean((gaussian_data_128 - reconstructed) ** 2))
         assert mse < 0.05, f"4-bit MSE {mse:.4f} > 0.05"
@@ -234,8 +253,13 @@ class TestEncodeDecode:
             gaussian_data_128, bits=3, group_size=32, rotation=rotation_128
         )
         reconstructed = turboquant_decode(
-            indices, scales, zeros, bits=3, group_size=32,
-            rotation=rotation_128, head_dim=128,
+            indices,
+            scales,
+            zeros,
+            bits=3,
+            group_size=32,
+            rotation=rotation_128,
+            head_dim=128,
         )
         mse = float(mx.mean((gaussian_data_128 - reconstructed) ** 2))
         assert mse < 0.15, f"3-bit MSE {mse:.4f} > 0.15"
@@ -246,25 +270,28 @@ class TestEncodeDecode:
         )
         assert indices.dtype == mx.uint8
 
-    def test_indices_range_4bit(self, gaussian_data_128, rotation_128):
-        indices, _, _ = turboquant_encode(
+    def test_packed_indices_range_4bit(self, gaussian_data_128, rotation_128):
+        """Packed indices are uint8 with nibble-packed values."""
+        packed, _, _ = turboquant_encode(
             gaussian_data_128, bits=4, group_size=32, rotation=rotation_128
         )
-        assert int(mx.max(indices)) <= 15
+        assert packed.dtype == mx.uint8
+        # Each byte has high nibble + low nibble, each in [0,15]
+        assert int(mx.max(packed)) <= 255
 
-    def test_indices_range_3bit(self, gaussian_data_128, rotation_128):
-        indices, _, _ = turboquant_encode(
+    def test_packed_indices_range_3bit(self, gaussian_data_128, rotation_128):
+        packed, _, _ = turboquant_encode(
             gaussian_data_128, bits=3, group_size=32, rotation=rotation_128
         )
-        assert int(mx.max(indices)) <= 7
+        assert packed.dtype == mx.uint8
 
     def test_output_shapes(self, gaussian_data_128, rotation_128):
-        """Verify output shapes are correct."""
-        indices, scales, zeros = turboquant_encode(
+        """Verify output shapes are correct (packed indices)."""
+        packed, scales, zeros = turboquant_encode(
             gaussian_data_128, bits=3, group_size=32, rotation=rotation_128
         )
-        # indices: same as input except last dim = head_dim
-        assert indices.shape == gaussian_data_128.shape
+        # packed indices: last dim = ceil(head_dim/2) due to nibble packing
+        assert packed.shape == (1, 8, 32, 64)  # 128 // 2
         # scales/zeros: (..., seq_len, n_groups)
         n_groups = 128 // 32  # = 4
         assert scales.shape == (1, 8, 32, n_groups)
@@ -280,8 +307,13 @@ class TestEncodeDecode:
             data, bits=4, group_size=32, rotation=rotation
         )
         reconstructed = turboquant_decode(
-            indices, scales, zeros, bits=4, group_size=32,
-            rotation=rotation, head_dim=100,
+            indices,
+            scales,
+            zeros,
+            bits=4,
+            group_size=32,
+            rotation=rotation,
+            head_dim=100,
         )
         assert reconstructed.shape == data.shape
 
@@ -295,8 +327,13 @@ class TestEncodeDecode:
             data, bits=4, group_size=32, rotation=rotation
         )
         reconstructed = turboquant_decode(
-            indices, scales, zeros, bits=4, group_size=32,
-            rotation=rotation, head_dim=128,
+            indices,
+            scales,
+            zeros,
+            bits=4,
+            group_size=32,
+            rotation=rotation,
+            head_dim=128,
         )
         assert reconstructed.shape == data.shape
 
@@ -364,9 +401,8 @@ class TestTurboQuantKVCache:
         compressed_bytes = indices.nbytes + scales.nbytes + zeros.nbytes
 
         ratio = compressed_bytes / fp16_v_bytes
-        # uint8 indices + fp16 scales/zeros: ~56% of FP16 V
-        # Phase 2 with bit-packing will bring this to ~25-35%
-        assert ratio < 0.65, f"Compression ratio {ratio:.2f} > 0.65"
+        # Nibble-packed indices (half size) + fp16 scales/zeros: ~31% of FP16 V
+        assert ratio < 0.40, f"Compression ratio {ratio:.2f} > 0.40"
 
     def test_3bit_memory_savings(self, mock_kv_cache):
         config3 = TurboQuantConfig(bits=3, group_size=32)
@@ -377,7 +413,7 @@ class TestTurboQuantKVCache:
         compressed_bytes = indices.nbytes + scales.nbytes + zeros.nbytes
 
         ratio = compressed_bytes / fp16_v_bytes
-        assert ratio < 0.65, f"3-bit ratio {ratio:.2f} > 0.65"
+        assert ratio < 0.40, f"3-bit ratio {ratio:.2f} > 0.40"
 
     def test_is_trimmable(self, mock_kv_cache, config):
         tq = TurboQuantKVCache.from_kv_cache(mock_kv_cache, config)
@@ -416,3 +452,107 @@ class TestTurboQuantKVCache:
         # Should be less than FP16 keys + FP16 values
         fp16_total = mock_kv_cache.keys.nbytes + mock_kv_cache.values.nbytes
         assert mem < fp16_total
+
+
+# ---------------------------------------------------------------------------
+# Integration: memory_cache compress/decompress
+# ---------------------------------------------------------------------------
+
+
+class TestMemoryCacheIntegration:
+    """Test TurboQuant wiring in memory_cache.py."""
+
+    def _make_cache_list(self, n_layers=4, seq_len=32, n_heads=8, head_dim=128):
+        """Create a list of real KVCache layers."""
+        from mlx_lm.models.cache import KVCache
+
+        cache = []
+        np.random.seed(0)
+        for _ in range(n_layers):
+            kv = KVCache()
+            kv.keys = mx.array(
+                np.random.randn(1, n_heads, seq_len, head_dim).astype(np.float16)
+            )
+            kv.values = mx.array(
+                np.random.randn(1, n_heads, seq_len, head_dim).astype(np.float16)
+            )
+            kv.offset = seq_len
+            cache.append(kv)
+        return cache
+
+    def test_compress_decompress_roundtrip(self):
+        """Compress then decompress should produce valid KVCache layers."""
+        from vllm_mlx.memory_cache import (
+            _turboquant_compress_cache,
+            _turboquant_decompress_cache,
+        )
+
+        cache = self._make_cache_list()
+        compressed = _turboquant_compress_cache(cache, bits=4, group_size=32)
+
+        # All layers should be TurboQuantKVCache
+        for layer in compressed:
+            assert isinstance(layer, TurboQuantKVCache)
+
+        decompressed = _turboquant_decompress_cache(compressed)
+
+        # All layers should have keys and values
+        for layer in decompressed:
+            assert layer.keys is not None
+            assert layer.values is not None
+
+    def test_compress_memory_reduction(self):
+        """Compressed cache should use less total memory."""
+        from vllm_mlx.memory_cache import (
+            _turboquant_compress_cache,
+            estimate_kv_cache_memory,
+        )
+
+        cache = self._make_cache_list()
+        original_mem = sum(layer.keys.nbytes + layer.values.nbytes for layer in cache)
+
+        compressed = _turboquant_compress_cache(cache, bits=4, group_size=32)
+        compressed_mem = estimate_kv_cache_memory(compressed)
+
+        # Compressed should be significantly smaller
+        ratio = compressed_mem / original_mem
+        assert ratio < 0.75, f"Compression ratio {ratio:.2f} > 0.75"
+        assert compressed_mem > 0, "Memory estimate should not be 0"
+
+    def test_none_layers_passthrough(self):
+        """None layers should pass through unchanged."""
+        from vllm_mlx.memory_cache import (
+            _turboquant_compress_cache,
+            _turboquant_decompress_cache,
+        )
+
+        cache = [None, None]
+        compressed = _turboquant_compress_cache(cache, bits=4, group_size=32)
+        assert compressed == [None, None]
+
+        decompressed = _turboquant_decompress_cache(compressed)
+        assert decompressed == [None, None]
+
+    def test_mixed_layers(self):
+        """Non-KVCache layers should pass through unchanged."""
+        from unittest.mock import MagicMock
+
+        from mlx_lm.models.cache import KVCache
+
+        from vllm_mlx.memory_cache import _turboquant_compress_cache
+
+        # Create a mix: KVCache + non-KVCache
+        kv = KVCache()
+        np.random.seed(0)
+        kv.keys = mx.array(np.random.randn(1, 8, 32, 128).astype(np.float16))
+        kv.values = mx.array(np.random.randn(1, 8, 32, 128).astype(np.float16))
+        kv.offset = 32
+
+        mamba = MagicMock()  # Not a KVCache instance
+
+        cache = [kv, mamba, None]
+        compressed = _turboquant_compress_cache(cache, bits=4, group_size=32)
+
+        assert isinstance(compressed[0], TurboQuantKVCache)
+        assert compressed[1] is mamba  # Passed through
+        assert compressed[2] is None  # Passed through

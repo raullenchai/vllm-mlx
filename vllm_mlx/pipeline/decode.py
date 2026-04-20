@@ -8,8 +8,8 @@ Usage::
 
     from vllm_mlx.pipeline.decode import StandardDecode
 
-    decode = StandardDecode(model, tokenizer, sampler, prefill_step_size=2048)
-    uid = decode.insert(DecodeRequest(uid=0, tokens=[...], max_tokens=100))
+    decode = StandardDecode(model, default_sampler=sampler, prefill_step_size=2048)
+    uid = decode.insert(DecodeRequest(tokens=[...], max_tokens=100))
     while decode.has_active():
         for result in decode.step():
             print(result.token, result.finish_reason)

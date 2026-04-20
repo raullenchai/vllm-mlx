@@ -60,11 +60,15 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
             model, tokenizer = load(model_name, tokenizer_config=tokenizer_config)
             logger.info("Gemma 4 loaded natively via mlx-lm")
             return model, tokenizer
-        except Exception:
-            # Fall back to our wrapper for older mlx-lm
+        except Exception as e:
+            # Fall back to our wrapper for older mlx-lm versions
+            # that lack native gemma4 architecture support
             from ..models.gemma4_text import load_gemma4_text
 
-            logger.info("Gemma 4 detected — loading via text-only wrapper (legacy mlx-lm)")
+            logger.info(
+                f"Gemma 4 native load failed ({e}), "
+                "falling back to text-only wrapper (legacy mlx-lm)"
+            )
             return load_gemma4_text(model_name, tokenizer_config)
 
     try:

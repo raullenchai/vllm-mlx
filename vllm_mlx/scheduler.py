@@ -1100,6 +1100,10 @@ class Scheduler:
         self.batch_generator: BatchGenerator | None = None
         self._current_sampler_params: tuple | None = None
 
+        # Pipeline decode strategy (mlx-lm 0.31+ public API, no monkey-patching)
+        self._decode: Any = None  # StandardDecode or None
+        self._use_pipeline: bool = not hasattr(BatchGenerator, "_process_prompts")
+
         # Prefix cache for KV state reuse
         self.prefix_cache: PrefixCacheManager | None = None
         self.memory_aware_cache: MemoryAwarePrefixCache | None = None
@@ -1224,7 +1228,11 @@ class Scheduler:
     def _create_batch_generator(
         self, sampling_params: SamplingParams
     ) -> BatchGenerator:
-        """Create a BatchGenerator with the given sampling parameters."""
+        """Create a BatchGenerator with the given sampling parameters.
+
+        On mlx-lm 0.31+, also creates a StandardDecode strategy that wraps
+        the BatchGenerator via public API (no monkey-patching).
+        """
         sampler = make_sampler(
             temp=sampling_params.temperature,
             top_p=sampling_params.top_p,
@@ -1232,19 +1240,39 @@ class Scheduler:
         )
 
         stop_tokens = self._get_stop_tokens()
-        # Add custom stop token IDs
         if sampling_params.stop_token_ids:
             stop_tokens.update(sampling_params.stop_token_ids)
 
-        bg = BatchGenerator(
-            model=self.model,
-            max_tokens=sampling_params.max_tokens,
-            stop_tokens=stop_tokens,
-            sampler=sampler,
-            prefill_batch_size=self.config.prefill_batch_size,
-            completion_batch_size=self.config.completion_batch_size,
-            prefill_step_size=self.config.prefill_step_size,
-        )
+        if self._use_pipeline:
+            # mlx-lm 0.31+: use StandardDecode (public API, no patching)
+            from .pipeline.decode import StandardDecode
+
+            self._decode = StandardDecode(
+                model=self.model,
+                default_sampler=sampler,
+                max_tokens=sampling_params.max_tokens,
+                stop_tokens=stop_tokens,
+                prefill_batch_size=self.config.prefill_batch_size,
+                completion_batch_size=self.config.completion_batch_size,
+                prefill_step_size=self.config.prefill_step_size,
+            )
+            # Store bg reference for compatibility (cache extraction, etc.)
+            bg = self._decode._bg
+            logger.info(
+                "[pipeline] Using StandardDecode (mlx-lm public API, no monkey-patching)"
+            )
+        else:
+            # Legacy mlx-lm <0.31: direct BatchGenerator with monkey-patching
+            bg = BatchGenerator(
+                model=self.model,
+                max_tokens=sampling_params.max_tokens,
+                stop_tokens=stop_tokens,
+                sampler=sampler,
+                prefill_batch_size=self.config.prefill_batch_size,
+                completion_batch_size=self.config.completion_batch_size,
+                prefill_step_size=self.config.prefill_step_size,
+            )
+            self._decode = None
 
         # Install chunked prefill when explicitly configured OR when
         # memory-aware cache is active (needed for prefix_boundary saves
@@ -1415,6 +1443,12 @@ class Scheduler:
 
     def _close_batch_generator(self) -> None:
         """Properly close BatchGenerator to restore wired_limit."""
+        if self._decode is not None:
+            try:
+                self._decode.close()
+            except Exception as e:
+                logger.debug(f"Error closing StandardDecode: {e}")
+            self._decode = None
         if self.batch_generator is not None:
             try:
                 if hasattr(self.batch_generator, "close"):
@@ -1819,7 +1853,10 @@ class Scheduler:
         if request_id in self.request_id_to_uid:
             was_running = True
             uid = self.request_id_to_uid[request_id]
-            if self.batch_generator is not None:
+            if self._decode is not None:
+                self._decode.remove(uid)
+                removed_from_batch = True
+            elif self.batch_generator is not None:
                 self.batch_generator.remove([uid])
                 removed_from_batch = True
             del self.uid_to_request_id[uid]
@@ -1922,34 +1959,74 @@ class Scheduler:
                 min_p=request.sampling_params.min_p,
             )
 
-            try:
-                uids = self.batch_generator.insert(
-                    [tokens_to_process],
-                    max_tokens=[request.sampling_params.max_tokens],
-                    caches=[cache_to_use] if cache_to_use else None,
-                    samplers=[request_sampler],
-                    logits_processors=request_logits_processors,
-                )
-            except Exception as e:
-                if cache_to_use is not None:
-                    logger.warning(
-                        f"[cache_insert_error] request={request.request_id[:12]} "
-                        f"cache insert failed ({e}), retrying without cache"
+            if self._decode is not None:
+                # Pipeline path: use StandardDecode (public API)
+                from .pipeline.interfaces import DecodeRequest
+
+                try:
+                    uid = self._decode.insert(
+                        DecodeRequest(
+                            tokens=tokens_to_process,
+                            max_tokens=request.sampling_params.max_tokens,
+                            sampler=request_sampler,
+                            logits_processors=request_logits_processors[0]
+                            if request_logits_processors
+                            else None,
+                            cache=cache_to_use,
+                        )
                     )
-                    cache_to_use = None
-                    request.prompt_cache = None
-                    request.cached_tokens = 0
-                    request.remaining_tokens = request.prompt_token_ids
-                    tokens_to_process = request.prompt_token_ids
+                    uids = [uid]
+                except Exception as e:
+                    if cache_to_use is not None:
+                        logger.warning(
+                            f"[cache_insert_error] request={request.request_id[:12]} "
+                            f"cache insert failed ({e}), retrying without cache"
+                        )
+                        cache_to_use = None
+                        request.prompt_cache = None
+                        request.cached_tokens = 0
+                        request.remaining_tokens = request.prompt_token_ids
+                        tokens_to_process = request.prompt_token_ids
+                        uid = self._decode.insert(
+                            DecodeRequest(
+                                tokens=tokens_to_process,
+                                max_tokens=request.sampling_params.max_tokens,
+                                sampler=request_sampler,
+                            )
+                        )
+                        uids = [uid]
+                    else:
+                        raise
+            else:
+                # Legacy path: direct BatchGenerator
+                try:
                     uids = self.batch_generator.insert(
                         [tokens_to_process],
                         max_tokens=[request.sampling_params.max_tokens],
-                        caches=None,
+                        caches=[cache_to_use] if cache_to_use else None,
                         samplers=[request_sampler],
                         logits_processors=request_logits_processors,
                     )
-                else:
-                    raise
+                except Exception as e:
+                    if cache_to_use is not None:
+                        logger.warning(
+                            f"[cache_insert_error] request={request.request_id[:12]} "
+                            f"cache insert failed ({e}), retrying without cache"
+                        )
+                        cache_to_use = None
+                        request.prompt_cache = None
+                        request.cached_tokens = 0
+                        request.remaining_tokens = request.prompt_token_ids
+                        tokens_to_process = request.prompt_token_ids
+                        uids = self.batch_generator.insert(
+                            [tokens_to_process],
+                            max_tokens=[request.sampling_params.max_tokens],
+                            caches=None,
+                            samplers=[request_sampler],
+                            logits_processors=request_logits_processors,
+                        )
+                    else:
+                        raise
 
             if uids:
                 uid = uids[0]
@@ -2353,18 +2430,27 @@ class Scheduler:
 
                 # Run generation step if we have running requests
                 if self.batch_generator is not None and self.running:
-                    raw_next = self.batch_generator.next()
-                    output.has_work = True
+                    responses = None
 
-                    # mlx-lm 0.31+ returns (prompt_responses, generation_responses) tuple
-                    # older versions return a flat list of responses
-                    if isinstance(raw_next, tuple):
-                        _, responses = raw_next
+                    if self._decode is not None:
+                        # Pipeline path: StandardDecode public API
+                        responses = self._decode.step()
+                        output.has_work = True
                     else:
-                        responses = raw_next
+                        # Legacy path: direct BatchGenerator
+                        raw_next = self.batch_generator.next()
+                        output.has_work = True
+                        if isinstance(raw_next, tuple):
+                            _, responses = raw_next
+                        else:
+                            responses = raw_next
 
+                    # Process responses (TokenResult and BG Response are
+                    # both compatible: .uid, .token, .logprobs, .finish_reason)
                     if responses:
-                        outputs, finished_ids = self._process_batch_responses(responses)
+                        outputs, finished_ids = self._process_batch_responses(
+                            responses
+                        )
                         output.outputs = outputs
                         output.finished_request_ids = finished_ids
                         self._cleanup_finished(finished_ids)

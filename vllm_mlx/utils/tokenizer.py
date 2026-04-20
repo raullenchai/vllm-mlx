@@ -50,14 +50,22 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
         )
         return _load_with_tokenizer_fallback(model_name)
 
-    # Gemma 4: mlx-lm doesn't support it yet, load via our text-only wrapper
+    # Gemma 4: mlx-lm 0.31+ supports it natively. Only use our wrapper
+    # for older mlx-lm versions that lack gemma4 model support.
     from ..models.gemma4_text import is_gemma4_model
 
     if is_gemma4_model(model_name):
-        from ..models.gemma4_text import load_gemma4_text
+        try:
+            # Try native mlx-lm load first (0.31+)
+            model, tokenizer = load(model_name, tokenizer_config=tokenizer_config)
+            logger.info("Gemma 4 loaded natively via mlx-lm")
+            return model, tokenizer
+        except Exception:
+            # Fall back to our wrapper for older mlx-lm
+            from ..models.gemma4_text import load_gemma4_text
 
-        logger.info("Gemma 4 detected — loading as text-only via LLM path")
-        return load_gemma4_text(model_name, tokenizer_config)
+            logger.info("Gemma 4 detected — loading via text-only wrapper (legacy mlx-lm)")
+            return load_gemma4_text(model_name, tokenizer_config)
 
     try:
         model, tokenizer = load(model_name, tokenizer_config=tokenizer_config)

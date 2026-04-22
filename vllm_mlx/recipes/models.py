@@ -228,13 +228,13 @@ _r(ModelRecipe(
     measured_ttft_cached_s=3.16,  # measured: 3.16s cached multi-turn
     bandwidth_efficiency=0.53,
     tool_calling=True,
-    tool_parser="hermes",
+    tool_parser="qwen3_coder_xml",  # Qwen3.6 uses XML tool format, NOT hermes JSON
     reasoning=True,
     reasoning_parser="qwen3",
     vision=True,
     turboquant_compatible=True,
-    base_args=["--tool-call-parser", "hermes", "--reasoning-parser", "qwen3"],
-    notes="Qwen3.6 dense 27B. 262K native context. Better reasoning than 3.5-27B.",
+    base_args=["--tool-call-parser", "qwen3_coder_xml", "--reasoning-parser", "qwen3"],
+    notes="Qwen3.6 dense 27B. 262K context. 63% tool calling (qwen3_coder_xml parser). Auto-detected.",
 ))
 
 _r(ModelRecipe(
@@ -253,12 +253,12 @@ _r(ModelRecipe(
     measured_ttft_cached_s=1.24,  # measured: 1.235s cached multi-turn
     bandwidth_efficiency=0.54,
     tool_calling=True,
-    tool_parser="hermes",
+    tool_parser="qwen3_coder_xml",  # Qwen3.6 uses XML tool format
     reasoning=True,
     reasoning_parser="qwen3",
     vision=True,
     turboquant_compatible=True,
-    base_args=["--tool-call-parser", "hermes", "--reasoning-parser", "qwen3"],
+    base_args=["--tool-call-parser", "qwen3_coder_xml", "--reasoning-parser", "qwen3"],
     notes="Qwen3.6: 12% faster than 3.5-35B. Better reasoning + coding. 262K native context.",
 ))
 
@@ -278,12 +278,12 @@ _r(ModelRecipe(
     measured_ttft_cached_s=0.22,
     bandwidth_efficiency=0.54,
     tool_calling=True,
-    tool_parser="hermes",
+    tool_parser="qwen3_coder_xml",  # Qwen3.6 uses XML tool format
     reasoning=True,
     reasoning_parser="qwen3",
     vision=True,
     turboquant_compatible=True,
-    base_args=["--tool-call-parser", "hermes", "--reasoning-parser", "qwen3"],
+    base_args=["--tool-call-parser", "qwen3_coder_xml", "--reasoning-parser", "qwen3"],
     notes="Higher quality than 4-bit. Needs 48GB+ Mac.",
 ))
 

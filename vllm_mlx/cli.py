@@ -789,42 +789,123 @@ def bench_kv_cache_command(args):
     )
 
 
-def models_command(_args):
-    """List available model aliases."""
+def models_command(args):
+    """List available model aliases with hardware-aware recommendations."""
     from vllm_mlx.model_aliases import list_aliases
+    from vllm_mlx.recipes.engine import format_models_table
+    from vllm_mlx.recipes.hardware import HARDWARE_PROFILES, detect_hardware
+    from vllm_mlx.recipes.models import search_recipes
 
-    # Hardcoded benchmark data: (size, speed, recommended Mac tier)
-    MODEL_INFO = {
-        "qwen3.5-4b": ("2.4 GB", "168 tok/s", "16GB+ Mac"),
-        "qwen3.5-9b": ("5.1 GB", "108 tok/s", "24GB+ Mac"),
-        "qwen3.5-27b": ("15.3 GB", "39 tok/s", "32GB+ Mac"),
-        "qwen3.5-35b": ("37 GB", "83 tok/s", "48GB+ Mac"),
-        "qwen3.5-122b": ("65 GB", "57 tok/s", "96GB+ Mac"),
-        "qwen3.6-35b": ("20 GB", "94 tok/s", "32GB+ Mac"),
-        "qwen3-coder": ("45 GB", "74 tok/s", "64GB+ Mac"),
-        "gemma-4-26b": ("14.4 GB", "85 tok/s", "24GB+ Mac"),
-        "gemma-4-31b": ("17 GB", "31 tok/s", "32GB+ Mac"),
-        "qwopus-27b": ("14.8 GB", "39 tok/s", "32GB+ Mac"),
-        "kimi-48b": ("~28 GB", "94 tok/s", "48GB+ Mac"),
-    }
-
-    aliases = list_aliases()
-    print()
-    print("  Available model aliases")
-    print("  " + "─" * 70)
-    print(f"  {'Alias':<20} {'Size':<10} {'Speed':<12} {'Recommended'}")
-    print("  " + "─" * 70)
-    for short, full in sorted(aliases.items()):
-        info = MODEL_INFO.get(short)
-        if info:
-            size, speed, rec = info
-            print(f"  {short:<20} {size:<10} {speed:<12} {rec}")
+    # Resolve hardware
+    hw = None
+    if not getattr(args, "all_hardware", False):
+        hw_id = getattr(args, "hardware", None)
+        if hw_id:
+            hw = HARDWARE_PROFILES.get(hw_id)
+            if not hw:
+                print(f"  Unknown hardware: {hw_id}")
+                print(f"  Available: {', '.join(sorted(HARDWARE_PROFILES.keys()))}")
+                sys.exit(1)
         else:
-            print(f"  {short:<20} → {full}")
+            hw = detect_hardware()
+            if hw:
+                print(f"\n  Detected: {hw.name} ({hw.memory_gb}GB, {hw.bandwidth_gbs} GB/s)")
+
+    # Show recipe-based table
+    recipes = search_recipes()
+    if recipes:
+        print()
+        print(format_models_table(recipes, hw))
+
+    # Also show aliases not covered by recipes
+    aliases = list_aliases()
+    recipe_ids = {r.id for r in recipes}
+    extra = {k: v for k, v in aliases.items() if k not in recipe_ids}
+    if extra:
+        print("  Other aliases (no recipe yet):")
+        for short, full in sorted(extra.items()):
+            print(f"    {short:<20} → {full}")
+        print()
+
+
+def recipe_command(args):
+    """Show hardware-optimized recipe for a model."""
+    import json as json_mod
+
+    from vllm_mlx.recipes.engine import compute_recommendation, format_recommendation
+    from vllm_mlx.recipes.hardware import HARDWARE_PROFILES, detect_hardware
+    from vllm_mlx.recipes.models import MODEL_RECIPES, get_recipe, search_recipes
+
+    # Find recipe
+    recipe = get_recipe(args.model)
+    if not recipe:
+        matches = search_recipes(args.model)
+        if matches:
+            print(f"\n  No exact match for '{args.model}'. Did you mean:")
+            for m in matches:
+                print(f"    {m.id:<22} {m.name}")
+        else:
+            print(f"\n  No recipe found for '{args.model}'.")
+            print(f"  Available: {', '.join(sorted(MODEL_RECIPES.keys()))}")
+        sys.exit(1)
+
+    # Resolve hardware
+    hw_id = getattr(args, "hardware", None)
+    if hw_id:
+        hw = HARDWARE_PROFILES.get(hw_id)
+        if not hw:
+            print(f"  Unknown hardware: {hw_id}")
+            print(f"  Available: {', '.join(sorted(HARDWARE_PROFILES.keys()))}")
+            sys.exit(1)
+    else:
+        hw = detect_hardware()
+        if hw:
+            print(f"\n  Detected: {hw.name}")
+        else:
+            print("\n  Could not detect hardware. Use --hardware <id> to specify.")
+            print(f"  Available: {', '.join(sorted(HARDWARE_PROFILES.keys()))}")
+            sys.exit(1)
+
+    # Compute recommendation
+    rec = compute_recommendation(recipe, hw, getattr(args, "context", None))
+
+    if getattr(args, "json_output", False):
+        out = {
+            "model_id": recipe.model_id,
+            "hardware": hw.name,
+            "fits": rec.fits,
+            "max_context_tokens": rec.max_context_tokens,
+            "max_context_turbo_tokens": rec.max_context_turbo_tokens,
+            "estimated_tps": round(rec.estimated_tps, 1),
+            "status": rec.status,
+            "command": rec.command,
+            "features": {
+                "tool_calling": recipe.tool_calling,
+                "reasoning": recipe.reasoning,
+                "vision": recipe.vision,
+                "turboquant": recipe.turboquant_compatible,
+            },
+        }
+        print(json_mod.dumps(out, indent=2))
+        return
+
     print()
-    print(f"  {len(aliases)} aliases available")
-    print("  Usage: rapid-mlx serve <alias>")
+    print(format_recommendation(rec))
     print()
+
+    # --run: start server with recommended config
+    if getattr(args, "run", False):
+        if not rec.fits:
+            print("  Cannot start: model does not fit in memory.")
+            sys.exit(1)
+        import shlex
+
+        cmd_parts = shlex.split(rec.command.replace("\\\n", " "))
+        # Reuse serve logic
+        print(f"  Starting server with recommended config...\n")
+        import subprocess
+
+        subprocess.execvp(cmd_parts[0], cmd_parts)
 
 
 def agents_command(args):
@@ -1507,7 +1588,51 @@ Examples:
     )
 
     # Models command
-    subparsers.add_parser("models", help="List available model aliases")
+    models_parser = subparsers.add_parser("models", help="List available model aliases")
+    models_parser.add_argument(
+        "--hardware",
+        type=str,
+        default=None,
+        help="Hardware profile ID (e.g. m4-max-128). Auto-detected if omitted.",
+    )
+    models_parser.add_argument(
+        "--all-hardware",
+        action="store_true",
+        help="Show info without hardware-specific recommendations",
+    )
+
+    # Recipe command
+    recipe_parser = subparsers.add_parser(
+        "recipe",
+        help="Show hardware-optimized recipe for a model",
+    )
+    recipe_parser.add_argument(
+        "model",
+        help="Model short ID, alias, or HuggingFace ID (e.g. qwen3.5-35b)",
+    )
+    recipe_parser.add_argument(
+        "--hardware",
+        type=str,
+        default=None,
+        help="Hardware profile ID (e.g. m4-max-128). Auto-detected if omitted.",
+    )
+    recipe_parser.add_argument(
+        "--context",
+        type=int,
+        default=None,
+        help="Desired context length in tokens (default: 32768)",
+    )
+    recipe_parser.add_argument(
+        "--run",
+        action="store_true",
+        help="Start the server with the recommended configuration",
+    )
+    recipe_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Output recommendation as JSON",
+    )
 
     # Agents command
     agents_parser = subparsers.add_parser(
@@ -1594,7 +1719,7 @@ Examples:
     if (
         hasattr(args, "model")
         and args.model
-        and getattr(args, "command", None) != "doctor"
+        and getattr(args, "command", None) not in ("doctor", "recipe")
     ):
         from vllm_mlx.model_aliases import resolve_model
 
@@ -1614,6 +1739,8 @@ Examples:
         bench_kv_cache_command(args)
     elif args.command == "models":
         models_command(args)
+    elif args.command == "recipe":
+        recipe_command(args)
     elif args.command == "agents":
         agents_command(args)
     elif args.command == "doctor":

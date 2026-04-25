@@ -54,16 +54,48 @@ def _has_partial_calling_tool_marker(text: str) -> bool:
     """Return True when a stream tail may become `Calling tool:`."""
     marker = "Calling tool:"
     tail = text.rstrip()
-    stripped_tail = tail
-    while stripped_tail and stripped_tail[-1] in "[ \t\r\n":
-        if stripped_tail[-1] == "[":
-            return True
-        stripped_tail = stripped_tail[:-1]
+    if tail.endswith("[") and _starts_current_line(tail, len(tail) - 1):
+        return True
     for i in range(1, len(marker)):
         partial = marker[:i]
-        if tail.endswith(partial) or tail.endswith(f"[{partial}"):
-            return True
+        if tail.endswith(partial):
+            start = len(tail) - len(partial)
+            if _starts_current_line(tail, start):
+                return True
+        if tail.endswith(f"[{partial}"):
+            start = len(tail) - len(partial) - 1
+            if _starts_current_line(tail, start):
+                return True
     return False
+
+
+def _starts_current_line(text: str, start: int) -> bool:
+    """Return True when start is preceded only by whitespace on its line."""
+    line_start = max(text.rfind("\n", 0, start), text.rfind("\r", 0, start)) + 1
+    return text[line_start:start].strip() == ""
+
+
+def _find_trailing_calling_tool_prefix(text: str) -> int | None:
+    marker = "Calling tool:"
+    tail_end = len(text.rstrip())
+    tail = text[:tail_end]
+
+    if tail.endswith("["):
+        start = len(tail) - 1
+        if _starts_current_line(tail, start):
+            return start
+
+    for i in range(1, len(marker)):
+        partial = marker[:i]
+        if tail.endswith(partial):
+            start = len(tail) - len(partial)
+            if _starts_current_line(tail, start):
+                return start
+        if tail.endswith(f"[{partial}"):
+            start = len(tail) - len(partial) - 1
+            if _starts_current_line(tail, start):
+                return start
+    return None
 
 
 def _strip_trailing_calling_tool_prefix(text: str) -> str | None:
@@ -71,31 +103,9 @@ def _strip_trailing_calling_tool_prefix(text: str) -> str | None:
     if not text:
         return None
 
-    marker = "Calling tool:"
-    tail_end = len(text.rstrip())
-    tail = text[:tail_end]
-
-    for i in range(1, len(marker)):
-        partial = marker[:i]
-        if not tail.endswith(partial):
-            continue
-        start = len(tail) - len(partial)
-        while start > 0 and tail[start - 1].isspace():
-            start -= 1
-        while start > 0 and tail[start - 1] == "[":
-            start -= 1
-            while start > 0 and tail[start - 1].isspace():
-                start -= 1
-        return text[:start]
-
-    start = len(tail)
-    saw_bracket = False
-    while start > 0 and tail[start - 1] in "[ \t\r\n":
-        if tail[start - 1] == "[":
-            saw_bracket = True
-        start -= 1
-    if saw_bracket:
-        return text[:start]
+    start = _find_trailing_calling_tool_prefix(text)
+    if start is not None:
+        return text[:start].rstrip()
     return None
 
 

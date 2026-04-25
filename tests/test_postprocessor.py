@@ -342,6 +342,29 @@ class TestStreamingPostProcessorToolCalls:
         assert args["command"] == "npm test"
         assert args["timeout"] == 60000.0
 
+    def test_code_brackets_are_not_treated_as_partial_tool_markers(self):
+        """Do not strip normal code brackets split at chunk boundaries."""
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_call_parser="qwen3_coder_xml",
+        )
+        pp = StreamingPostProcessor(
+            cfg,
+            tools_requested=True,
+            request={"tools": []},
+        )
+        pp.reset()
+
+        index_events = pp.process_chunk(_make_output("const head = game.snake["))
+        array_events = pp.process_chunk(_make_output("const snake = ["))
+
+        assert len(index_events) == 1
+        assert index_events[0].type == "content"
+        assert index_events[0].content == "const head = game.snake["
+        assert len(array_events) == 1
+        assert array_events[0].type == "content"
+        assert array_events[0].content == "const snake = ["
+
     def test_generic_tool_call_drops_missing_required_duplicate(self):
         """Malformed duplicate calls should not reach clients for schema rejection."""
         request = {

@@ -221,6 +221,58 @@ class TestInjectJsonInstruction:
 
 
 # ---------------------------------------------------------------------------
+# _append_tool_continuation_prompt
+# ---------------------------------------------------------------------------
+
+
+class TestAppendToolContinuationPrompt:
+    """Tests for tool-result continuation prompt injection."""
+
+    def test_appends_after_tool_result_when_tools_requested(self):
+        from vllm_mlx.service.helpers import _append_tool_continuation_prompt
+
+        messages = [
+            {"role": "user", "content": "Build the app"},
+            {"role": "assistant", "content": "", "tool_calls": []},
+            {"role": "tool", "tool_call_id": "call_1", "content": "PASS"},
+        ]
+        result, added = _append_tool_continuation_prompt(messages, True)
+
+        assert added is True
+        assert result[-1]["role"] == "user"
+        assert "call the next tool now" in result[-1]["content"]
+        assert len(messages) == 3
+
+    def test_does_not_append_without_tools(self):
+        from vllm_mlx.service.helpers import _append_tool_continuation_prompt
+
+        messages = [{"role": "tool", "content": "PASS"}]
+        result, added = _append_tool_continuation_prompt(messages, False)
+
+        assert added is False
+        assert result is messages
+
+    def test_does_not_append_unless_last_message_is_tool(self):
+        from vllm_mlx.service.helpers import _append_tool_continuation_prompt
+
+        messages = [{"role": "user", "content": "continue"}]
+        result, added = _append_tool_continuation_prompt(messages, True)
+
+        assert added is False
+        assert result is messages
+
+    def test_appends_after_converted_tool_result_user_message(self):
+        from vllm_mlx.service.helpers import _append_tool_continuation_prompt
+
+        messages = [{"role": "user", "content": "[Tool Result (call_1)]: PASS"}]
+        result, added = _append_tool_continuation_prompt(messages, True)
+
+        assert added is True
+        assert result[-1]["role"] == "user"
+        assert "Do not stop with only reasoning" in result[-1]["content"]
+
+
+# ---------------------------------------------------------------------------
 # _extract_token_logprob
 # ---------------------------------------------------------------------------
 

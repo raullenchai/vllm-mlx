@@ -47,6 +47,19 @@ _TOOL_USE_SYSTEM_SUFFIX = (
     "Give direct answers only — no preamble like 'The user asks...' or 'Let me think...'."
 )
 
+_TOOL_CONTINUATION_USER_PROMPT = (
+    "Continue the original task after the tool result above. "
+    "If any work remains and a suitable tool is available, call the next tool now. "
+    "Do not describe the next action. Do not stop with only reasoning. "
+    "Only give a final answer when the task is complete."
+)
+
+_TOOL_CONTINUATION_RETRY_PROMPT = (
+    "Your previous response was only narration/planning after a tool result. "
+    "That is invalid for this tool-using client. "
+    "Call the next required tool now. Do not output any explanatory text."
+)
+
 
 # ── Resolution helpers ─────────────────────────────────────────────
 
@@ -356,6 +369,42 @@ def _inject_json_instruction(messages: list, instruction: str) -> list:
         messages.insert(0, {"role": "system", "content": instruction})
 
     return messages
+
+
+def _message_role(message) -> str | None:
+    return (
+        message.get("role") if isinstance(message, dict) else getattr(message, "role", None)
+    )
+
+
+def _message_content(message):
+    return (
+        message.get("content")
+        if isinstance(message, dict)
+        else getattr(message, "content", None)
+    )
+
+
+def _is_tool_result_message(message) -> bool:
+    role = _message_role(message)
+    if role == "tool":
+        return True
+    if role != "user":
+        return False
+    content = _message_content(message)
+    if not isinstance(content, str):
+        return False
+    stripped = content.lstrip()
+    return stripped.startswith("[Tool Result") or stripped.startswith("<tool_response>")
+
+
+def _append_tool_continuation_prompt(messages: list, tools_requested: bool) -> tuple[list, bool]:
+    """Add a hidden continuation nudge after tool results for local tool models."""
+    if not tools_requested or not messages:
+        return messages, False
+    if not _is_tool_result_message(messages[-1]):
+        return messages, False
+    return messages + [{"role": "user", "content": _TOOL_CONTINUATION_USER_PROMPT}], True
 
 
 def _maybe_pin_system_prompt(messages: list) -> None:

@@ -40,7 +40,9 @@ from ..config import get_config
 from ..engine import GenerationOutput
 from ..middleware.auth import check_rate_limit, verify_api_key
 from ..service.helpers import (
+    _TOOL_CONTINUATION_RETRY_PROMPT,
     _TOOL_USE_SYSTEM_SUFFIX,
+    _append_tool_continuation_prompt,
     _build_usage,
     _disconnect_guard,
     _extract_token_logprob,
@@ -273,6 +275,11 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
             system_msg = {"role": "system", "content": _inject_suffix.strip()}
             messages = [system_msg] + list(messages)
 
+    messages, added_tool_continuation_prompt = _append_tool_continuation_prompt(
+        list(messages),
+        bool(request.tools),
+    )
+
     # Auto-pin system prompt prefix cache blocks
     if cfg.pin_system_prompt:
         _maybe_pin_system_prompt(messages)
@@ -315,7 +322,9 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # Pass through enable_thinking if explicitly set by the client
     if request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = request.enable_thinking
-    elif cfg.no_thinking:
+    elif cfg.no_thinking or (
+        added_tool_continuation_prompt and cfg.tool_call_parser == "qwen3_coder_xml"
+    ):
         chat_kwargs["enable_thinking"] = False
 
     # Cloud routing: offload large-context requests to cloud LLM
@@ -407,7 +416,13 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
                 raise
         return StreamingResponse(
             _disconnect_guard(
-                stream_chat_completion(engine, messages, request, **chat_kwargs),
+                stream_chat_completion(
+                    engine,
+                    messages,
+                    request,
+                    tool_continuation_retry=added_tool_continuation_prompt,
+                    **chat_kwargs,
+                ),
                 raw_request,
             ),
             media_type="text/event-stream",
@@ -578,6 +593,7 @@ async def stream_chat_completion(
     engine,
     messages: list,
     request: ChatCompletionRequest,
+    tool_continuation_retry: bool = False,
     **kwargs,
 ) -> AsyncIterator[str]:
     """Stream chat completion response.
@@ -634,94 +650,34 @@ async def stream_chat_completion(
             logger.info(f"[SSE-ROLE] {_first_sse.strip()[:200]}")
         yield _first_sse
 
-        # Initialize post-processor
-        processor = StreamingPostProcessor(
-            cfg,
-            tools_requested=bool(request.tools),
-            json_mode=bool(
-                request.response_format
-                and getattr(request.response_format, "type", "text") != "text"
-            ),
-            request_dict=request.model_dump(),
-        )
-        processor.set_thinking_model(request.model)
-        processor.reset()
-
         # Track token counts for usage reporting
         prompt_tokens = 0
         completion_tokens = 0
 
-        # Stream content — PostProcessor handles reasoning/tool/sanitize
-        async for output in engine.stream_chat(messages=messages, **kwargs):
-            if hasattr(output, "prompt_tokens") and output.prompt_tokens:
-                prompt_tokens = output.prompt_tokens
-            if hasattr(output, "completion_tokens") and output.completion_tokens:
-                completion_tokens = output.completion_tokens
-
-            for event in processor.process_chunk(output):
-                if event.type == "content":
-                    if not want_logprobs:
-                        _sse = _fast_sse_chunk(event.content, "content")
-                        if _sse:
-                            yield _sse
-                    else:
-                        chunk = ChatCompletionChunk(
-                            id=response_id,
-                            model=_resolve_model_name(request.model),
-                            choices=[
-                                ChatCompletionChunkChoice(
-                                    delta=ChatCompletionChunkDelta(
-                                        content=event.content,
-                                    ),
-                                    logprobs=_build_chunk_logprobs(output),
-                                )
-                            ],
+        def _format_stream_event(event, output: GenerationOutput) -> list[str]:
+            if event.type == "content":
+                if not want_logprobs:
+                    _sse = _fast_sse_chunk(event.content, "content")
+                    return [_sse] if _sse else []
+                chunk = ChatCompletionChunk(
+                    id=response_id,
+                    model=_resolve_model_name(request.model),
+                    choices=[
+                        ChatCompletionChunkChoice(
+                            delta=ChatCompletionChunkDelta(
+                                content=event.content,
+                            ),
+                            logprobs=_build_chunk_logprobs(output),
                         )
-                        yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                    ],
+                )
+                return [f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"]
 
-                elif event.type == "reasoning":
-                    yield _fast_sse_chunk(event.reasoning, "reasoning_content")
+            if event.type == "reasoning":
+                return [_fast_sse_chunk(event.reasoning, "reasoning_content")]
 
-                elif event.type == "tool_call":
-                    chunk = ChatCompletionChunk(
-                        id=response_id,
-                        model=_resolve_model_name(request.model),
-                        choices=[
-                            ChatCompletionChunkChoice(
-                                delta=ChatCompletionChunkDelta(
-                                    tool_calls=event.tool_calls,
-                                ),
-                                finish_reason=event.finish_reason,
-                            )
-                        ],
-                        usage=get_usage(output) if output.finished else None,
-                    )
-                    _tc_sse = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
-                    logger.info(f"[SSE-TC] {_tc_sse.strip()[:300]}")
-                    yield _tc_sse
-
-                elif event.type == "finish":
-                    chunk = ChatCompletionChunk(
-                        id=response_id,
-                        model=_resolve_model_name(request.model),
-                        choices=[
-                            ChatCompletionChunkChoice(
-                                delta=ChatCompletionChunkDelta(
-                                    content=event.content,
-                                    reasoning_content=event.reasoning,
-                                ),
-                                finish_reason=event.finish_reason,
-                                logprobs=_build_chunk_logprobs(output),
-                            )
-                        ],
-                        usage=get_usage(output) if output.finished else None,
-                    )
-                    yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
-
-        # Fallback tool call detection
-        for event in processor.finalize():
             if event.type == "tool_call":
-                tool_chunk = ChatCompletionChunk(
+                chunk = ChatCompletionChunk(
                     id=response_id,
                     model=_resolve_model_name(request.model),
                     choices=[
@@ -729,13 +685,152 @@ async def stream_chat_completion(
                             delta=ChatCompletionChunkDelta(
                                 tool_calls=event.tool_calls,
                             ),
-                            finish_reason="tool_calls",
+                            finish_reason=event.finish_reason,
                         )
                     ],
+                    usage=get_usage(output) if output.finished else None,
                 )
-                _fb_sse = f"data: {tool_chunk.model_dump_json(exclude_none=True)}\n\n"
-                logger.info(f"[SSE-FALLBACK-TC] {_fb_sse.strip()[:300]}")
-                yield _fb_sse
+                _tc_sse = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                logger.info(f"[SSE-TC] {_tc_sse.strip()[:300]}")
+                return [_tc_sse]
+
+            if event.type == "finish":
+                chunk = ChatCompletionChunk(
+                    id=response_id,
+                    model=_resolve_model_name(request.model),
+                    choices=[
+                        ChatCompletionChunkChoice(
+                            delta=ChatCompletionChunkDelta(
+                                content=event.content,
+                                reasoning_content=event.reasoning,
+                            ),
+                            finish_reason=event.finish_reason,
+                            logprobs=_build_chunk_logprobs(output),
+                        )
+                    ],
+                    usage=get_usage(output) if output.finished else None,
+                )
+                return [f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"]
+
+            return []
+
+        retry_attempts = 0
+        active_messages = messages
+        max_tool_continuation_retries = 2 if tool_continuation_retry else 0
+
+        while True:
+            # Initialize post-processor
+            processor = StreamingPostProcessor(
+                cfg,
+                tools_requested=bool(request.tools),
+                json_mode=bool(
+                    request.response_format
+                    and getattr(request.response_format, "type", "text") != "text"
+                ),
+                request_dict=request.model_dump(),
+            )
+            processor.set_thinking_model(request.model)
+            processor.reset()
+
+            buffered_events: list[tuple] = []
+            deferred_finish: tuple | None = None
+            emitted_tool_call = False
+
+            # Stream content — PostProcessor handles reasoning/tool/sanitize
+            async for output in engine.stream_chat(messages=active_messages, **kwargs):
+                if hasattr(output, "prompt_tokens") and output.prompt_tokens:
+                    prompt_tokens = output.prompt_tokens
+                if hasattr(output, "completion_tokens") and output.completion_tokens:
+                    completion_tokens = output.completion_tokens
+
+                retry_window = (
+                    retry_attempts < max_tool_continuation_retries
+                    and not emitted_tool_call
+                )
+
+                for event in processor.process_chunk(output):
+                    if retry_window and event.type in ("content", "reasoning"):
+                        buffered_events.append((event, output))
+                        continue
+
+                    if (
+                        retry_window
+                        and event.type == "finish"
+                        and event.finish_reason == "stop"
+                    ):
+                        deferred_finish = (event, output)
+                        continue
+
+                    if event.type == "tool_call":
+                        emitted_tool_call = True
+                        for buffered_event, buffered_output in buffered_events:
+                            for _sse in _format_stream_event(
+                                buffered_event, buffered_output
+                            ):
+                                yield _sse
+                        buffered_events.clear()
+
+                    for _sse in _format_stream_event(event, output):
+                        yield _sse
+
+            # Fallback tool call detection
+            for event in processor.finalize():
+                if event.type == "tool_call":
+                    emitted_tool_call = True
+                    for buffered_event, buffered_output in buffered_events:
+                        for _sse in _format_stream_event(
+                            buffered_event, buffered_output
+                        ):
+                            yield _sse
+                    buffered_events.clear()
+
+                    tool_chunk = ChatCompletionChunk(
+                        id=response_id,
+                        model=_resolve_model_name(request.model),
+                        choices=[
+                            ChatCompletionChunkChoice(
+                                delta=ChatCompletionChunkDelta(
+                                    tool_calls=event.tool_calls,
+                                ),
+                                finish_reason="tool_calls",
+                            )
+                        ],
+                    )
+                    _fb_sse = (
+                        f"data: {tool_chunk.model_dump_json(exclude_none=True)}\n\n"
+                    )
+                    logger.info(f"[SSE-FALLBACK-TC] {_fb_sse.strip()[:300]}")
+                    yield _fb_sse
+
+            retry_reason = None
+            if deferred_finish and not emitted_tool_call:
+                retry_reason = "text-only stop"
+            elif buffered_events and not emitted_tool_call:
+                retry_reason = "stream exhausted without tool call"
+
+            if retry_reason and retry_attempts < max_tool_continuation_retries:
+                retry_attempts += 1
+                logger.info(
+                    "[tool-continuation] retrying after %s following "
+                    "tool result (attempt %d/%d)",
+                    retry_reason,
+                    retry_attempts,
+                    max_tool_continuation_retries,
+                )
+                active_messages = list(messages) + [
+                    {"role": "user", "content": _TOOL_CONTINUATION_RETRY_PROMPT}
+                ]
+                continue
+
+            for buffered_event, buffered_output in buffered_events:
+                for _sse in _format_stream_event(buffered_event, buffered_output):
+                    yield _sse
+            if deferred_finish:
+                event, output = deferred_finish
+                for _sse in _format_stream_event(event, output):
+                    yield _sse
+
+            break
 
         # Log throughput
         elapsed = time.perf_counter() - start_time

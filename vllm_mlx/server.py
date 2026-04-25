@@ -369,16 +369,18 @@ def _detect_native_tool_support() -> bool:
         True if native format should be preserved
     """
     cfg = get_config()
-    if not cfg.enable_auto_tool_choice or not cfg.tool_call_parser:
+    enable_auto_tool_choice = cfg.enable_auto_tool_choice or _enable_auto_tool_choice
+    tool_call_parser = cfg.tool_call_parser or _tool_call_parser
+    if not enable_auto_tool_choice or not tool_call_parser:
         return False
 
     try:
-        parser_cls = ToolParserManager.get_tool_parser(cfg.tool_call_parser)
+        parser_cls = ToolParserManager.get_tool_parser(tool_call_parser)
         return parser_cls.supports_native_format()
     except KeyError:
         # Parser not found - this is a configuration error, log as error
         logger.error(
-            f"Tool parser '{cfg.tool_call_parser}' not found. "
+            f"Tool parser '{tool_call_parser}' not found. "
             f"Available parsers: {ToolParserManager.list_registered()}"
         )
         return False

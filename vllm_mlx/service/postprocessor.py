@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from ..api.tool_calling import parse_tool_calls
 from ..api.utils import sanitize_output, strip_special_tokens
 from ..domain.events import StreamEvent
 
@@ -121,6 +122,36 @@ class StreamingPostProcessor:
         # the first JSON delimiter ({ or [) is seen, then emit from there.
         self._json_preamble_stripped = False
         self._json_preamble_buffer = ""
+
+    @staticmethod
+    def _tool_calls_to_stream_chunks(tool_calls) -> list[dict]:
+        chunks = []
+        for i, tc in enumerate(tool_calls):
+            if hasattr(tc, "function"):
+                call_id = tc.id
+                name = tc.function.name
+                arguments = tc.function.arguments
+            elif "function" in tc:
+                call_id = tc.get("id")
+                name = tc["function"]["name"]
+                arguments = tc["function"]["arguments"]
+            else:
+                call_id = tc.get("id")
+                name = tc["name"]
+                arguments = tc["arguments"]
+
+            chunks.append(
+                {
+                    "index": i,
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "arguments": arguments,
+                    },
+                }
+            )
+        return chunks
 
     @staticmethod
     def _create_reasoning_parser(cfg: ServerConfig):
@@ -500,6 +531,19 @@ class StreamingPostProcessor:
                 )
                 self.tool_calls_detected = True
 
+        if "Calling tool:" in _fallback_text and not self.tool_calls_detected:
+            _, tool_calls = parse_tool_calls(_fallback_text, self.request)
+            if tool_calls:
+                events.append(
+                    StreamEvent(
+                        type="tool_call",
+                        tool_calls=self._tool_calls_to_stream_chunks(tool_calls),
+                        finish_reason="tool_calls",
+                        tool_calls_detected=True,
+                    )
+                )
+                self.tool_calls_detected = True
+
         return events
 
     def _detect_tool_calls(self, content: str) -> dict | None:
@@ -509,7 +553,12 @@ class StreamingPostProcessor:
         Returns {"tool_calls": [...]} if tool calls detected.
         Returns {"content": "..."} for normal content pass-through.
         """
-        if not self.tool_markup_possible and "<" not in content and "[" not in content:
+        if (
+            not self.tool_markup_possible
+            and "<" not in content
+            and "[" not in content
+            and "Calling tool:" not in content
+        ):
             self.tool_accumulated_text += content
             return {"content": content}
 
@@ -526,11 +575,27 @@ class StreamingPostProcessor:
         )
 
         if tool_result is None:
+            if "Calling tool:" in self.tool_accumulated_text:
+                _, tool_calls = parse_tool_calls(
+                    self.tool_accumulated_text, self.request
+                )
+                if tool_calls:
+                    self.tool_calls_detected = True
+                    return {"tool_calls": self._tool_calls_to_stream_chunks(tool_calls)}
             return None  # inside tool markup
 
         if "tool_calls" in tool_result:
             self.tool_calls_detected = True
             return tool_result
+
+        if "Calling tool:" in self.tool_accumulated_text:
+            _, tool_calls = parse_tool_calls(
+                self.tool_accumulated_text, self.request
+            )
+            if tool_calls:
+                self.tool_calls_detected = True
+                return {"tool_calls": self._tool_calls_to_stream_chunks(tool_calls)}
+            return None
 
         return {"content": tool_result.get("content", "")}
 

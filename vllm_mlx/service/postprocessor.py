@@ -316,7 +316,7 @@ class StreamingPostProcessor:
             return False
         if self.tool_parser:
             return True
-        return self.tools_requested and (
+        return (
             "Calling tool:" in content or "Calling tool:" in self.tool_accumulated_text
         )
 

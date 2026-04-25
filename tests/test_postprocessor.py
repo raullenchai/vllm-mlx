@@ -294,7 +294,7 @@ class TestStreamingPostProcessorToolCalls:
         assert args["todos"][0]["content"] == "Initialize"
 
     def test_bare_calling_tool_works_without_configured_parser(self):
-        """Generic Calling tool fallback works when only request tools are present."""
+        """Generic Calling tool fallback works without a configured parser."""
         request = {
             "tools": [
                 {
@@ -313,7 +313,7 @@ class TestStreamingPostProcessorToolCalls:
         cfg = _make_cfg(enable_auto_tool_choice=False)
         pp = StreamingPostProcessor(
             cfg,
-            tools_requested=True,
+            tools_requested=False,
             request_dict=request,
         )
         pp.reset()

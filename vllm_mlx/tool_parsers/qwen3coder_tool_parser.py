@@ -275,6 +275,8 @@ class Qwen3CoderToolParser(ToolParser):
         if not previous_text:
             self._reset_streaming_state()
             self._streaming_request = request
+        elif request is not None and self._streaming_request is None:
+            self._streaming_request = request
 
         if not delta_text:
             return None

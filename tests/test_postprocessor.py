@@ -275,7 +275,7 @@ class TestStreamingPostProcessorToolCalls:
         pp = StreamingPostProcessor(
             cfg,
             tools_requested=True,
-            request_dict=request,
+            request=request,
         )
         pp.reset()
 
@@ -293,6 +293,55 @@ class TestStreamingPostProcessorToolCalls:
         assert isinstance(args["todos"], list)
         assert args["todos"][0]["content"] == "Initialize"
 
+    def test_qwen_xml_tool_uses_schema_after_content_prefix(self):
+        """Schema conversion still works if text appears before tool markup."""
+        request = {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "todowrite",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "todos": {
+                                    "type": "array",
+                                    "items": {"type": "object"},
+                                },
+                            },
+                        },
+                    },
+                }
+            ]
+        }
+
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_call_parser="qwen3_coder_xml",
+        )
+        pp = StreamingPostProcessor(
+            cfg,
+            tools_requested=True,
+            request=request,
+        )
+        pp.reset()
+
+        assert pp.process_chunk(_make_output("Thinking first.\n"))[0].type == "content"
+        events = pp.process_chunk(
+            _make_output(
+                "<tool_call>\n<function=todowrite>\n"
+                "<parameter=todos>\n"
+                '"[{\\"content\\": \\"Install tests\\", \\"status\\": \\"in_progress\\"}]"\n'
+                "</parameter>\n"
+                "</function>\n</tool_call>"
+            )
+        )
+
+        assert len(events) == 1
+        assert events[0].type == "tool_call"
+        args = json.loads(events[0].tool_calls[0]["function"]["arguments"])
+        assert isinstance(args["todos"], list)
+        assert args["todos"][0]["content"] == "Install tests"
 
 class TestStreamingPostProcessorNemotron:
     """Tests for Nemotron thinking prefix."""

@@ -8,6 +8,7 @@ one cohesive orchestrator, because reasoning/tool/sanitize are tightly coupled.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -47,6 +48,55 @@ def _find_json_start(text: str) -> int:
             return i
         i += 1
     return -1
+
+
+def _has_partial_calling_tool_marker(text: str) -> bool:
+    """Return True when a stream tail may become `Calling tool:`."""
+    marker = "Calling tool:"
+    tail = text.rstrip()
+    stripped_tail = tail
+    while stripped_tail and stripped_tail[-1] in "[ \t\r\n":
+        if stripped_tail[-1] == "[":
+            return True
+        stripped_tail = stripped_tail[:-1]
+    for i in range(1, len(marker)):
+        partial = marker[:i]
+        if tail.endswith(partial) or tail.endswith(f"[{partial}"):
+            return True
+    return False
+
+
+def _strip_trailing_calling_tool_prefix(text: str) -> str | None:
+    """Remove a trailing bracket/partial marker that may start a tool call."""
+    if not text:
+        return None
+
+    marker = "Calling tool:"
+    tail_end = len(text.rstrip())
+    tail = text[:tail_end]
+
+    for i in range(1, len(marker)):
+        partial = marker[:i]
+        if not tail.endswith(partial):
+            continue
+        start = len(tail) - len(partial)
+        while start > 0 and tail[start - 1].isspace():
+            start -= 1
+        while start > 0 and tail[start - 1] == "[":
+            start -= 1
+            while start > 0 and tail[start - 1].isspace():
+                start -= 1
+        return text[:start]
+
+    start = len(tail)
+    saw_bracket = False
+    while start > 0 and tail[start - 1] in "[ \t\r\n":
+        if tail[start - 1] == "[":
+            saw_bracket = True
+        start -= 1
+    if saw_bracket:
+        return text[:start]
+    return None
 
 
 class StreamingPostProcessor:
@@ -123,8 +173,37 @@ class StreamingPostProcessor:
         self._json_preamble_stripped = False
         self._json_preamble_buffer = ""
 
-    @staticmethod
-    def _tool_calls_to_stream_chunks(tool_calls) -> list[dict]:
+    def _tool_call_has_required_args(self, name: str | None, arguments) -> bool:
+        if not name or not isinstance(self.request, dict):
+            return True
+        tools = self.request.get("tools")
+        if not isinstance(tools, list):
+            return True
+
+        required = []
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            function = tool.get("function")
+            if not isinstance(function, dict) or function.get("name") != name:
+                continue
+            parameters = function.get("parameters")
+            if isinstance(parameters, dict):
+                required = parameters.get("required") or []
+            break
+        if not required:
+            return True
+
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except (TypeError, ValueError):
+                return False
+        if not isinstance(arguments, dict):
+            return False
+        return all(key in arguments for key in required)
+
+    def _tool_calls_to_stream_chunks(self, tool_calls) -> list[dict]:
         chunks = []
         for i, tc in enumerate(tool_calls):
             if hasattr(tc, "function"):
@@ -140,9 +219,16 @@ class StreamingPostProcessor:
                 name = tc["name"]
                 arguments = tc["arguments"]
 
+            if not self._tool_call_has_required_args(name, arguments):
+                logger.debug(
+                    "Dropping malformed tool call missing required arguments: %s",
+                    name,
+                )
+                continue
+
             chunks.append(
                 {
-                    "index": i,
+                    "index": len(chunks),
                     "id": call_id,
                     "type": "function",
                     "function": {
@@ -534,10 +620,13 @@ class StreamingPostProcessor:
         if "Calling tool:" in _fallback_text and not self.tool_calls_detected:
             _, tool_calls = parse_tool_calls(_fallback_text, self.request)
             if tool_calls:
+                chunks = self._tool_calls_to_stream_chunks(tool_calls)
+                if not chunks:
+                    return events
                 events.append(
                     StreamEvent(
                         type="tool_call",
-                        tool_calls=self._tool_calls_to_stream_chunks(tool_calls),
+                        tool_calls=chunks,
                         finish_reason="tool_calls",
                         tool_calls_detected=True,
                     )
@@ -580,8 +669,11 @@ class StreamingPostProcessor:
                     self.tool_accumulated_text, self.request
                 )
                 if tool_calls:
+                    chunks = self._tool_calls_to_stream_chunks(tool_calls)
+                    if not chunks:
+                        return None
                     self.tool_calls_detected = True
-                    return {"tool_calls": self._tool_calls_to_stream_chunks(tool_calls)}
+                    return {"tool_calls": chunks}
             return None  # inside tool markup
 
         if "tool_calls" in tool_result:
@@ -593,8 +685,18 @@ class StreamingPostProcessor:
                 self.tool_accumulated_text, self.request
             )
             if tool_calls:
+                chunks = self._tool_calls_to_stream_chunks(tool_calls)
+                if not chunks:
+                    return None
                 self.tool_calls_detected = True
-                return {"tool_calls": self._tool_calls_to_stream_chunks(tool_calls)}
+                return {"tool_calls": chunks}
+            return None
+
+        if _has_partial_calling_tool_marker(self.tool_accumulated_text):
+            content = tool_result.get("content", "")
+            stripped = _strip_trailing_calling_tool_prefix(content)
+            if stripped:
+                return {"content": stripped}
             return None
 
         return {"content": tool_result.get("content", "")}

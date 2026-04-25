@@ -333,6 +333,104 @@ class TestStreamingPostProcessorToolCalls:
         args = json.loads(events[0].tool_calls[0]["function"]["arguments"])
         assert args["command"].startswith("npx tsc")
 
+    def test_partial_calling_tool_marker_is_buffered(self):
+        """Do not leak partial generic tool markers as assistant text."""
+        request = {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "bash",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "command": {"type": "string"},
+                                "timeout": {"type": "number"},
+                            },
+                        },
+                    },
+                }
+            ]
+        }
+
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_call_parser="qwen3_coder_xml",
+        )
+        pp = StreamingPostProcessor(
+            cfg,
+            tools_requested=True,
+            request_dict=request,
+        )
+        pp.reset()
+
+        heading_events = pp.process_chunk(_make_output("Next step\n\n["))
+        assert len(heading_events) == 1
+        assert heading_events[0].type == "content"
+        assert heading_events[0].content == "Next step"
+        assert pp.process_chunk(_make_output("Calling tool")) == []
+        events = pp.process_chunk(
+            _make_output(
+                ': bash({"command":"npm test", "timeout": "60000"})]',
+                finished=True,
+            )
+        )
+
+        tool_events = [event for event in events if event.type == "tool_call"]
+        assert len(tool_events) == 1
+        args = json.loads(tool_events[0].tool_calls[0]["function"]["arguments"])
+        assert args["command"] == "npm test"
+        assert args["timeout"] == 60000.0
+
+    def test_generic_tool_call_drops_missing_required_duplicate(self):
+        """Malformed duplicate calls should not reach clients for schema rejection."""
+        request = {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "edit",
+                        "parameters": {
+                            "type": "object",
+                            "required": ["filePath", "oldString", "newString"],
+                            "properties": {
+                                "filePath": {"type": "string"},
+                                "oldString": {"type": "string"},
+                                "newString": {"type": "string"},
+                                "replaceAll": {"type": "boolean"},
+                            },
+                        },
+                    },
+                }
+            ]
+        }
+
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_call_parser="qwen3_coder_xml",
+        )
+        pp = StreamingPostProcessor(
+            cfg,
+            tools_requested=True,
+            request_dict=request,
+        )
+        pp.reset()
+
+        events = pp.process_chunk(
+            _make_output(
+                'Calling tool: edit({"oldString":"a","newString":"b"})\n'
+                'Calling tool: edit({"filePath":"/tmp/package.json",'
+                '"oldString":"a","newString":"b"})',
+                finished=True,
+            )
+        )
+
+        tool_events = [event for event in events if event.type == "tool_call"]
+        assert len(tool_events) == 1
+        assert len(tool_events[0].tool_calls) == 1
+        args = json.loads(tool_events[0].tool_calls[0]["function"]["arguments"])
+        assert args["filePath"] == "/tmp/package.json"
+
     def test_qwen_xml_tool_uses_schema_after_content_prefix(self):
         """Schema conversion still works if text appears before tool markup."""
         request = {

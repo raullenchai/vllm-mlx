@@ -72,6 +72,8 @@ def _get_tool_param_config(
 
 
 def _schema_type(schema: Any) -> str | None:
+    if isinstance(schema, str):
+        return schema.strip().lower()
     if not isinstance(schema, dict):
         return None
     schema_type = schema.get("type")
@@ -86,6 +88,12 @@ def _schema_type(schema: Any) -> str | None:
                 option_type = _schema_type(option)
                 if option_type and option_type != "null":
                     return option_type
+    if "items" in schema:
+        return "array"
+    if "properties" in schema or "additionalProperties" in schema:
+        return "object"
+    if "enum" in schema:
+        return "string"
     return None
 
 

@@ -75,6 +75,37 @@ def _decode_json_like(value: Any) -> Any:
     return current
 
 
+def _schema_type(schema: Any) -> str | None:
+    """Infer a JSON schema type for tool argument conversion."""
+    if isinstance(schema, str):
+        return schema.strip().lower()
+    if not isinstance(schema, dict):
+        return None
+
+    schema_type = schema.get("type")
+    if isinstance(schema_type, list):
+        schema_type = next((item for item in schema_type if item != "null"), None)
+    if isinstance(schema_type, str):
+        return schema_type.strip().lower()
+
+    for key in ("anyOf", "oneOf", "allOf"):
+        options = schema.get(key)
+        if not isinstance(options, list):
+            continue
+        for option in options:
+            option_type = _schema_type(option)
+            if option_type and option_type != "null":
+                return option_type
+
+    if "items" in schema:
+        return "array"
+    if "properties" in schema or "additionalProperties" in schema:
+        return "object"
+    if "enum" in schema:
+        return "string"
+    return None
+
+
 def _convert_param_value(
     param_value: str, param_name: str, param_config: dict, func_name: str
 ) -> Any:
@@ -86,10 +117,9 @@ def _convert_param_value(
         return _decode_json_like(param_value)
 
     cfg = param_config[param_name]
-    if isinstance(cfg, dict) and "type" in cfg:
-        param_type = str(cfg["type"]).strip().lower()
-    else:
-        param_type = "string"
+    param_type = _schema_type(cfg)
+    if param_type is None:
+        return _decode_json_like(param_value)
 
     if param_type in ("string", "str", "text", "varchar", "char", "enum"):
         return param_value

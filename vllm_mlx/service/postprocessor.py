@@ -251,7 +251,7 @@ class StreamingPostProcessor:
             content, reasoning = delta_text, None
 
         # Tool call detection on content
-        if self.tool_parser and content:
+        if self._should_detect_tool_calls(content):
             result = self._detect_tool_calls(content)
             if result is None:
                 return []  # suppressed (inside tool markup)
@@ -311,6 +311,15 @@ class StreamingPostProcessor:
             events.append(StreamEvent(type="reasoning", reasoning=reasoning))
         return events
 
+    def _should_detect_tool_calls(self, content: str | None) -> bool:
+        if not content:
+            return False
+        if self.tool_parser:
+            return True
+        return self.tools_requested and (
+            "Calling tool:" in content or "Calling tool:" in self.tool_accumulated_text
+        )
+
     def _process_with_reasoning(
         self, delta_text: str, output: GenerationOutput
     ) -> list[StreamEvent]:
@@ -342,7 +351,7 @@ class StreamingPostProcessor:
                 reasoning = None
 
         # Tool call detection
-        if self.tool_parser and content:
+        if self._should_detect_tool_calls(content):
             result = self._detect_tool_calls(content)
             if result is None:
                 return []
@@ -430,7 +439,7 @@ class StreamingPostProcessor:
             self._think_prefix_sent = True
 
         # Tool call detection
-        if self.tool_parser and delta_text:
+        if self._should_detect_tool_calls(delta_text):
             result = self._detect_tool_calls(delta_text)
             if result is None:
                 return []
@@ -564,12 +573,15 @@ class StreamingPostProcessor:
 
         tool_previous = self.tool_accumulated_text
         self.tool_accumulated_text += content
-        tool_result = self.tool_parser.extract_tool_calls_streaming(
-            tool_previous,
-            self.tool_accumulated_text,
-            content,
-            request=self.request_dict,
-        )
+        if self.tool_parser:
+            tool_result = self.tool_parser.extract_tool_calls_streaming(
+                tool_previous,
+                self.tool_accumulated_text,
+                content,
+                request=self.request_dict,
+            )
+        else:
+            tool_result = {"content": content}
 
         if tool_result is None:
             if "Calling tool:" in self.tool_accumulated_text:

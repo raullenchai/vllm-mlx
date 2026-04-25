@@ -293,6 +293,46 @@ class TestStreamingPostProcessorToolCalls:
         assert isinstance(args["todos"], list)
         assert args["todos"][0]["content"] == "Initialize"
 
+    def test_bare_calling_tool_works_without_configured_parser(self):
+        """Generic Calling tool fallback works when only request tools are present."""
+        request = {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "bash",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"command": {"type": "string"}},
+                        },
+                    },
+                }
+            ]
+        }
+
+        cfg = _make_cfg(enable_auto_tool_choice=False)
+        pp = StreamingPostProcessor(
+            cfg,
+            tools_requested=True,
+            request_dict=request,
+        )
+        pp.reset()
+
+        events = pp.process_chunk(
+            _make_output(
+                'Calling tool: bash({"command": "npx tsc --noEmit 2>&1 | '
+                'distill \\"TypeScript compilation result. Return only: PASS '
+                'or FAIL with error details.\\""})'
+            )
+        )
+
+        assert len(events) == 1
+        assert events[0].type == "tool_call"
+        assert events[0].content is None
+        assert events[0].tool_calls[0]["function"]["name"] == "bash"
+        args = json.loads(events[0].tool_calls[0]["function"]["arguments"])
+        assert args["command"].startswith("npx tsc")
+
 
 class TestStreamingPostProcessorNemotron:
     """Tests for Nemotron thinking prefix."""

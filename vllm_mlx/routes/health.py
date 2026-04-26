@@ -6,8 +6,22 @@ import gc
 from fastapi import APIRouter, HTTPException
 
 from ..config import get_config
+from ..request_metrics import get_recorder
 
 router = APIRouter()
+
+
+@router.get("/v1/requests")
+async def recent_requests(limit: int = 50):
+    """Return recent completed requests + active request snapshot.
+
+    Used by the `rapid-mlx serve --tui` monitor.
+    """
+    recorder = get_recorder()
+    return {
+        "active": recorder.active(),
+        "entries": recorder.entries(max(1, min(int(limit), 500))),
+    }
 
 
 @router.get("/health")

@@ -398,13 +398,64 @@ def serve_command(args):
     print(f"  Ready: http://{host_display}:{args.port}/v1")
     print(f"  Docs:  http://{host_display}:{args.port}/docs")
     print()
-    uvicorn.run(
+
+    if getattr(args, "tui", False):
+        _run_with_tui(
+            app,
+            host=args.host,
+            port=args.port,
+            log_level=uvicorn_log_level,
+        )
+    else:
+        uvicorn.run(
+            app,
+            host=args.host,
+            port=args.port,
+            log_level=uvicorn_log_level,
+            timeout_keep_alive=30,
+        )
+
+
+def _run_with_tui(app, host: str, port: int, log_level) -> None:
+    """Run uvicorn in a background thread + the live TUI in the foreground."""
+    import os
+    import threading
+    import time
+
+    import uvicorn
+
+    config = uvicorn.Config(
         app,
-        host=args.host,
-        port=args.port,
-        log_level=uvicorn_log_level,
+        host=host,
+        port=port,
+        log_level=log_level,
         timeout_keep_alive=30,
+        access_log=False,
     )
+    server = uvicorn.Server(config)
+    # Signal handlers can only be installed from the main thread; the TUI
+    # owns the main thread, so we disable uvicorn's installer.
+    server.install_signal_handlers = lambda: None  # type: ignore[assignment]
+
+    server_thread = threading.Thread(target=server.run, daemon=True)
+    server_thread.start()
+
+    # Wait for the server to start (max ~10s) before opening the TUI.
+    for _ in range(200):
+        if server.started:
+            break
+        time.sleep(0.05)
+
+    from .tui import run_monitor
+
+    tui_host = "127.0.0.1" if host == "0.0.0.0" else host
+    base_url = f"http://{tui_host}:{port}"
+
+    try:
+        run_monitor(base_url, interval=1.0, pid=os.getpid())
+    finally:
+        server.should_exit = True
+        server_thread.join(timeout=5)
 
 
 def bench_command(args):
@@ -1370,6 +1421,11 @@ Examples:
         type=str,
         default=None,
         help="Pre-load an embedding model at startup (e.g. mlx-community/embeddinggemma-300m-6bit)",
+    )
+    serve_parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Run a live full-screen monitor TUI alongside the server (q to quit).",
     )
     # Bench command
     bench_parser = subparsers.add_parser("bench", help="Run benchmark")

@@ -99,6 +99,8 @@ class RequestRecorder:
         non_streaming: bool = False,
         engine_gen_tps: float | None = None,
         engine_ttft: float | None = None,
+        acceptance_ratio: float | None = None,
+        block_size: int | None = None,
     ) -> None:
         now = time.time()
         with self._lock:
@@ -153,6 +155,13 @@ class RequestRecorder:
                 if ptoks > 0 and ttft > 0.01:
                     prompt_tps = ptoks / ttft
 
+            record_acceptance = (
+                float(acceptance_ratio) if acceptance_ratio is not None else None
+            )
+            record_block_size = (
+                int(block_size) if block_size is not None else None
+            )
+
             record = {
                 "request_id": entry["request_id"],
                 "surface": entry.get("surface", ""),
@@ -168,6 +177,8 @@ class RequestRecorder:
                 "message_preview": entry.get("message_preview") or "",
                 "message_preview_source": entry.get("message_preview_source", "output"),
                 "error": error,
+                "acceptance_ratio": record_acceptance,
+                "block_size": record_block_size,
             }
             self._entries.append(record)
 

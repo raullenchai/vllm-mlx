@@ -94,10 +94,13 @@ class MetricsMiddleware:
         running_text_tokens = 0  # rough fallback when usage is absent
         engine_gen_tps: float = 0.0
         engine_ttft: float | None = None
+        engine_acceptance: float | None = None
+        engine_block_size: int | None = None
 
         def poll_engine_stats() -> None:
-            """Snapshot engine's per-request tps/ttft during the stream."""
+            """Snapshot engine's per-request tps/ttft/acceptance during the stream."""
             nonlocal engine_gen_tps, engine_ttft
+            nonlocal engine_acceptance, engine_block_size
             try:
                 from ..config import get_config
 
@@ -115,6 +118,18 @@ class MetricsMiddleware:
                     if ttft_s is not None and engine_ttft is None:
                         try:
                             engine_ttft = float(ttft_s)
+                        except Exception:
+                            pass
+                    accept = r.get("acceptance_ratio")
+                    if accept is not None:
+                        try:
+                            engine_acceptance = float(accept)
+                        except Exception:
+                            pass
+                    block = r.get("block_size")
+                    if block is not None:
+                        try:
+                            engine_block_size = int(block)
                         except Exception:
                             pass
             except Exception:
@@ -210,6 +225,8 @@ class MetricsMiddleware:
                             non_streaming=not is_sse,
                             engine_gen_tps=engine_gen_tps if engine_gen_tps > 0 else None,
                             engine_ttft=engine_ttft,
+                            acceptance_ratio=engine_acceptance,
+                            block_size=engine_block_size,
                         )
             except Exception as exc:  # never let metrics break the response
                 logger.debug("metrics middleware error: %s", exc)

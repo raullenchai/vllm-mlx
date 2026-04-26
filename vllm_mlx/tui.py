@@ -276,6 +276,8 @@ def _build_screen(
     last_finish = last.get("finish_reason", "n/a")
     last_surface = last.get("surface", "n/a")
     last_ttft = last.get("ttft")
+    last_accept = last.get("acceptance_ratio")
+    last_block = last.get("block_size")
 
     rows.append(_c(tty_on, "bold", "Last request"))
     if not last:
@@ -319,18 +321,18 @@ def _build_screen(
                 tty_on,
             )
         )
+        accept_text = (
+            f"{_num(last_accept):.0%} {_bar(_num(last_accept), 1.0, 12)}"
+            if last_accept is not None
+            else "n/a"
+        )
+        block_text = str(last_block) if last_block is not None else "n/a"
         rows.append(
             _row("surface", str(last_surface), left, "white", tty_on)
             + gap
-            + _row(
-                "target rate",
-                ">=20 tok/s good, >=40 fast",
-                mid,
-                "dim",
-                tty_on,
-            )
+            + _row("dflash accept", accept_text, mid, "magenta", tty_on)
             + gap
-            + _row("tuning", "low rate => check cache", right, "dim", tty_on)
+            + _row("block size", block_text, right, "magenta", tty_on)
         )
     rows.append(_line(width))
 
@@ -344,14 +346,31 @@ def _build_screen(
         avg_gen_tps = _mean([_num(item.get("generation_tps", 0.0)) for item in entries])
         avg_pre_tps = _mean([_num(item.get("prompt_tps", 0.0)) for item in entries])
         avg_elapsed = _mean([_num(item.get("elapsed", 0.0)) for item in entries])
-        header = "  out  prompt  gen tok/s  prefill tok/s  elapsed"
-        row = (
-            f"  {avg_out:>5.1f} "
-            f"{avg_prompt:>7.1f} "
-            f"{avg_gen_tps:>9.1f} "
-            f"{avg_pre_tps:>13.1f} "
-            f"{avg_elapsed:>8.1f}s"
-        )
+        accept_values = [
+            _num(item.get("acceptance_ratio"))
+            for item in entries
+            if item.get("acceptance_ratio") is not None
+        ]
+        avg_accept = _mean(accept_values) if accept_values else None
+        if avg_accept is not None:
+            header = "  out  prompt  gen tok/s  prefill tok/s  elapsed   accept"
+            row = (
+                f"  {avg_out:>5.1f} "
+                f"{avg_prompt:>7.1f} "
+                f"{avg_gen_tps:>9.1f} "
+                f"{avg_pre_tps:>13.1f} "
+                f"{avg_elapsed:>8.1f}s "
+                f"{avg_accept:>7.0%}"
+            )
+        else:
+            header = "  out  prompt  gen tok/s  prefill tok/s  elapsed"
+            row = (
+                f"  {avg_out:>5.1f} "
+                f"{avg_prompt:>7.1f} "
+                f"{avg_gen_tps:>9.1f} "
+                f"{avg_pre_tps:>13.1f} "
+                f"{avg_elapsed:>8.1f}s"
+            )
         rows.append(_c(tty_on, "dim", _clamp(header, width)))
         rows.append(_clamp(row, width))
     rows.append(_line(width))
@@ -364,9 +383,17 @@ def _build_screen(
     if not recent_entries:
         rows.append(_c(tty_on, "dim", "  no completed request metrics yet"))
     else:
-        header = (
-            "  time      surface              out  prompt  gen tok/s  prefill tok/s  finish"
+        any_accept = any(
+            item.get("acceptance_ratio") is not None for item in recent_entries
         )
+        if any_accept:
+            header = (
+                "  time      surface              out  prompt  gen tok/s  prefill tok/s  accept  block  finish"
+            )
+        else:
+            header = (
+                "  time      surface              out  prompt  gen tok/s  prefill tok/s  finish"
+            )
         rows.append(_c(tty_on, "dim", _clamp(header, width)))
         for item in reversed(recent_entries):
             ts = item.get("finished_at") or 0
@@ -375,15 +402,24 @@ def _build_screen(
             except Exception:
                 when = "--:--:--"
             surface = str(item.get("surface", "n/a"))[-18:].ljust(18)
-            row = (
+            base = (
                 f"  {when}  "
                 f"{surface} "
                 f"{_integer(item.get('generated_tokens', 0)):>5} "
                 f"{_integer(item.get('prompt_tokens', 0)):>7} "
                 f"{_num(item.get('generation_tps', 0.0)):>9.1f} "
                 f"{_num(item.get('prompt_tps', 0.0)):>13.1f}  "
-                f"{str(item.get('finish_reason', 'n/a'))[:12]}"
             )
+            if any_accept:
+                accept = item.get("acceptance_ratio")
+                accept_s = (
+                    f"{_num(accept):>5.0%}" if accept is not None else "  -  "
+                )
+                block = item.get("block_size")
+                block_s = f"{_integer(block):>4}" if block is not None else "  - "
+                row = base + f"{accept_s}  {block_s}  {str(item.get('finish_reason', 'n/a'))[:8]}"
+            else:
+                row = base + str(item.get("finish_reason", "n/a"))[:12]
             rows.append(_clamp(row, width))
     rows.append(_line(width))
 

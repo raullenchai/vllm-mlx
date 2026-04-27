@@ -34,14 +34,13 @@ logger = logging.getLogger(__name__)
 
 
 def _looks_like_tool_prompt(prompt: str) -> bool:
-    # Detect prompts that contain PRIOR tool call/response exchanges
-    # (not just tool definitions or instruction examples).
-    # Qwen3 XML: system prompt includes example "<function=example_function_name>"
-    # which would be a false positive, so we look for a *completed* tool call
-    # (</tool_call>) or a tool response marker instead.
+    # Detect prompts with PRIOR tool call/response exchanges (not system
+    # instruction examples). Qwen3 XML system prompt includes both
+    # "<tool_call>" and "</tool_call>" as formatting examples, so those
+    # markers cause false positives on every tool-enabled fresh request.
+    # "<tool_response>" only appears when an actual tool result was injected.
     markers = (
-        "</tool_call>",      # completed prior tool call in history
-        "<tool_response>",   # tool result fed back to model
+        "<tool_response>",     # Qwen3 XML: actual tool result in conversation
         "<minimax:tool_call>",
         '<invoke name="',
         "<|tool_call>",

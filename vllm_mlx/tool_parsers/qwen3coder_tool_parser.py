@@ -94,6 +94,32 @@ def _param_name_key(param_name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", param_name.lower())
 
 
+def _resolve_tool_name(name: str, tools: list[dict] | None) -> str:
+    """Resolve a potentially malformed function name to a valid tool name.
+
+    Handles: extra JSON content appended to name, wrong but similar names
+    (e.g. "sh" → "bash", "task_id" → "task").
+    """
+    m = re.match(r"^[A-Za-z_][A-Za-z0-9_]*", name.strip())
+    clean = m.group(0) if m else name.strip()
+    if not tools:
+        return clean
+    valid = [
+        t.get("function", {}).get("name", "")
+        for t in tools
+        if isinstance(t, dict) and t.get("function", {}).get("name")
+    ]
+    if not valid:
+        return clean
+    if clean in valid:
+        return clean
+    # Prefix/suffix match — handles "task_id"→"task", "sh"→"bash"
+    for v in valid:
+        if clean.startswith(v) or v.startswith(clean) or v.endswith(clean):
+            return v
+    return clean
+
+
 def _normalize_param_name(param_name: str, param_config: dict) -> str:
     """Map common model-emitted argument aliases to the tool schema key."""
     normalized = param_name.strip()
@@ -332,6 +358,7 @@ class Qwen3CoderToolParser(ToolParser):
         else:
             function_name = function_call_str[:gt_index]
             parameters = function_call_str[gt_index + 1:]
+        function_name = _resolve_tool_name(function_name, tools)
         param_config = _get_arguments_config(function_name, tools)
         param_dict = {}
         for match_text in self.tool_call_parameter_regex.findall(parameters):
@@ -499,9 +526,11 @@ class Qwen3CoderToolParser(ToolParser):
                 func_nl = tool_text.find("\n", func_start)
                 if func_end != -1:
                     if func_nl != -1 and func_nl < func_end:
-                        self.current_function_name = tool_text[func_start:func_nl].strip()
+                        raw_name = tool_text[func_start:func_nl].strip()
                     else:
-                        self.current_function_name = tool_text[func_start:func_end]
+                        raw_name = tool_text[func_start:func_end]
+                    _tools = request.get("tools") if isinstance(request, dict) else None
+                    self.current_function_name = _resolve_tool_name(raw_name, _tools)
                     self._current_tool_id = _generate_tool_id()
                     self.header_sent = True
                     self.in_function = True

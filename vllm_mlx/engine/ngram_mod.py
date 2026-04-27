@@ -217,7 +217,10 @@ class NGramModEngine(BatchedEngine):
         # reference from outside, so we maintain a parallel tracking list here.
         _recent: list[int] = list(token_ids)
 
+        _ban_log_fired = False
+
         def _apply_repetition_penalty(logprobs: mx.array) -> mx.array:
+            nonlocal _ban_log_fired
             recent = _recent[-20:]
             if not recent:
                 return logprobs
@@ -228,22 +231,27 @@ class NGramModEngine(BatchedEngine):
             # log-probs are ≤ 0; multiplying by >1 makes them more negative.
             unique = list(set(recent))
             idx = mx.array(unique, mx.int32)
-            mask = mx.one_hot(idx, vocab, dtype=mx.float32).sum(axis=0) > 0
+            soft_mask = mx.one_hot(idx, vocab, dtype=mx.float32).sum(axis=0)
             for _ in range(result.ndim - 1):
-                mask = mask[None]
-            result = mx.where(mask, result * _rep_penalty, result)
+                soft_mask = soft_mask[None]
+            # Where mask=1: apply penalty; where mask=0: keep original.
+            result = result * (1.0 + soft_mask * (_rep_penalty - 1.0))
 
-            # Hard ban: tokens repeating ≥ 3x in last 10 positions get -1e9.
-            # Soft penalty alone cannot break temperature=0 attractor states
-            # (logprob near 0 × 1.3 is still near 0 vs competitors at -5+).
+            # Hard ban: tokens repeating ≥ 3x in last 10 positions.
+            # Use arithmetic subtraction instead of mx.where to avoid
+            # potential scalar-broadcast issues in MLX.
             tail = recent[-10:]
             banned = [t for t in set(tail) if tail.count(t) >= 3]
             if banned:
+                if not _ban_log_fired:
+                    logger.info("[rep-penalty] hard-ban fired: tokens=%s recent_tail=%s", banned, tail)
+                    _ban_log_fired = True
                 bidx = mx.array(banned, mx.int32)
-                ban_mask = mx.one_hot(bidx, vocab, dtype=mx.float32).sum(axis=0) > 0
+                ban_float = mx.one_hot(bidx, vocab, dtype=mx.float32).sum(axis=0)
                 for _ in range(result.ndim - 1):
-                    ban_mask = ban_mask[None]
-                result = mx.where(ban_mask, mx.array(-1e9, dtype=result.dtype), result)
+                    ban_float = ban_float[None]
+                # Subtract 2e9 at banned positions (effectively -inf).
+                result = result - ban_float * 2e9
 
             return result
 
@@ -428,9 +436,11 @@ class NGramModEngine(BatchedEngine):
                 self._track_request_start()
                 parts: list[str] = []
                 last: dict | None = None
+                _rep_penalty = float(kwargs.pop("repetition_penalty", 1.0))
                 try:
                     async for chunk in self._stream_ngram_mod(
-                        prompt, max_tokens, temperature, top_p, stop=stop
+                        prompt, max_tokens, temperature, top_p, stop=stop,
+                        repetition_penalty=_rep_penalty,
                     ):
                         last = chunk
                         if chunk.get("text"):

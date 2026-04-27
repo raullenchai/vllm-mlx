@@ -488,16 +488,17 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # effective_temperature=0 for all tool-enabled prompts directly, and
     # no_repeat_ngram_size=20 prevents word-level loops at greedy temp.
 
-    # Only force thinking off when explicitly configured on the server.
-    # For qwen3_coder_xml: Qwen3 generates <tool_call> AFTER </think>, never
-    # inside the think block, so thinking mode is safe and actually required —
-    # disabling thinking causes the model to generate plain text + EOS on
-    # complex contexts instead of tool calls.  The <think> prefill stripping
-    # below handles OpenCode's implicit reasoning injection.
+    # For tool-enabled requests with a reasoning parser, disable thinking.
+    # With thinking ON and qwen3_coder_xml, the model loops in <think> for
+    # 30k+ tokens before emitting a tool call (even at temp=0.55 with
+    # no_repeat_ngram_size=20). With thinking OFF, tool calls are generated
+    # in ~30 tokens and the tool call loop works correctly.
     if cfg.no_thinking:
         chat_kwargs["enable_thinking"] = False
     elif request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = request.enable_thinking
+    elif cfg.reasoning_parser_name and request.tools:
+        chat_kwargs["enable_thinking"] = False
 
     # Strip any OpenCode-style bare <think> prefill injected as a partial
     # assistant turn.  Some agents append {"role": "assistant", "content":

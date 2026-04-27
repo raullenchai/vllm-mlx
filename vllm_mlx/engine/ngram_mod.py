@@ -278,31 +278,38 @@ class NGramModEngine(BatchedEngine):
             def sampler(logprobs):
                 if _rep_penalty == 1.0:
                     return mx.argmax(logprobs, axis=-1)
-                # For greedy decoding, apply penalty per-position so that
-                # a speculative batch of N tokens (n_max up to 16) doesn't
-                # bypass the ban by sharing a single stale _recent snapshot.
-                # Convert to numpy once, iterate positions in Python.
+                # Per-position greedy with two anti-repetition mechanisms:
+                # 1. Token-level hard ban (>=3x in last 10)
+                # 2. No-repeat-ngram (ban token that would continue a 4-gram seen before)
                 import numpy as np
-                lp_np = np.array(logprobs.astype(mx.float32))  # [1, n_predict, vocab] — cast bf16→f32 then eval
+                lp_np = np.array(logprobs.astype(mx.float32))  # bf16→f32 then eval
                 n_pred = lp_np.shape[-2] if lp_np.ndim >= 3 else 1
-                running = list(_recent[-20:])
+                # Keep longer window for ngram detection (last 64 tokens)
+                running = list(_recent[-64:])
                 results = []
                 for i in range(n_pred):
-                    pos = lp_np[0, i] if n_pred > 1 else lp_np.reshape(-1)
-                    # Soft penalty
+                    pos = lp_np[0, i].copy() if n_pred > 1 else lp_np.reshape(-1).copy()
+                    # Soft multiplicative penalty for recently seen tokens
                     for t in set(running[-20:]):
                         pos[t] *= _rep_penalty
-                    # Hard ban
-                    tail = running[-10:]
-                    for t in set(tail):
-                        if tail.count(t) >= 3:
+                    # Hard token ban: >=3x in last 10
+                    tail10 = running[-10:]
+                    for t in set(tail10):
+                        if tail10.count(t) >= 3:
                             pos[t] = -1e9
+                    # No-repeat-ngram (size 4): if last 3 tokens match an earlier
+                    # prefix in running history, ban the token that followed it then.
+                    if len(running) >= 3:
+                        prefix = tuple(running[-3:])
+                        for j in range(len(running) - 3):
+                            if tuple(running[j:j+3]) == prefix:
+                                banned_next = running[j + 3]
+                                pos[banned_next] = -1e9
                     tok = int(np.argmax(pos))
                     results.append(tok)
                     running.append(tok)
-                    if len(running) > 30:
-                        running = running[-20:]
-                # Shape must be [1, n_pred] so _step's .squeeze(0) gives [n_pred]
+                    if len(running) > 128:
+                        running = running[-64:]
                 return mx.array(results, dtype=mx.uint32)[None, :]
 
         def _make_gen():

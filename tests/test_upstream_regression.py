@@ -599,6 +599,44 @@ def qwen3coder_request():
     }
 
 
+@pytest.fixture
+def qwen3coder_coding_request():
+    """Request with coding tools that use camelCase argument names."""
+    return {
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "write",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "filePath": {"type": "string"},
+                            "content": {"type": "string"},
+                        },
+                        "required": ["filePath", "content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "edit",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "filePath": {"type": "string"},
+                            "oldString": {"type": "string"},
+                            "newString": {"type": "string"},
+                        },
+                        "required": ["filePath", "oldString", "newString"],
+                    },
+                },
+            },
+        ]
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Seed-OSS — ported from vLLM test_seed_oss_tool_parser.py
 # ═══════════════════════════════════════════════════════════════════════
@@ -1001,6 +1039,24 @@ class TestQwen3CoderUpstreamNonStreaming:
         args = json.loads(tc["arguments"])
         assert args == {"city": "Dallas", "state": "TX", "unit": "fahrenheit"}
 
+    def test_coding_tool_path_alias_normalizes_to_schema(
+        self, qwen3coder_parser, qwen3coder_coding_request
+    ):
+        """Coding tools often receive path aliases but require filePath."""
+        output = (
+            "<tool_call>\n<function=write>\n"
+            "<parameter=path>\nsnake-game/src/App.css\n</parameter>\n"
+            "<parameter=content>\n.board { display: grid; }\n</parameter>\n"
+            "</function>\n</tool_call>"
+        )
+        result = qwen3coder_parser.extract_tool_calls(output, qwen3coder_coding_request)
+        assert result.tools_called
+        args = json.loads(result.tool_calls[0]["arguments"])
+        assert args == {
+            "filePath": "snake-game/src/App.css",
+            "content": ".board { display: grid; }",
+        }
+
     def test_single_tool_with_content(self, qwen3coder_parser, qwen3coder_request):
         """Content before tool call is preserved."""
         output = (
@@ -1275,6 +1331,44 @@ class TestQwen3CoderUpstreamStreaming:
         assert full_args.endswith("}")
         parsed = json.loads(full_args)
         assert parsed["city"] == "Dallas"
+
+    def test_streaming_coding_aliases_normalize_to_schema(
+        self, qwen3coder_parser, qwen3coder_coding_request
+    ):
+        """Streaming coding tools normalize aliases before schema validation."""
+        deltas = [
+            "<tool_call>\n<function=edit>",
+            "\n<parameter=path>snake-game/src/App.tsx</parameter>",
+            "\n<parameter=old_string>const score = 0</parameter>",
+            "\n<parameter=replace>const score = highScore</parameter>",
+            "\n</function>\n</tool_call>",
+        ]
+        text = ""
+        collected = []
+        for delta in deltas:
+            previous = text
+            text += delta
+            result = qwen3coder_parser.extract_tool_calls_streaming(
+                previous_text=previous,
+                current_text=text,
+                delta_text=delta,
+                request=qwen3coder_coding_request,
+            )
+            if result:
+                collected.append(result)
+
+        arg_parts = [
+            chunk["tool_calls"][0]["function"]["arguments"]
+            for chunk in collected
+            if "tool_calls" in chunk
+            and "arguments" in chunk["tool_calls"][0].get("function", {})
+        ]
+        args = json.loads("".join(arg_parts))
+        assert args == {
+            "filePath": "snake-game/src/App.tsx",
+            "oldString": "const score = 0",
+            "newString": "const score = highScore",
+        }
 
     def test_streaming_array_parameter_nullable_type_list(self, qwen3coder_parser):
         """Streaming conversion also handles nullable array schemas."""

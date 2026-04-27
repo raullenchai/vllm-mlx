@@ -53,6 +53,71 @@ def _get_arguments_config(func_name: str, tools: list[dict] | None) -> dict:
     return {}
 
 
+_PARAM_NAME_ALIASES = {
+    "filePath": {
+        "file",
+        "filename",
+        "path",
+        "targetfile",
+        "targetpath",
+    },
+    "oldString": {
+        "find",
+        "findstring",
+        "old",
+        "oldtext",
+        "original",
+        "originaltext",
+        "search",
+        "searchstring",
+    },
+    "newString": {
+        "new",
+        "newtext",
+        "replace",
+        "replacement",
+        "replacementstring",
+        "replacestring",
+    },
+    "content": {
+        "body",
+        "code",
+        "contents",
+        "filecontent",
+        "source",
+        "text",
+    },
+}
+
+
+def _param_name_key(param_name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", param_name.lower())
+
+
+def _normalize_param_name(param_name: str, param_config: dict) -> str:
+    """Map common model-emitted argument aliases to the tool schema key."""
+    normalized = param_name.strip()
+    if not isinstance(param_config, dict) or not param_config:
+        return normalized
+    if normalized in param_config:
+        return normalized
+
+    normalized_key = _param_name_key(normalized)
+    for schema_name in param_config:
+        if not isinstance(schema_name, str):
+            continue
+        if schema_name.lower() == normalized.lower():
+            return schema_name
+        if _param_name_key(schema_name) == normalized_key:
+            return schema_name
+
+    for schema_name, aliases in _PARAM_NAME_ALIASES.items():
+        if schema_name in param_config and normalized_key in aliases:
+            return schema_name
+
+    return normalized
+
+
 def _decode_json_like(value: Any) -> Any:
     """Decode JSON-looking strings, including double-encoded values."""
     if not isinstance(value, str):
@@ -265,7 +330,7 @@ class Qwen3CoderToolParser(ToolParser):
                 idx = match_text.index(">")
             except ValueError:
                 continue
-            p_name = match_text[:idx]
+            p_name = _normalize_param_name(match_text[:idx], param_config)
             p_value = str(match_text[idx + 1 :])
             if p_value.startswith("\n"):
                 p_value = p_value[1:]
@@ -516,7 +581,7 @@ class Qwen3CoderToolParser(ToolParser):
                     break
 
                 name_end = remaining.find(">")
-                current_param_name = remaining[:name_end]
+                raw_param_name = remaining[:name_end]
                 value_start = param_start + name_end + 1
                 value_text = tool_text[value_start:]
                 if value_text.startswith("\n"):
@@ -545,9 +610,6 @@ class Qwen3CoderToolParser(ToolParser):
                 if pv.endswith("\n"):
                     pv = pv[:-1]
 
-                self.accumulated_params[current_param_name] = pv
-
-                # Type conversion
                 tools = None
                 if self._streaming_request:
                     tools = (
@@ -558,6 +620,10 @@ class Qwen3CoderToolParser(ToolParser):
                 param_config = _get_arguments_config(
                     self.current_function_name or "", tools
                 )
+                current_param_name = _normalize_param_name(raw_param_name, param_config)
+                self.accumulated_params[current_param_name] = pv
+
+                # Type conversion
                 converted = _convert_param_value(
                     pv,
                     current_param_name,

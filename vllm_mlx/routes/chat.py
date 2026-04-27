@@ -474,7 +474,11 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if "no_repeat_ngram_size" not in chat_kwargs:
         if hasattr(request, "no_repeat_ngram_size") and request.no_repeat_ngram_size:
             chat_kwargs["no_repeat_ngram_size"] = int(request.no_repeat_ngram_size)
-        elif cfg.reasoning_parser_name:
+        elif cfg.reasoning_parser_name and not request.tools:
+            # Only apply for non-tool requests. Tool requests have thinking
+            # disabled (enable_thinking=False), so no thinking loops are possible.
+            # For tool requests, n-gram blocking forces slight variations in
+            # repeated tool calls, bypassing OpenCode's doom-loop detector.
             chat_kwargs["no_repeat_ngram_size"] = 20
 
     # Presence penalty: pass through client value only; no server default.

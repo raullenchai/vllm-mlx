@@ -44,7 +44,9 @@ _TOOL_USE_SYSTEM_SUFFIX = (
     "a reasonable default exists. Do NOT explain what you will do — just do it. "
     "Be direct and concise in your responses. "
     "Do NOT think out loud or show your reasoning process. "
-    "Give direct answers only — no preamble like 'The user asks...' or 'Let me think...'."
+    "Give direct answers only — no preamble like 'The user asks...' or 'Let me think...'.\n"
+    "When creating or writing files, ALWAYS use the write tool with the exact file path "
+    "and complete file content. Do NOT use bash heredoc (cat > file << 'EOF') for file creation."
 )
 
 _TOOL_CONTINUATION_USER_PROMPT = (

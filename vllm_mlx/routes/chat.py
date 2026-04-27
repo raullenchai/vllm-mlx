@@ -458,12 +458,23 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if request.tools:
         chat_kwargs["tools"] = convert_tools_for_template(request.tools)
 
-    # Wire repetition_penalty: honour explicit client value; otherwise apply a
-    # mild default for reasoning models with tools to prevent thinking loops.
+    # Wire repetition_penalty: honour explicit client value; no server default.
+    # A server default of 1.3 penalizes prompt tokens (short prompts fit in the
+    # 20-token window) including words the model needs in its thinking.
     if request.repetition_penalty and request.repetition_penalty != 1.0:
         chat_kwargs["repetition_penalty"] = request.repetition_penalty
-    elif cfg.reasoning_parser_name and request.tools:
-        chat_kwargs["repetition_penalty"] = 1.3
+
+    # N-gram blocking: honour explicit client value; no server default.
+    # Disabled by default — aggressive blocking corrupts coherent thinking output.
+    if hasattr(request, "no_repeat_ngram_size") and request.no_repeat_ngram_size:
+        chat_kwargs["no_repeat_ngram_size"] = int(request.no_repeat_ngram_size)
+
+    # Presence penalty: pass through client value only; no server default.
+    # The hard ban (count>=3 in last 10) + no_repeat_ngram_size handle extreme
+    # repetition. A large default presence_penalty disrupts coherence at temp=0
+    # by penalizing high-prob tokens like "a" / "the" into wrong alternatives.
+    if hasattr(request, "presence_penalty") and request.presence_penalty:
+        chat_kwargs["presence_penalty"] = float(request.presence_penalty)
 
     # For reasoning models with tools, temperature=0 (greedy) causes
     # phrase-level repetition loops in the thinking phase — anti-repetition

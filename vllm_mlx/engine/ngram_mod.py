@@ -174,6 +174,9 @@ class NGramModEngine(BatchedEngine):
         top_p: float,
         stop: list[str] | None = None,
         repetition_penalty: float = 1.0,
+        no_repeat_ngram_size: int = 0,
+        presence_penalty: float = 0.0,
+        _disable_speculative: bool = False,
     ):
         loop = asyncio.get_running_loop()
         executor = self._executor
@@ -204,20 +207,29 @@ class NGramModEngine(BatchedEngine):
             else float(temperature or 0.0)
         )
         logger.info(
-            "[ngram-mod] request: temperature=%s (effective=%s) top_p=%s max_tokens=%s prompt_tokens=%d tool_prompt=%s",
+            "[ngram-mod] request: temperature=%s (effective=%s) top_p=%s max_tokens=%s prompt_tokens=%d tool_prompt=%s rep_penalty=%s ngram=%s presence=%s",
             temperature,
             effective_temperature,
             top_p,
             max_tokens,
             prompt_tokens_len,
             tool_prompt,
+            repetition_penalty,
+            no_repeat_ngram_size,
+            presence_penalty,
         )
 
         _rep_penalty = float(repetition_penalty)
+        _presence_penalty = float(presence_penalty)
         # Mutable list shared with sampler closure; updated after each yielded token.
         # ngram_mod_generate_step maintains its own internal `seq` that we can't
         # reference from outside, so we maintain a parallel tracking list here.
         _recent: list[int] = list(token_ids)
+
+        # Accepted generated tokens only. Updated by outer loop, read by sampler.
+        # Never contains phantom speculative candidates — only tokens that were
+        # accepted and emitted. Capped at 512 then trimmed to 256.
+        _generated_ids: list[int] = []
 
         _ban_log_fired = False
 
@@ -250,9 +262,10 @@ class NGramModEngine(BatchedEngine):
                 soft_mask = soft_mask[None]
             result = result * (1.0 + soft_mask * (_rep_penalty - 1.0))
 
-            # Hard ban: tokens repeating ≥ 3x in last 10 positions.
+            # Hard ban: consecutive repeat or ≥3x in last 10 positions.
             tail = recent[-10:]
-            banned = [t for t in set(tail) if tail.count(t) >= 3]
+            consecutive = recent[-1] if len(recent) >= 2 and recent[-1] == recent[-2] else None
+            banned = [t for t in set(tail) if t == consecutive or tail.count(t) >= 3]
             if banned:
                 if not _ban_log_fired:
                     logger.info("[rep-penalty] hard-ban fired: tokens=%s", banned)
@@ -264,7 +277,7 @@ class NGramModEngine(BatchedEngine):
 
             return result
 
-        if effective_temperature > 0 and _rep_penalty == 1.0:
+        if effective_temperature > 0 and _rep_penalty == 1.0 and _presence_penalty == 0.0:
             # Fast path: no repetition penalty, use MLX directly.
             def sampler(logprobs):
                 scaled = logprobs / effective_temperature
@@ -287,19 +300,50 @@ class NGramModEngine(BatchedEngine):
             def sampler(logprobs):
                 lp_np = np.array(logprobs.astype(mx.float32))  # bf16→f32 + eval
                 n_pred = lp_np.shape[-2] if lp_np.ndim >= 3 else 1
+                # running: grows with batch; penalty/ban uses last 20/10 tokens.
+                # Do NOT trim mid-batch — the suffix running[20:] holds batch tokens
+                # needed for n-gram context (they're not yet in _recent).
                 running = list(_recent[-20:])
                 results = []
                 for i in range(n_pred):
                     pos = lp_np[0, i].copy() if n_pred > 1 else lp_np.reshape(-1).copy()
-                    # Soft penalty for recently seen tokens
+                    # Tokens generated within this batch call (beyond the initial
+                    # snapshot of _recent). These are not yet in _generated_ids.
+                    batch_extra = running[20:]
+                    # Multiplicative repetition penalty — generated tokens only.
+                    # Using running[-20:] would penalize prompt tokens (short prompts
+                    # fit in the window), causing the model to avoid its own question
+                    # words during thinking, producing cascading incoherence.
                     if _rep_penalty != 1.0:
-                        for t in set(running[-20:]):
+                        gen_recent20 = (_generated_ids + batch_extra)[-20:]
+                        for t in set(gen_recent20):
                             pos[t] *= _rep_penalty
-                        # Hard ban: >=3x in last 10 positions
-                        tail10 = running[-10:]
-                        for t in set(tail10):
-                            if tail10.count(t) >= 3:
-                                pos[t] = -1e9
+                    # Additive presence penalty over a short window of GENERATED tokens
+                    # only. Applying it to prompt tokens penalizes <think> and newlines
+                    # at generation start, causing immediate EOS. Only the last 5 accepted
+                    # generated tokens + current batch tokens are penalized.
+                    if _presence_penalty != 0.0:
+                        recent_gen = (_generated_ids + batch_extra)[-5:]
+                        for t in set(recent_gen):
+                            pos[t] -= _presence_penalty
+                    # Hard ban: prevent 3 consecutive identical tokens (e.g. "React
+                    # React React"). Using "count>=3 in last 10" is too aggressive —
+                    # enumerated thinking naturally produces "." multiple times across
+                    # 10 tokens, and banning it cascades into corrupt output.
+                    recent2 = (_generated_ids + batch_extra)[-2:]
+                    if len(recent2) == 2 and recent2[0] == recent2[1]:
+                        pos[recent2[0]] = -1e9
+                    # N-gram blocking: scan accepted generated tokens + current batch.
+                    # _generated_ids holds only accepted tokens (maintained by outer
+                    # loop), so no phantom speculative candidates corrupt the history.
+                    if no_repeat_ngram_size >= 2:
+                        ngram_hist = _generated_ids[-256:] + batch_extra
+                        if len(ngram_hist) >= no_repeat_ngram_size:
+                            n = no_repeat_ngram_size - 1
+                            prefix = ngram_hist[-n:]
+                            for j in range(len(ngram_hist) - n):
+                                if ngram_hist[j:j + n] == prefix:
+                                    pos[ngram_hist[j + n]] = -1e9
                     if effective_temperature > 0:
                         # Stochastic sampling with numpy
                         scaled = pos / effective_temperature
@@ -311,8 +355,6 @@ class NGramModEngine(BatchedEngine):
                         tok = int(np.argmax(pos))
                     results.append(tok)
                     running.append(tok)
-                    if len(running) > 30:
-                        running = running[-20:]
                 return mx.array(results, dtype=mx.uint32)[None, :]
 
         def _make_gen():
@@ -320,6 +362,11 @@ class NGramModEngine(BatchedEngine):
                 prompt_arr,
                 self._model,
                 decoder=self._decoder,
+                # n_min=9999 disables speculative drafting (floor always > draft length).
+                # Used for tool-enabled prompts where the n-gram pool proposes tokens
+                # from the system prompt example format (e.g. "<function=example_function_name>")
+                # that corrupt the tool call output.
+                n_min=9999 if _disable_speculative else None,
                 max_tokens=max_tokens,
                 sampler=sampler,
                 prefill_step_size=self._prefill_step_size,
@@ -329,11 +376,54 @@ class NGramModEngine(BatchedEngine):
         gen = await loop.run_in_executor(executor, _make_gen)
         sentinel = object()
 
+        # Draft-accepted tokens bypass the sampler closure (speculative decoding
+        # skips resampling when draft==target). _next_checked() runs in the
+        # executor thread (safe for MLX/numpy) and re-applies all penalty rules
+        # to draft tokens before returning them to the outer loop.
+        _needs_check = _rep_penalty != 1.0 or _presence_penalty != 0.0 or no_repeat_ngram_size >= 2
+        import numpy as _np
+
         def _next():
             try:
-                return next(gen)
+                tok_raw, logprobs_raw, from_draft = next(gen)
             except StopIteration:
                 return sentinel
+            if not (from_draft and _needs_check):
+                return tok_raw, logprobs_raw, from_draft
+            # Apply penalty rules in executor thread (safe for MLX/numpy).
+            lp = _np.array(logprobs_raw.astype(mx.float32)).reshape(-1).copy()
+            recent20 = _recent[-20:]
+            if _rep_penalty != 1.0:
+                for t in set(_generated_ids[-20:]):  # generated only, not prompt
+                    lp[t] *= _rep_penalty
+            if _presence_penalty != 0.0:
+                recent_gen = _generated_ids[-5:]
+                for t in set(recent_gen):
+                    lp[t] -= _presence_penalty
+            # Hard ban: prevent 3rd consecutive identical token.
+            recent2 = _generated_ids[-2:]
+            if len(recent2) == 2 and recent2[0] == recent2[1]:
+                lp[recent2[0]] = -1e9
+            if no_repeat_ngram_size >= 2 and len(_generated_ids) >= no_repeat_ngram_size:
+                n = no_repeat_ngram_size - 1
+                prefix = _generated_ids[-n:]
+                for j in range(len(_generated_ids) - n):
+                    if _generated_ids[j:j + n] == prefix:
+                        lp[_generated_ids[j + n]] = -1e9
+            # Resample if penalties change the best token.
+            # Soft penalties (presence, rep) may not hard-ban the draft token but
+            # can make another token more likely — always re-pick after applying.
+            if effective_temperature > 0:
+                scaled = lp / effective_temperature
+                scaled -= scaled.max()
+                probs = _np.exp(scaled).astype(_np.float64)
+                probs /= probs.sum()
+                effective_tok = int(_np.random.choice(len(probs), p=probs))
+            else:
+                effective_tok = int(_np.argmax(lp))
+            if effective_tok != int(tok_raw):
+                tok_raw = effective_tok
+            return tok_raw, logprobs_raw, from_draft
 
         generated = 0
         proposed_before = self._decoder.lifetime_proposed
@@ -372,6 +462,11 @@ class NGramModEngine(BatchedEngine):
             _recent.append(int(tok))
             if len(_recent) > 200:
                 del _recent[:100]
+
+            # Track accepted generated tokens for n-gram blocking.
+            _generated_ids.append(int(tok))
+            if len(_generated_ids) > 512:
+                del _generated_ids[:256]
 
             if tok in eos_ids:
                 finish_reason = "stop"
@@ -457,6 +552,13 @@ class NGramModEngine(BatchedEngine):
             "_final": True,
         }
 
+    def _is_tool_prompt(self, prompt: str) -> bool:
+        # Tool-enabled prompts contain the Qwen3 XML tool format system section.
+        # The n-gram draft pools from the system prompt and proposes tokens like
+        # "<function=example_function_name>" which corrupt the tool call output.
+        # Fall back to non-speculative generation for these requests.
+        return "<function=" in prompt or "<tools>" in prompt
+
     async def generate(
         self,
         prompt: str,
@@ -473,6 +575,8 @@ class NGramModEngine(BatchedEngine):
         if images or videos:
             raise ValueError("ngram-mod does not support images or videos.")
 
+        _no_spec = self._is_tool_prompt(prompt)
+
         self._inflight += 1
         try:
             async with self._lock:
@@ -480,10 +584,15 @@ class NGramModEngine(BatchedEngine):
                 parts: list[str] = []
                 last: dict | None = None
                 _rep_penalty = float(kwargs.pop("repetition_penalty", 1.0))
+                _ngram_size = int(kwargs.pop("no_repeat_ngram_size", 0))
+                _presence = float(kwargs.pop("presence_penalty", 0.0))
                 try:
                     async for chunk in self._stream_ngram_mod(
                         prompt, max_tokens, temperature, top_p, stop=stop,
                         repetition_penalty=_rep_penalty,
+                        no_repeat_ngram_size=_ngram_size,
+                        presence_penalty=_presence,
+                        _disable_speculative=_no_spec,
                     ):
                         last = chunk
                         if chunk.get("text"):
@@ -518,6 +627,8 @@ class NGramModEngine(BatchedEngine):
         if images or videos:
             raise ValueError("ngram-mod does not support images or videos.")
 
+        _no_spec = self._is_tool_prompt(prompt)
+
         self._inflight += 1
         try:
             async with self._lock:
@@ -525,10 +636,15 @@ class NGramModEngine(BatchedEngine):
                 cumulative = ""
                 last: dict | None = None
                 _rep_penalty = float(kwargs.pop("repetition_penalty", 1.0))
+                _ngram_size = int(kwargs.pop("no_repeat_ngram_size", 0))
+                _presence = float(kwargs.pop("presence_penalty", 0.0))
                 try:
                     async for chunk in self._stream_ngram_mod(
                         prompt, max_tokens, temperature, top_p, stop=stop,
                         repetition_penalty=_rep_penalty,
+                        no_repeat_ngram_size=_ngram_size,
+                        presence_penalty=_presence,
+                        _disable_speculative=_no_spec,
                     ):
                         last = chunk
                         new_text = chunk.get("text") or ""

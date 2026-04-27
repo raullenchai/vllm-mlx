@@ -464,7 +464,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if request.repetition_penalty and request.repetition_penalty != 1.0:
         chat_kwargs["repetition_penalty"] = request.repetition_penalty
     elif cfg.reasoning_parser_name and request.tools:
-        chat_kwargs["repetition_penalty"] = 1.15
+        chat_kwargs["repetition_penalty"] = 1.3
 
     # Only force thinking off when explicitly configured on the server.
     # For qwen3_coder_xml: Qwen3 generates <tool_call> AFTER </think>, never

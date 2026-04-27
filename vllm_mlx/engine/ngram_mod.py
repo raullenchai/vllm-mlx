@@ -214,21 +214,34 @@ class NGramModEngine(BatchedEngine):
         _rep_penalty = float(repetition_penalty)
 
         def _apply_repetition_penalty(logprobs: mx.array, recent: list[int]) -> mx.array:
-            # Penalise recently generated tokens to prevent repetition loops.
-            # recent: list of token IDs from seq (prompt + generated so far).
-            # logprobs are log-softmax'd (≤ 0); multiplying by penalty > 1 makes
-            # them more negative, reducing sampling probability.
             if not recent:
                 return logprobs
-            unique = list(set(recent))
-            idx = mx.array(unique, mx.int32)
             vocab = logprobs.shape[-1]
-            # mask: [vocab_size] bool — True at penalised positions
-            mask = mx.one_hot(idx, vocab, dtype=mx.float32).sum(axis=0) > 0
-            # Broadcast mask to logprobs shape (e.g. [1, n_predict, vocab])
-            for _ in range(logprobs.ndim - 1):
-                mask = mask[None]
-            return mx.where(mask, logprobs * _rep_penalty, logprobs)
+            result = logprobs
+
+            # Soft multiplicative penalty for recently generated tokens.
+            # log-probs are ≤ 0; multiplying by >1 makes them more negative.
+            if _rep_penalty != 1.0:
+                unique = list(set(recent))
+                idx = mx.array(unique, mx.int32)
+                mask = mx.one_hot(idx, vocab, dtype=mx.float32).sum(axis=0) > 0
+                for _ in range(result.ndim - 1):
+                    mask = mask[None]
+                result = mx.where(mask, result * _rep_penalty, result)
+
+            # Hard ban: tokens repeating ≥ 3x in last 10 positions get -1e9.
+            # Soft penalty alone cannot break temperature=0 attractor states
+            # (logprob near 0 * 1.15 is still near 0 vs competitors at -5+).
+            tail = recent[-10:]
+            banned = [t for t in set(tail) if tail.count(t) >= 3]
+            if banned:
+                bidx = mx.array(banned, mx.int32)
+                ban_mask = mx.one_hot(bidx, vocab, dtype=mx.float32).sum(axis=0) > 0
+                for _ in range(result.ndim - 1):
+                    ban_mask = ban_mask[None]
+                result = mx.where(ban_mask, mx.array(-1e9, dtype=result.dtype), result)
+
+            return result
 
         if effective_temperature > 0:
             def sampler(logprobs):

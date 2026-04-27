@@ -203,12 +203,7 @@ class NGramModEngine(BatchedEngine):
         tool_prompt = _looks_like_tool_prompt(prompt)
         effective_temperature = (
             0.0
-            # Force greedy only on turn 1 (where _skip_prompt_ingest is set —
-            # prompt contains <tools> but no prior tool results). Turn 1 at
-            # temp=0.6 causes paragraph-level repetition in thinking. Subsequent
-            # turns (tool_prompt=True) keep the client temperature so the model
-            # can escape greedy-decoding doom loops between tool calls.
-            if (self._force_greedy or _skip_prompt_ingest)
+            if self._force_greedy
             else float(temperature or 0.0)
         )
         logger.info(

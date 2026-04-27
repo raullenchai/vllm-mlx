@@ -264,10 +264,10 @@ class NGramModEngine(BatchedEngine):
 
             return result
 
-        if effective_temperature > 0:
+        if effective_temperature > 0 and _rep_penalty == 1.0:
+            # Fast path: no repetition penalty, use MLX directly.
             def sampler(logprobs):
-                lp = _apply_repetition_penalty(logprobs) if _rep_penalty != 1.0 else logprobs
-                scaled = lp / effective_temperature
+                scaled = logprobs / effective_temperature
                 if 0.0 < top_p < 1.0:
                     sorted_logits = mx.sort(scaled, axis=-1)[..., ::-1]
                     sorted_probs = mx.softmax(sorted_logits, axis=-1)
@@ -277,28 +277,38 @@ class NGramModEngine(BatchedEngine):
                     scaled = mx.where(scaled < threshold, -mx.inf, scaled)
                 return mx.random.categorical(scaled)
         else:
+            # Per-position penalty: handles both greedy (temp=0) and stochastic.
+            # With speculative batches of up to n_max=16, a shared _recent snapshot
+            # would let a banned token slip through for the entire batch. Iterating
+            # per-position with a running context fixes this at the cost of one
+            # numpy eval per sampler call.
+            import numpy as np
+
             def sampler(logprobs):
-                if _rep_penalty == 1.0:
-                    return mx.argmax(logprobs, axis=-1)
-                # Per-position greedy with token-level hard ban (>=3x in last 10).
-                # Note: temperature=0 + anti-repetition still causes phrase-level
-                # cycles for complex reasoning. Prefer routing tool+reasoning
-                # requests to temperature>0 (see routes/chat.py) so this branch
-                # only handles edge cases.
-                import numpy as np
-                lp_np = np.array(logprobs.astype(mx.float32))  # bf16→f32 then eval
+                lp_np = np.array(logprobs.astype(mx.float32))  # bf16→f32 + eval
                 n_pred = lp_np.shape[-2] if lp_np.ndim >= 3 else 1
                 running = list(_recent[-20:])
                 results = []
                 for i in range(n_pred):
                     pos = lp_np[0, i].copy() if n_pred > 1 else lp_np.reshape(-1).copy()
-                    for t in set(running[-20:]):
-                        pos[t] *= _rep_penalty
-                    tail10 = running[-10:]
-                    for t in set(tail10):
-                        if tail10.count(t) >= 3:
-                            pos[t] = -1e9
-                    tok = int(np.argmax(pos))
+                    # Soft penalty for recently seen tokens
+                    if _rep_penalty != 1.0:
+                        for t in set(running[-20:]):
+                            pos[t] *= _rep_penalty
+                        # Hard ban: >=3x in last 10 positions
+                        tail10 = running[-10:]
+                        for t in set(tail10):
+                            if tail10.count(t) >= 3:
+                                pos[t] = -1e9
+                    if effective_temperature > 0:
+                        # Stochastic sampling with numpy
+                        scaled = pos / effective_temperature
+                        scaled -= scaled.max()  # numerical stability
+                        probs = np.exp(scaled).astype(np.float64)
+                        probs /= probs.sum()
+                        tok = int(np.random.choice(len(probs), p=probs))
+                    else:
+                        tok = int(np.argmax(pos))
                     results.append(tok)
                     running.append(tok)
                     if len(running) > 30:

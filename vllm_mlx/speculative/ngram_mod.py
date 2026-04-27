@@ -582,7 +582,7 @@ class MultiLevelNGramDecoder:
         for lvl in self._levels:
             lvl.preseed_qwen3()
 
-    def draft(self, recent_tokens, n_max: int | None = None) -> list[int]:
+    def draft(self, recent_tokens, n_max: int | None = None, min_n: int | None = None) -> list[int]:
         """Greedy draft using multi-level fallback, then recent-context scan.
 
         For each draft position:
@@ -591,6 +591,11 @@ class MultiLevelNGramDecoder:
              history via the shortest-n level's ``_scan()`` (Option C/D
              hybrid). This catches patterns evicted by hash collisions and
              tokens that were generated after the initial ingest call.
+
+        min_n: if set, skip levels with n < min_n. Use this to avoid short
+        accidental n-gram matches on common tokens (e.g. preseed sequences
+        contain literal command strings like "ls -la\\n" at short n-windows,
+        which can corrupt thinking output when those strings appear mid-reason).
         """
         cap = self.n_max if n_max is None else int(n_max)
         if cap <= 0:
@@ -604,23 +609,33 @@ class MultiLevelNGramDecoder:
         else:
             window = list(recent_tokens[-max_n:])
 
+        # Filter levels by min_n if specified.
+        active_levels = (
+            [lvl for lvl in self._levels if lvl.n >= min_n]
+            if min_n is not None
+            else self._levels
+        )
+
         # The shortest-n level owns the scan fallback; all levels share the
         # same token history, so using the last level is sufficient.
-        scan_level = self._levels[-1]
+        # When min_n restricts levels, disable scan fallback (it uses shortest
+        # level which may be below min_n).
+        scan_level = self._levels[-1] if min_n is None else None
 
         out: list[int] = []
         for _ in range(cap):
             tok = EMPTY
-            for lvl in self._levels:
+            for lvl in active_levels:
                 if len(window) >= lvl.n:
                     tok = lvl.get(window[-lvl.n:])
                     if tok != EMPTY:
                         break
-            if tok == EMPTY:
+            if tok == EMPTY and scan_level is not None:
                 tok = scan_level._scan(window[-scan_level.n :])
-                if tok == EMPTY:
-                    break
-                scan_level.lifetime_scan_hits += 1
+                if tok != EMPTY:
+                    scan_level.lifetime_scan_hits += 1
+            if tok == EMPTY:
+                break
             out.append(int(tok))
             window.append(int(tok))
             if len(window) > max_n:
@@ -659,6 +674,8 @@ def ngram_mod_generate_step(
     prompt_cache=None,
     prefill_step_size: int = 512,
     eos_ids: set[int] | None = None,
+    no_ingest_prompt: bool = False,
+    min_draft_n: int | None = None,
 ):
     """Generator yielding (token_id, logprobs, from_draft) tuples.
 
@@ -685,10 +702,26 @@ def ngram_mod_generate_step(
     # Only ingest the suffix not already in the pool to avoid O(n) Python
     # stall on long prompts (29K+ tokens takes 20+ seconds otherwise).
     _already_ingested = getattr(decoder, "_ingested_up_to", 0)
-    if len(seq) < _already_ingested:
-        _already_ingested = 0
-    if len(seq) > _already_ingested:
-        decoder.ingest(seq[max(0, _already_ingested - decoder.n):])
+    if no_ingest_prompt:
+        # Skip ingesting current prompt tokens. Used for tool-enabled prompts
+        # where the system prompt contains "<function=example_function_name>"
+        # examples that contaminate the pool and cause drafts to propose wrong
+        # function names. Generated tokens still enter the pool via _push, so
+        # from turn 2 onward the pool holds real tool calls and acceptance rate
+        # recovers. The preseed sequences cover structural boilerplate (turn 1).
+        if len(seq) < _already_ingested:
+            _already_ingested = 0
+        # Ingest only the delta between _already_ingested and current prompt —
+        # these are tokens from the PREVIOUS turn's generation that are now part
+        # of the prompt (tool call + tool response), not the static system prompt.
+        prev_gen_start = _already_ingested
+        if prev_gen_start > 0 and len(seq) > prev_gen_start:
+            decoder.ingest(seq[max(0, prev_gen_start - decoder.n):])
+    else:
+        if len(seq) < _already_ingested:
+            _already_ingested = 0
+        if len(seq) > _already_ingested:
+            decoder.ingest(seq[max(0, _already_ingested - decoder.n):])
     decoder._ingested_up_to = len(seq)
 
     def _step(tokens: mx.array, n_predict: int = 1):
@@ -724,7 +757,7 @@ def ngram_mod_generate_step(
 
         _push(current_token.item())
 
-        draft = decoder.draft(seq, n_max=cap)
+        draft = decoder.draft(seq, n_max=cap, min_n=min_draft_n)
         # Truncate draft at first EOS token so speculative decoding never
         # accepts a premature end-of-sequence from a stale pool pattern.
         if eos_ids:

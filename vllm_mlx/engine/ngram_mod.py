@@ -176,7 +176,7 @@ class NGramModEngine(BatchedEngine):
         repetition_penalty: float = 1.0,
         no_repeat_ngram_size: int = 0,
         presence_penalty: float = 0.0,
-        _disable_speculative: bool = False,
+        _skip_prompt_ingest: bool = False,
     ):
         loop = asyncio.get_running_loop()
         executor = self._executor
@@ -362,15 +362,23 @@ class NGramModEngine(BatchedEngine):
                 prompt_arr,
                 self._model,
                 decoder=self._decoder,
-                # n_min=9999 disables speculative drafting (floor always > draft length).
-                # Used for tool-enabled prompts where the n-gram pool proposes tokens
-                # from the system prompt example format (e.g. "<function=example_function_name>")
-                # that corrupt the tool call output.
-                n_min=9999 if _disable_speculative else None,
                 max_tokens=max_tokens,
                 sampler=sampler,
                 prefill_step_size=self._prefill_step_size,
                 eos_ids=eos_ids,
+                # For tool-enabled prompts, skip ingesting the current prompt tokens.
+                # The system prompt contains "<function=example_function_name>" examples
+                # that contaminate the pool and cause drafts to propose wrong function names.
+                # Skipping prompt ingest means only generated tokens (real tool calls) build
+                # the pool — turn 2+ gets good acceptance from actual prior tool calls.
+                # The preseed sequences cover structural boilerplate for turn 1.
+                no_ingest_prompt=_skip_prompt_ingest,
+                # For tool prompts, require ≥8 tokens of context to match before
+                # drafting. Preseed sequences contain literal command strings like
+                # "ls -la\n" (4 tokens). With min_draft_n=8, those short patterns
+                # won't trigger — only structural 8+-token sequences like the full
+                # <tool_call>\n<function=bash\n<parameter=command> skeleton do.
+                min_draft_n=8 if _skip_prompt_ingest else None,
             )
 
         gen = await loop.run_in_executor(executor, _make_gen)
@@ -575,7 +583,7 @@ class NGramModEngine(BatchedEngine):
         if images or videos:
             raise ValueError("ngram-mod does not support images or videos.")
 
-        _no_spec = self._is_tool_prompt(prompt)
+        _skip_ingest = self._is_tool_prompt(prompt)
 
         self._inflight += 1
         try:
@@ -592,7 +600,7 @@ class NGramModEngine(BatchedEngine):
                         repetition_penalty=_rep_penalty,
                         no_repeat_ngram_size=_ngram_size,
                         presence_penalty=_presence,
-                        _disable_speculative=_no_spec,
+                        _skip_prompt_ingest=_skip_ingest,
                     ):
                         last = chunk
                         if chunk.get("text"):
@@ -627,7 +635,7 @@ class NGramModEngine(BatchedEngine):
         if images or videos:
             raise ValueError("ngram-mod does not support images or videos.")
 
-        _no_spec = self._is_tool_prompt(prompt)
+        _skip_ingest = self._is_tool_prompt(prompt)
 
         self._inflight += 1
         try:
@@ -644,7 +652,7 @@ class NGramModEngine(BatchedEngine):
                         repetition_penalty=_rep_penalty,
                         no_repeat_ngram_size=_ngram_size,
                         presence_penalty=_presence,
-                        _disable_speculative=_no_spec,
+                        _skip_prompt_ingest=_skip_ingest,
                     ):
                         last = chunk
                         new_text = chunk.get("text") or ""

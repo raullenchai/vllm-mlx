@@ -317,13 +317,22 @@ class Qwen3CoderToolParser(ToolParser):
         self, function_call_str: str, tools: list[dict] | None
     ) -> dict | None:
         """Parse a single function call from XML and return a tool call dict."""
-        try:
-            end_index = function_call_str.index(">")
-        except ValueError:
+        gt_index = function_call_str.find(">")
+        if gt_index == -1:
             return None
-        function_name = function_call_str[:end_index]
+        nl_index = function_call_str.find("\n", 0, gt_index)
+        if nl_index != -1:
+            # Model omitted '>' after function name: "name\n</parameter>ARG>VAL"
+            # Use newline as name boundary and fix the malformed first param.
+            function_name = function_call_str[:nl_index].strip()
+            params_raw = function_call_str[nl_index + 1:]
+            # "</parameter>ARG>" → "<parameter=ARG>" for the first parameter
+            params_raw = re.sub(r"^</parameter>([^>]*>)", r"<parameter=\1", params_raw)
+            parameters = params_raw
+        else:
+            function_name = function_call_str[:gt_index]
+            parameters = function_call_str[gt_index + 1:]
         param_config = _get_arguments_config(function_name, tools)
-        parameters = function_call_str[end_index + 1 :]
         param_dict = {}
         for match_text in self.tool_call_parameter_regex.findall(parameters):
             try:
@@ -487,8 +496,12 @@ class Qwen3CoderToolParser(ToolParser):
                     self.tool_call_prefix
                 )
                 func_end = tool_text.find(">", func_start)
+                func_nl = tool_text.find("\n", func_start)
                 if func_end != -1:
-                    self.current_function_name = tool_text[func_start:func_end]
+                    if func_nl != -1 and func_nl < func_end:
+                        self.current_function_name = tool_text[func_start:func_nl].strip()
+                    else:
+                        self.current_function_name = tool_text[func_start:func_end]
                     self._current_tool_id = _generate_tool_id()
                     self.header_sent = True
                     self.in_function = True

@@ -484,18 +484,9 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if hasattr(request, "presence_penalty") and request.presence_penalty:
         chat_kwargs["presence_penalty"] = float(request.presence_penalty)
 
-    # For reasoning models with tools, temperature=0 (greedy) causes
-    # phrase-level repetition loops in the thinking phase — anti-repetition
-    # alone cannot fix this without degrading output quality. Override to
-    # a small temperature (0.6) unless the client explicitly set one.
-    # Pure completion requests (no tools) keep whatever temperature was set.
-    if (
-        cfg.reasoning_parser_name
-        and request.tools
-        and request.temperature is None  # client did not override
-        and chat_kwargs.get("temperature", 0.0) == 0.0
-    ):
-        chat_kwargs["temperature"] = 0.6
+    # Temperature override for tool requests: removed. The engine forces
+    # effective_temperature=0 for all tool-enabled prompts directly, and
+    # no_repeat_ngram_size=20 prevents word-level loops at greedy temp.
 
     # Only force thinking off when explicitly configured on the server.
     # For qwen3_coder_xml: Qwen3 generates <tool_call> AFTER </think>, never

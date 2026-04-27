@@ -203,7 +203,11 @@ class NGramModEngine(BatchedEngine):
         tool_prompt = _looks_like_tool_prompt(prompt)
         effective_temperature = (
             0.0
-            if (self._force_greedy or tool_prompt)
+            # Force greedy for tool-enabled prompts (both turn 1 where
+            # _skip_prompt_ingest is set, and turn 2+ where tool_prompt fires).
+            # At temp=0.6 the thinking loops with paragraph-level repetition;
+            # n-gram blocking (n=20) now prevents word-level loops at temp=0.
+            if (self._force_greedy or tool_prompt or _skip_prompt_ingest)
             else float(temperature or 0.0)
         )
         logger.info(

@@ -168,6 +168,7 @@ class NGramModDecoder:
         self.keys = self._make_keys()
         self.used = 0
         self.lifetime_resets += 1
+        self._ingested_up_to = 0
 
     def get_stats(self) -> dict:
         rate = (
@@ -224,7 +225,14 @@ def ngram_mod_generate_step(
     floor = decoder.n_min if n_min is None else int(n_min)
 
     seq: list[int] = prompt.tolist()
-    decoder.ingest(seq)
+    # Only ingest the suffix not already in the pool to avoid O(n) Python
+    # stall on long prompts (29K+ tokens takes 20+ seconds otherwise).
+    _already_ingested = getattr(decoder, "_ingested_up_to", 0)
+    if len(seq) < _already_ingested:
+        _already_ingested = 0
+    if len(seq) > _already_ingested:
+        decoder.ingest(seq[max(0, _already_ingested - decoder.n):])
+    decoder._ingested_up_to = len(seq)
 
     def _step(tokens: mx.array, n_predict: int = 1):
         logits = model(tokens[None], cache=prompt_cache)
@@ -300,6 +308,7 @@ def ngram_mod_generate_step(
                 model(replay_arr[None], cache=prompt_cache)
                 mx.eval([c.state for c in prompt_cache])
 
+            _push(verified[n_acc])
             current_token = mx.array(verified[n_acc], mx.uint32)
             logprobs = vlogprobs[n_acc]
         else:

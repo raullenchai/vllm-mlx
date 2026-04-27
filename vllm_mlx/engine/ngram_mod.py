@@ -176,7 +176,7 @@ class NGramModEngine(BatchedEngine):
                 if hasattr(tokenizer, "convert_ids_to_tokens")
                 else None
             )
-            if tok_str and tok_str.endswith("im_end|>"):
+            if tok_str and ("im_end|>" in tok_str or "endoftext" in tok_str):
                 eos_ids.add(int(tid))
 
         tool_prompt = _looks_like_tool_prompt(prompt)
@@ -504,6 +504,11 @@ class NGramModEngine(BatchedEngine):
                     "tokens_per_second": tps,
                     "ttft_s": ttft,
                     "acceptance_ratio": ratio,
+                    "block_size": (
+                        round(self._active.accepted_tokens / self._active.proposed_tokens, 2)
+                        if self._active.proposed_tokens > 0
+                        else None
+                    ),
                     "accepted_tokens": self._active.accepted_tokens,
                     "proposed_tokens": self._active.proposed_tokens,
                     "cache_hit_type": None,

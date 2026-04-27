@@ -58,6 +58,7 @@ from ..service.helpers import (
     _resolve_temperature,
     _resolve_top_p,
     _validate_model_name,
+    _coerce_tool_call_params,
     _validate_tool_call_params,
     _wait_with_disconnect,
     get_engine,
@@ -120,8 +121,11 @@ def _tool_call_value(obj, key: str, default=None):
     return getattr(obj, key, default)
 
 
-def _buffered_tool_calls_complete(buffered_events: list[tuple]) -> bool:
-    """Return True when streamed tool-call chunks assemble to valid JSON."""
+def _buffered_tool_calls_complete(
+    buffered_events: list[tuple],
+    request_tools=None,
+) -> bool:
+    """Return True when streamed tool-call chunks assemble to valid JSON with required params."""
     calls: dict[int, dict[str, str | None]] = {}
     for event, _ in buffered_events:
         for tool_call in getattr(event, "tool_calls", None) or []:
@@ -151,6 +155,30 @@ def _buffered_tool_calls_complete(buffered_events: list[tuple]) -> bool:
     if not calls:
         return False
 
+    required_by_tool: dict[str, list[str]] = {}
+    if request_tools:
+        for tool in request_tools:
+            fn = (
+                tool.get("function", {})
+                if isinstance(tool, dict)
+                else getattr(tool, "function", None) or {}
+            )
+            fn_name = (
+                fn.get("name") if isinstance(fn, dict) else getattr(fn, "name", None)
+            )
+            params = (
+                fn.get("parameters", {})
+                if isinstance(fn, dict)
+                else getattr(fn, "parameters", None) or {}
+            )
+            required = (
+                params.get("required")
+                if isinstance(params, dict)
+                else getattr(params, "required", None)
+            ) or []
+            if fn_name:
+                required_by_tool[str(fn_name)] = list(required)
+
     for assembled in calls.values():
         if not assembled.get("name"):
             return False
@@ -163,6 +191,15 @@ def _buffered_tool_calls_complete(buffered_events: list[tuple]) -> bool:
             return False
         if not isinstance(parsed, dict):
             return False
+        fn_name = assembled.get("name") or ""
+        for req_key in required_by_tool.get(fn_name, []):
+            if req_key not in parsed:
+                logger.warning(
+                    "[tool-buffering] assembled tool call '%s' missing required param '%s'",
+                    fn_name,
+                    req_key,
+                )
+                return False
 
     return True
 
@@ -424,9 +461,7 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # Pass through enable_thinking if explicitly set by the client
     if request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = request.enable_thinking
-    elif cfg.no_thinking or (
-        added_tool_continuation_prompt and cfg.tool_call_parser == "qwen3_coder_xml"
-    ):
+    elif cfg.no_thinking or cfg.tool_call_parser == "qwen3_coder_xml":
         chat_kwargs["enable_thinking"] = False
 
     # Cloud routing: offload large-context requests to cloud LLM
@@ -626,8 +661,9 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # Parse tool calls from output using configured parser
     cleaned_text, tool_calls = _parse_tool_calls_with_parser(output.text, request)
 
-    # Validate tool call parameter values against schemas
+    # Coerce stringified array/object params then validate
     if tool_calls and request.tools:
+        _coerce_tool_call_params(tool_calls, request.tools)
         _validate_tool_call_params(tool_calls, request.tools)
 
     # Extract reasoning content FIRST.
@@ -850,6 +886,8 @@ async def stream_chat_completion(
             emitted_tool_call = False
             last_output = None
             retry_reason = None
+            _buffered_text_cache = ""
+            _buf_evt_count = 0
 
             # Stream content — PostProcessor handles reasoning/tool/sanitize
             async for output in engine.stream_chat(messages=active_messages, **kwargs):
@@ -866,9 +904,13 @@ async def stream_chat_completion(
 
                 for event in processor.process_chunk(output):
                     if retry_window and event.type in ("content", "reasoning"):
-                        buffered_events.append((event, output))
-                        if _is_repetitive_tool_text(
-                            _buffered_stream_text(buffered_events)
+                        _buffered_text_cache += (getattr(event, "content", None) or "") + (getattr(event, "reasoning", None) or "")
+                        _buf_evt_count += 1
+                        # Only check every 32 events — _is_repetitive_tool_text
+                        # requires ≥32 words and runs a full regex scan each call;
+                        # checking on every event is O(N²) over the stream.
+                        if _buf_evt_count % 32 == 0 and _is_repetitive_tool_text(
+                            _buffered_text_cache
                         ):
                             retry_reason = "repetitive text before tool call"
                             logger.info(
@@ -876,6 +918,8 @@ async def stream_chat_completion(
                                 "before tool call; aborting current stream"
                             )
                             break
+                        for _sse in _format_stream_event(event, output):
+                            yield _sse
                         continue
 
                     if (
@@ -948,7 +992,7 @@ async def stream_chat_completion(
                         yield _fb_sse
 
             if not retry_reason and buffered_tool_call_events:
-                if _buffered_tool_calls_complete(buffered_tool_call_events):
+                if _buffered_tool_calls_complete(buffered_tool_call_events, request.tools):
                     emitted_tool_call = True
                     for buffered_event, buffered_output in buffered_events:
                         for _sse in _format_stream_event(
@@ -960,6 +1004,10 @@ async def stream_chat_completion(
                     for tool_event, tool_output in buffered_tool_call_events:
                         if tool_output is None:
                             continue
+                        # Coerce stringified array/object args before emitting
+                        _tc = getattr(tool_event, "tool_calls", None)
+                        if _tc and request.tools:
+                            _coerce_tool_call_params(_tc, request.tools)
                         for _sse in _format_stream_event(tool_event, tool_output):
                             yield _sse
                     buffered_tool_call_events.clear()
@@ -974,7 +1022,7 @@ async def stream_chat_completion(
 
             if not retry_reason and deferred_finish and not emitted_tool_call:
                 retry_reason = "text-only stop"
-            elif not retry_reason and buffered_events and not emitted_tool_call:
+            elif not retry_reason and _buf_evt_count > 0 and not emitted_tool_call:
                 retry_reason = "stream exhausted without tool call"
 
             if retry_reason and retry_attempts < max_tool_continuation_retries:

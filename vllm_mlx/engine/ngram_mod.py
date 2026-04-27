@@ -34,17 +34,20 @@ logger = logging.getLogger(__name__)
 
 
 def _looks_like_tool_prompt(prompt: str) -> bool:
-    return any(
-        marker in prompt
-        for marker in (
-            "<tool_call>",
-            "<function=",
-            "<minimax:tool_call>",
-            '<invoke name="',
-            "<|tool_call>",
-            "[TOOL_CALLS]",
-        )
+    # Detect prompts that contain PRIOR tool call/response exchanges
+    # (not just tool definitions or instruction examples).
+    # Qwen3 XML: system prompt includes example "<function=example_function_name>"
+    # which would be a false positive, so we look for a *completed* tool call
+    # (</tool_call>) or a tool response marker instead.
+    markers = (
+        "</tool_call>",      # completed prior tool call in history
+        "<tool_response>",   # tool result fed back to model
+        "<minimax:tool_call>",
+        '<invoke name="',
+        "<|tool_call>",
+        "[TOOL_CALLS]",
     )
+    return any(m in prompt for m in markers)
 
 
 def _init_ngram_mod_step_thread() -> None:

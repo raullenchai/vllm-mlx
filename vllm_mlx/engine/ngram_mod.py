@@ -283,7 +283,7 @@ class NGramModEngine(BatchedEngine):
                 # bypass the ban by sharing a single stale _recent snapshot.
                 # Convert to numpy once, iterate positions in Python.
                 import numpy as np
-                lp_np = np.array(logprobs)  # [1, n_predict, vocab] — forces eval
+                lp_np = np.array(logprobs.astype(mx.float32))  # [1, n_predict, vocab] — cast bf16→f32 then eval
                 n_pred = lp_np.shape[-2] if lp_np.ndim >= 3 else 1
                 running = list(_recent[-20:])
                 results = []

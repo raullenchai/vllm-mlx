@@ -141,6 +141,12 @@ class StreamingPostProcessor:
         self.tools_requested = tools_requested
         self.json_mode = json_mode
         self.request_dict = request_dict
+        # When thinking is explicitly disabled the model output contains no
+        # <think> tags.  The Qwen3 reasoning parser's "Case 3" (no tags seen)
+        # would then classify *all* output — including tool calls — as
+        # reasoning, hiding them from the tool parser.  Bypass the reasoning
+        # parser entirely so tool calls flow straight through _process_standard.
+        self._thinking_disabled = enable_thinking is False
 
         # Per-request parser instances — each streaming request gets its
         # own parser to avoid state corruption under concurrent
@@ -179,6 +185,7 @@ class StreamingPostProcessor:
         # the first JSON delimiter ({ or [) is seen, then emit from there.
         self._json_preamble_stripped = False
         self._json_preamble_buffer = ""
+        self._in_suppressed_think = False
 
     def _tool_call_has_required_args(self, name: str | None, arguments) -> bool:
         if not name or not isinstance(self.request_dict, dict):
@@ -309,6 +316,7 @@ class StreamingPostProcessor:
         self._think_prefix_sent = False
         self._json_preamble_stripped = False
         self._json_preamble_buffer = ""
+        self._in_suppressed_think = False  # for _thinking_disabled think-block filter
 
         if self.reasoning_parser:
             self.reasoning_parser.reset_state()
@@ -327,10 +335,13 @@ class StreamingPostProcessor:
                 return [self._make_finish_event(output)]
             return []
 
-        # Step 1: Separate content from reasoning
+        # Step 1: Separate content from reasoning.
+        # Skip the reasoning parser when thinking is explicitly disabled —
+        # the Qwen3 "Case 3" path would treat all output (including tool calls)
+        # as reasoning, routing them away from the tool parser.
         if output.channel:
             return self._process_channel_routed(delta_text, output)
-        elif self.reasoning_parser:
+        elif self.reasoning_parser and not self._thinking_disabled:
             return self._process_with_reasoning(delta_text, output)
         else:
             return self._process_standard(delta_text, output)
@@ -513,6 +524,14 @@ class StreamingPostProcessor:
         """Handle standard models (no reasoning parser, no channel router)."""
         content = strip_special_tokens(delta_text)
 
+        # When thinking is disabled but the model still emits <think>...</think>
+        # (can happen with some quantized models that ignore the nothink prefix),
+        # strip think-block text from content so it never reaches the tool parser.
+        # Surface it as reasoning_content so OpenCode shows it as "Thinking:".
+        _think_text: str = ""
+        if self._thinking_disabled and content:
+            content, _think_text = self._split_think_content(content)
+
         # JSON mode preamble stripping (#46): when response_format is set and
         # no reasoning parser is active, the model may emit a thinking preamble
         # (e.g. "Let me think...\n{json}") before the actual JSON. Suppress
@@ -536,20 +555,28 @@ class StreamingPostProcessor:
             content = "<think>" + content
             self._think_prefix_sent = True
 
-        # Tool call detection
-        if self._should_detect_tool_calls(delta_text):
-            result = self._detect_tool_calls(delta_text)
+        # Tool call detection — use think-stripped content when thinking disabled,
+        # raw delta_text otherwise (preserves original behaviour for other models).
+        _tc_input = content if self._thinking_disabled else delta_text
+        if _tc_input and self._should_detect_tool_calls(_tc_input):
+            result = self._detect_tool_calls(_tc_input)
             if result is None:
+                if _think_text:
+                    return [StreamEvent(type="reasoning", reasoning=_think_text)]
                 return []
             if result.get("tool_calls"):
-                return [
+                tc_events: list[StreamEvent] = []
+                if _think_text:
+                    tc_events.append(StreamEvent(type="reasoning", reasoning=_think_text))
+                tc_events.append(
                     StreamEvent(
                         type="tool_call",
                         tool_calls=result["tool_calls"],
                         finish_reason="tool_calls" if output.finished else None,
                         tool_calls_detected=True,
                     )
-                ]
+                )
+                return tc_events
             content = strip_special_tokens(result.get("content", ""))
 
         if self.tool_calls_detected:
@@ -569,7 +596,7 @@ class StreamingPostProcessor:
 
         finish_reason = self._compute_finish_reason(output)
 
-        if not content and not finish_reason:
+        if not content and not finish_reason and not _think_text:
             return []
 
         if content:
@@ -580,18 +607,22 @@ class StreamingPostProcessor:
         # When finish_reason is set, emit ONE finish event with content merged in.
         # Never emit separate content + finish events — that would cause
         # double-emission of the same content and duplicate logprobs.
+        events: list[StreamEvent] = []
+        if _think_text:
+            events.append(StreamEvent(type="reasoning", reasoning=_think_text))
         if finish_reason:
-            return [
+            events.append(
                 StreamEvent(
                     type="finish",
                     finish_reason=finish_reason,
                     content=content,
                     tool_calls_detected=self.tool_calls_detected,
                 )
-            ]
+            )
+            return events
         if content:
-            return [StreamEvent(type="content", content=content)]
-        return []
+            events.append(StreamEvent(type="content", content=content))
+        return events
 
     def finalize(self) -> list[StreamEvent]:
         """Finalize stream — flush remaining tool calls, emit corrections.
@@ -721,6 +752,41 @@ class StreamingPostProcessor:
             return None
 
         return {"content": tool_result.get("content", "")}
+
+    def _split_think_content(self, text: str) -> tuple[str, str]:
+        """Split delta text into (content_outside_think, think_block_text).
+
+        Handles streaming: tracks _in_suppressed_think across deltas.
+        think_block_text should be surfaced as reasoning; content_outside_think
+        passes through to the tool parser as regular content.
+        """
+        if not text:
+            return text, ""
+
+        think_parts: list[str] = []
+        content_parts: list[str] = []
+        pos = 0
+        while pos < len(text):
+            if self._in_suppressed_think:
+                end = text.find("</think>", pos)
+                if end == -1:
+                    think_parts.append(text[pos:])
+                    pos = len(text)
+                else:
+                    think_parts.append(text[pos:end])
+                    self._in_suppressed_think = False
+                    pos = end + len("</think>")
+            else:
+                start = text.find("<think>", pos)
+                if start == -1:
+                    content_parts.append(text[pos:])
+                    pos = len(text)
+                else:
+                    content_parts.append(text[pos:start])
+                    self._in_suppressed_think = True
+                    pos = start + len("<think>")
+
+        return "".join(content_parts), "".join(think_parts)
 
     def _compute_finish_reason(self, output: GenerationOutput) -> str | None:
         if not output.finished:

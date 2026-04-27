@@ -113,6 +113,7 @@ class NGramModEngine(BatchedEngine):
                 reset_threshold=reset_threshold,
                 reset_streak=reset_streak,
             )
+        self._decoder.preseed_qwen3()
         self._prefill_step_size = int(prefill_step_size)
         self._force_greedy = bool(force_greedy)
 

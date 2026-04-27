@@ -466,6 +466,29 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     elif request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = request.enable_thinking
 
+    # When thinking is disabled, strip any OpenCode-style <think> prefill.
+    # Some agents (OpenCode) append a partial assistant turn starting with
+    # "<think>" to force reasoning mode — this bypasses enable_thinking=False
+    # because the template never adds its own nothink prefix when an assistant
+    # turn is already present.  Remove the bare marker so the template inserts
+    # the proper "<think>\n\n</think>\n\n" nothink prefix instead.
+    if chat_kwargs.get("enable_thinking") is False and messages:
+        _last = messages[-1]
+        _last_role = (
+            _last.get("role") if isinstance(_last, dict)
+            else getattr(_last, "role", None)
+        )
+        if _last_role == "assistant":
+            _last_content = (
+                _last.get("content", "") if isinstance(_last, dict)
+                else getattr(_last, "content", "")
+            ) or ""
+            if _last_content.strip() in ("<think>", "<think>\n", "<think>\n\n"):
+                messages = list(messages[:-1])
+                logger.info(
+                    "[nothink] stripped partial <think> prefill from last assistant message"
+                )
+
     # Cloud routing: offload large-context requests to cloud LLM
     if cfg.cloud_router and not engine.is_mllm and hasattr(engine, "build_prompt"):
         try:
@@ -878,6 +901,7 @@ async def stream_chat_completion(
                     and getattr(request.response_format, "type", "text") != "text"
                 ),
                 request_dict=request.model_dump(),
+                enable_thinking=kwargs.get("enable_thinking"),
             )
             processor.set_thinking_model(request.model)
             processor.reset()

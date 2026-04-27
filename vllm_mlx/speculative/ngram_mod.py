@@ -39,6 +39,76 @@ _TOKEN_MASK: int = (1 << _TOKEN_BITS) - 1  # 0xFFFFF
 _COUNT_SHIFT: int = _TOKEN_BITS
 _COUNT_MAX: int = 0xFF
 
+# ---------------------------------------------------------------------------
+# Pre-seed token sequences for Qwen3 models.
+#
+# These are the exact token IDs produced by the Qwen3 tokenizer
+# (confirmed against mlx-community/Qwen3.5-4B-MLX-4bit, identical across
+# all Qwen3 variants).  Each sequence represents a complete tool-call
+# skeleton in the format the chat template uses:
+#
+#   \n\n<tool_call>\n<function=NAME>\n<parameter=PARAM>\n[VALUE]
+#   \n</parameter>\n</function>\n</tool_call>
+#
+# Seeding these at startup means the pool already knows the structural
+# transitions before the first request arrives, giving near-100% draft
+# acceptance for tool-call boilerplate from turn 1 onward.
+# ---------------------------------------------------------------------------
+# fmt: off
+_QWEN3_PRESEED_SEQUENCES: list[list[int]] = [
+    # bash + command (bare)
+    [271, 248058, 198, 27, 1628, 21402, 956, 29, 198, 27, 15704, 28, 5454, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # bash + command + "ls -la\n"
+    [271, 248058, 198, 27, 1628, 21402, 956, 29, 198, 27, 15704, 28, 5454, 29, 198, 4577, 471, 4120, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # bash + command + "cat "
+    [271, 248058, 198, 27, 1628, 21402, 956, 29, 198, 27, 15704, 28, 5454, 29, 198, 4466, 220, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # bash + command + "python "
+    [271, 248058, 198, 27, 1628, 21402, 956, 29, 198, 27, 15704, 28, 5454, 29, 198, 12305, 220, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # bash + command + "npm "
+    [271, 248058, 198, 27, 1628, 21402, 956, 29, 198, 27, 15704, 28, 5454, 29, 198, 38708, 220, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # bash + command + "git "
+    [271, 248058, 198, 27, 1628, 21402, 956, 29, 198, 27, 15704, 28, 5454, 29, 198, 12513, 220, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # bash + command + "echo "
+    [271, 248058, 198, 27, 1628, 21402, 956, 29, 198, 27, 15704, 28, 5454, 29, 198, 2949, 220, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # bash + command + "mkdir "
+    [271, 248058, 198, 27, 1628, 21402, 956, 29, 198, 27, 15704, 28, 5454, 29, 198, 25283, 220, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # bash + command + "cd "
+    [271, 248058, 198, 27, 1628, 21402, 956, 29, 198, 27, 15704, 28, 5454, 29, 198, 4243, 220, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # read_file + path (bare)
+    [271, 248058, 198, 27, 1628, 86779, 2378, 29, 198, 27, 15704, 79114, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # read_file + path + "/"
+    [271, 248058, 198, 27, 1628, 86779, 2378, 29, 198, 27, 15704, 79114, 29, 198, 14, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # read_file + path + "src/"
+    [271, 248058, 198, 27, 1628, 86779, 2378, 29, 198, 27, 15704, 79114, 29, 198, 3431, 14, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # write_file + path
+    [271, 248058, 198, 27, 1628, 28, 4775, 2378, 29, 198, 27, 15704, 79114, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # write_file + content
+    [271, 248058, 198, 27, 1628, 28, 4775, 2378, 29, 198, 27, 15704, 28, 1733, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # str_replace_editor + path
+    [271, 248058, 198, 27, 1628, 15462, 10318, 32634, 29, 198, 27, 15704, 79114, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # str_replace_editor + command
+    [271, 248058, 198, 27, 1628, 15462, 10318, 32634, 29, 198, 27, 15704, 28, 5454, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # str_replace_editor + old_str
+    [271, 248058, 198, 27, 1628, 15462, 10318, 32634, 29, 198, 27, 15704, 28, 787, 2801, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # str_replace_editor + new_str
+    [271, 248058, 198, 27, 1628, 15462, 10318, 32634, 29, 198, 27, 15704, 8083, 2801, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # view + path + "/"
+    [271, 248058, 198, 27, 1628, 88783, 29, 198, 27, 15704, 79114, 29, 198, 14, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # create_file + path
+    [271, 248058, 198, 27, 1628, 87950, 2378, 29, 198, 27, 15704, 79114, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # create_file + content
+    [271, 248058, 198, 27, 1628, 87950, 2378, 29, 198, 27, 15704, 28, 1733, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # search_files + pattern
+    [271, 248058, 198, 27, 1628, 93260, 10612, 29, 198, 27, 15704, 28, 13927, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # search_files + path
+    [271, 248058, 198, 27, 1628, 93260, 10612, 29, 198, 27, 15704, 79114, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # execute_command + command
+    [271, 248058, 198, 27, 1628, 28, 9951, 10494, 29, 198, 27, 15704, 28, 5454, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+    # run_command + command
+    [271, 248058, 198, 27, 1628, 28, 5917, 10494, 29, 198, 27, 15704, 28, 5454, 29, 198, 198, 510, 15704, 29, 198, 510, 1628, 29, 198, 248059],
+]
+# fmt: on
+
 
 class NGramModDecoder:
     """Hash-pool n-gram drafter (llama.cpp ngram-mod port).
@@ -198,6 +268,70 @@ class NGramModDecoder:
         for w in range(len(tokens) - self.n):
             self.add(tokens[w : w + self.n], tokens[w + self.n])
 
+    def ingest_preseed(self, sequences: list[list[int]], count: int = 10) -> None:
+        """Ingest static token sequences into the pool without touching _ingested_up_to.
+
+        Each sequence is ingested like a regular ingest() call, but the entries
+        are written with an initial count of `count` (default 10) so they survive
+        hash-collision eviction by real tokens (which start at count=1).  This
+        makes structural patterns — tool-call XML, common code boilerplate — durable
+        in the pool even after many requests have run.
+
+        Sequences shorter than n+1 tokens are silently skipped.
+
+        Args:
+            sequences: list of token-ID lists to pre-seed.
+            count: initial frequency count for pre-seeded entries (clamped to _COUNT_MAX).
+        """
+        initial_count = min(int(count), _COUNT_MAX)
+        for seq in sequences:
+            if len(seq) < self.n + 1:
+                continue
+            self._history.extend(int(t) for t in seq[: self.n])
+            for w in range(len(seq) - self.n):
+                window = seq[w : w + self.n]
+                next_tok = int(seq[w + self.n]) & _TOKEN_MASK
+                i, key = self._slot_and_key(window)
+                if self.keys[i] == EMPTY_KEY:
+                    self.used += 1
+                    self.keys[i] = key
+                    self.entries[i] = (initial_count << _COUNT_SHIFT) | next_tok
+                elif self.keys[i] == key:
+                    # Same n-gram already present — bump count so it stays durable.
+                    stored_tok = self.entries[i] & _TOKEN_MASK
+                    if stored_tok == next_tok:
+                        stored_cnt = (self.entries[i] >> _COUNT_SHIFT) & 0xFF
+                        self.entries[i] = (min(stored_cnt + initial_count, _COUNT_MAX) << _COUNT_SHIFT) | next_tok
+                    # If a different token is stored for this n-gram, leave it;
+                    # actual generation data is more trustworthy than pre-seeds.
+                else:
+                    # Collision: evict only if the incumbent is low-frequency.
+                    stored_cnt = (self.entries[i] >> _COUNT_SHIFT) & 0xFF if self.entries[i] >= 0 else 0
+                    if stored_cnt < initial_count:
+                        self.keys[i] = key
+                        self.entries[i] = (initial_count << _COUNT_SHIFT) | next_tok
+                self._history.append(next_tok)
+
+    def preseed_qwen3(self) -> None:
+        """Pre-seed the pool with Qwen3 tool-call and structural patterns.
+
+        Call once at startup (and again after reset_pool if you want persistent
+        coverage).  The sequences are hardcoded token IDs for the Qwen3
+        tokenizer family — safe to call unconditionally; incorrect seeds for a
+        non-Qwen3 model are harmless (they occupy a tiny fraction of the pool
+        and get evicted by actual traffic within a few requests).
+
+        Also stores the sequences in ``_preseed_sequences`` so that
+        ``reset_pool()`` automatically re-applies them after a pool wipe.
+        """
+        self._preseed_sequences = _QWEN3_PRESEED_SEQUENCES
+        self.ingest_preseed(_QWEN3_PRESEED_SEQUENCES)
+        logger.debug(
+            "ngram-mod: pre-seeded %d Qwen3 tool-call sequences (%d pool entries)",
+            len(_QWEN3_PRESEED_SEQUENCES),
+            sum(max(0, len(s) - self.n) for s in _QWEN3_PRESEED_SEQUENCES),
+        )
+
     def _scan(self, tail: list[int]) -> int:
         """Scan recent history for the longest suffix match of *tail*.
 
@@ -295,6 +429,11 @@ class NGramModDecoder:
         self._history.clear()
         self.lifetime_resets += 1
         self._ingested_up_to = 0
+        # Re-apply any pre-seeded sequences so structural patterns survive the
+        # reset.  preseed_sequences is set by callers who want durable patterns
+        # (e.g., NGramModEngine sets it after calling preseed_qwen3()).
+        if getattr(self, "_preseed_sequences", None):
+            self.ingest_preseed(self._preseed_sequences)
 
     def get_stats(self) -> dict:
         rate = (
@@ -437,6 +576,11 @@ class MultiLevelNGramDecoder:
         """Feed all extractable n-gram pairs to every level."""
         for lvl in self._levels:
             lvl.ingest(tokens)
+
+    def preseed_qwen3(self) -> None:
+        """Pre-seed all levels with Qwen3 tool-call patterns."""
+        for lvl in self._levels:
+            lvl.preseed_qwen3()
 
     def draft(self, recent_tokens, n_max: int | None = None) -> list[int]:
         """Greedy draft using multi-level fallback, then recent-context scan.

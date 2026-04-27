@@ -200,6 +200,7 @@ def ngram_mod_generate_step(
     sampler=None,
     prompt_cache=None,
     prefill_step_size: int = 512,
+    eos_ids: set[int] | None = None,
 ):
     """Generator yielding (token_id, logprobs, from_draft) tuples.
 
@@ -259,6 +260,13 @@ def ngram_mod_generate_step(
         _push(current_token.item())
 
         draft = decoder.draft(seq, n_max=cap)
+        # Truncate draft at first EOS token so speculative decoding never
+        # accepts a premature end-of-sequence from a stale pool pattern.
+        if eos_ids:
+            for _j, _tok in enumerate(draft):
+                if _tok in eos_ids:
+                    draft = draft[:_j]
+                    break
         if len(draft) >= floor:
             snapshot = [c.state for c in prompt_cache]
             current_id = current_token.item()

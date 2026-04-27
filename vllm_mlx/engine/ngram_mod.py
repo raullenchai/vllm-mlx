@@ -218,6 +218,7 @@ class NGramModEngine(BatchedEngine):
                 max_tokens=max_tokens,
                 sampler=sampler,
                 prefill_step_size=self._prefill_step_size,
+                eos_ids=eos_ids,
             )
 
         gen = await loop.run_in_executor(executor, _make_gen)
@@ -443,6 +444,10 @@ class NGramModEngine(BatchedEngine):
             self._lifetime_proposed += self._active.proposed_tokens
             self._lifetime_accepted += self._active.accepted_tokens
         self._active = None
+        # Reset per-request streak so cross-turn low-acceptance doesn't
+        # trigger a pool reset at the wrong time in agentic tool-call loops.
+        if self._decoder is not None:
+            self._decoder._low_streak = 0
 
     def _update_active(self, chunk: dict) -> None:
         a = self._active

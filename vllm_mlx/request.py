@@ -52,7 +52,7 @@ class RequestStatus(enum.IntEnum):
 class SamplingParams:
     """Sampling parameters for text generation."""
 
-    max_tokens: int = 256
+    max_tokens: int = 8192
     temperature: float = 0.7
     top_p: float = 0.9
     top_k: int = 0  # 0 means disabled

@@ -464,10 +464,18 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if request.repetition_penalty and request.repetition_penalty != 1.0:
         chat_kwargs["repetition_penalty"] = request.repetition_penalty
 
-    # N-gram blocking: honour explicit client value; no server default.
-    # Disabled by default — aggressive blocking corrupts coherent thinking output.
-    if hasattr(request, "no_repeat_ngram_size") and request.no_repeat_ngram_size:
-        chat_kwargs["no_repeat_ngram_size"] = int(request.no_repeat_ngram_size)
+    # N-gram blocking: default n=20 for reasoning models to prevent paragraph-level
+    # repetition loops (e.g. thinking that re-generates the same 3 sentences on
+    # every step). Requires a 19-token exact context match before blocking — safe
+    # for normal reasoning but catches the n-gram speculation feedback loop where
+    # generated text enters the pool and the draft proposes the same continuation.
+    # Previously disabled due to hard-ban+rep_penalty bugs on prompt tokens; those
+    # are fixed, so this is now safe.
+    if "no_repeat_ngram_size" not in chat_kwargs:
+        if hasattr(request, "no_repeat_ngram_size") and request.no_repeat_ngram_size:
+            chat_kwargs["no_repeat_ngram_size"] = int(request.no_repeat_ngram_size)
+        elif cfg.reasoning_parser_name:
+            chat_kwargs["no_repeat_ngram_size"] = 20
 
     # Presence penalty: pass through client value only; no server default.
     # The hard ban (count>=3 in last 10) + no_repeat_ngram_size handle extreme

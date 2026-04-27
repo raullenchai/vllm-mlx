@@ -449,6 +449,14 @@ def load_model(
     dflash_block_min: int = 8,
     dflash_block_max: int = 22,
     dflash_turboquant_bits: float | None = None,
+    spec_type: str | None = None,
+    ngram_mod_n: int = 16,
+    ngram_mod_pool_size: int = 1 << 20,
+    ngram_mod_min: int = 2,
+    ngram_mod_max: int = 16,
+    ngram_mod_reset_threshold: float = 0.5,
+    ngram_mod_reset_streak: int = 3,
+    ngram_mod_force_greedy: bool = False,
 ):
     """
     Load a model (auto-detects MLLM vs LLM).
@@ -509,6 +517,24 @@ def load_model(
             adaptive_min=dflash_block_min,
             adaptive_max=dflash_block_max,
             turboquant_bits=dflash_turboquant_bits,
+            gpu_memory_utilization=gpu_memory_utilization,
+        )
+    elif spec_type == "ngram-mod":
+        from .engine import NGramModEngine
+
+        logger.info(
+            f"Loading model with NGramModEngine: target={model_name}, "
+            f"n={ngram_mod_n}, pool={ngram_mod_pool_size}"
+        )
+        _engine = NGramModEngine(
+            model_name=model_name,
+            n=ngram_mod_n,
+            pool_size=ngram_mod_pool_size,
+            n_min=ngram_mod_min,
+            n_max=ngram_mod_max,
+            reset_threshold=ngram_mod_reset_threshold,
+            reset_streak=ngram_mod_reset_streak,
+            force_greedy=ngram_mod_force_greedy,
             gpu_memory_utilization=gpu_memory_utilization,
         )
     else:

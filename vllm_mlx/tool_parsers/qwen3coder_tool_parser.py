@@ -207,6 +207,47 @@ class Qwen3CoderToolParser(ToolParser):
         self._streaming_request = None
         self.prev_tool_call_arr = []
 
+    def has_pending_tool_call(self, text: str) -> bool:
+        return (
+            self.tool_call_start_token in text
+            or self.tool_call_prefix in text
+            or self.has_text_format_tool_call(text)
+        )
+
+    def _bare_function_positions(self, text: str) -> list[int]:
+        positions = []
+        idx = 0
+        while True:
+            idx = text.find(self.tool_call_prefix, idx)
+            if idx == -1:
+                break
+            last_tool_start = text.rfind(self.tool_call_start_token, 0, idx)
+            last_tool_end = text.rfind(self.tool_call_end_token, 0, idx)
+            if last_tool_start == -1 or last_tool_end > last_tool_start:
+                positions.append(idx)
+            idx += len(self.tool_call_prefix)
+        return positions
+
+    def _tool_start_positions(self, text: str) -> list[tuple[int, bool]]:
+        positions = []
+        idx = 0
+        while True:
+            idx = text.find(self.tool_call_start_token, idx)
+            if idx == -1:
+                break
+            positions.append((idx, True))
+            idx += len(self.tool_call_start_token)
+        positions.extend((idx, False) for idx in self._bare_function_positions(text))
+        return sorted(positions, key=lambda item: item[0])
+
+    def _completed_tool_count(self, text: str) -> int:
+        count = 0
+        for start, wrapped in self._tool_start_positions(text):
+            end_token = self.tool_call_end_token if wrapped else self.function_end_token
+            if text.find(end_token, start) != -1:
+                count += 1
+        return count
+
     def _parse_xml_function_call(
         self, function_call_str: str, tools: list[dict] | None
     ) -> dict | None:
@@ -316,7 +357,7 @@ class Qwen3CoderToolParser(ToolParser):
 
         # Check if we need to advance to next tool
         if self.json_closed and not self.in_function:
-            tool_ends = current_text.count(self.tool_call_end_token)
+            tool_ends = self._completed_tool_count(current_text)
             if tool_ends > self.current_tool_index:
                 self.current_tool_index += 1
                 self.header_sent = False
@@ -332,15 +373,20 @@ class Qwen3CoderToolParser(ToolParser):
 
         # Handle content before tool calls
         if not self.is_tool_call_started:
+            bare_function_idx = delta_text.find(self.tool_call_prefix)
             if (
                 self.tool_call_start_token_id is not None
                 and self.tool_call_start_token_id in delta_token_ids
-            ) or self.tool_call_start_token in delta_text:
+            ) or self.tool_call_start_token in delta_text or bare_function_idx != -1:
                 self.is_tool_call_started = True
                 if self.tool_call_start_token in delta_text:
                     content_before = delta_text[
                         : delta_text.index(self.tool_call_start_token)
                     ]
+                    if content_before:
+                        return {"content": content_before}
+                elif bare_function_idx > 0:
+                    content_before = delta_text[:bare_function_idx]
                     if content_before:
                         return {"content": content_before}
                 # Fall through to header parsing below instead of returning
@@ -353,30 +399,20 @@ class Qwen3CoderToolParser(ToolParser):
                     return None
                 return {"content": delta_text}
 
-        # Find current tool call portion
-        tool_starts_count = current_text.count(self.tool_call_start_token)
-        if self.current_tool_index >= tool_starts_count:
-            return None
-
-        tool_start_positions: list[int] = []
-        idx = 0
-        while True:
-            idx = current_text.find(self.tool_call_start_token, idx)
-            if idx == -1:
-                break
-            tool_start_positions.append(idx)
-            idx += len(self.tool_call_start_token)
-
+        # Find current tool call portion. Qwen3 sometimes omits the
+        # <tool_call> wrapper and starts directly with <function=...>.
+        tool_start_positions = self._tool_start_positions(current_text)
         if self.current_tool_index >= len(tool_start_positions):
             return None
 
-        tool_start_idx = tool_start_positions[self.current_tool_index]
-        tool_end_idx = current_text.find(self.tool_call_end_token, tool_start_idx)
+        tool_start_idx, wrapped = tool_start_positions[self.current_tool_index]
+        end_token = self.tool_call_end_token if wrapped else self.function_end_token
+        tool_end_idx = current_text.find(end_token, tool_start_idx)
         if tool_end_idx == -1:
             tool_text = current_text[tool_start_idx:]
         else:
             tool_text = current_text[
-                tool_start_idx : tool_end_idx + len(self.tool_call_end_token)
+                tool_start_idx : tool_end_idx + len(end_token)
             ]
 
         # Parse function header
@@ -539,6 +575,11 @@ class Qwen3CoderToolParser(ToolParser):
 
             if json_fragments:
                 combined = "".join(json_fragments)
+                if not self.json_closed and self.function_end_token in tool_text:
+                    self.json_closed = True
+                    self.in_function = False
+                    self.accumulated_params = {}
+                    combined += "}"
                 return {
                     "tool_calls": [
                         {

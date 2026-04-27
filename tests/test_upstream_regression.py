@@ -1360,6 +1360,66 @@ class TestQwen3CoderUpstreamStreaming:
         parsed = json.loads(args)
         assert parsed["city"] == "Dallas"
 
+    def test_streaming_bare_function_no_xml_leak(
+        self, qwen3coder_parser, qwen3coder_request
+    ):
+        """Bare <function=...> streams as a tool call, not content XML."""
+        deltas = [
+            "<function=get_current_weather>",
+            "<parameter=city>Dallas</parameter>",
+            "</function>",
+        ]
+        text = ""
+        collected = []
+        leaked_content = []
+        for delta in deltas:
+            previous = text
+            text += delta
+            result = qwen3coder_parser.extract_tool_calls_streaming(
+                previous_text=previous,
+                current_text=text,
+                delta_text=delta,
+                request=qwen3coder_request,
+            )
+            if result:
+                collected.append(result)
+                if "content" in result:
+                    leaked_content.append(result["content"])
+
+        assert leaked_content == []
+        arg_parts = [
+            chunk["tool_calls"][0]["function"]["arguments"]
+            for chunk in collected
+            if "tool_calls" in chunk
+            and "arguments" in chunk["tool_calls"][0].get("function", {})
+        ]
+        args = json.loads("".join(arg_parts))
+        assert args["city"] == "Dallas"
+
+    def test_streaming_bare_function_with_content(
+        self, qwen3coder_parser, qwen3coder_request
+    ):
+        """Content before a bare function is preserved once, XML suppressed."""
+        text = "Checking now. <function=get_current_weather>"
+        result = qwen3coder_parser.extract_tool_calls_streaming(
+            previous_text="",
+            current_text=text,
+            delta_text=text,
+            request=qwen3coder_request,
+        )
+        assert result == {"content": "Checking now. "}
+
+        previous = text
+        text += "<parameter=city>Dallas</parameter></function>"
+        result = qwen3coder_parser.extract_tool_calls_streaming(
+            previous_text=previous,
+            current_text=text,
+            delta_text="<parameter=city>Dallas</parameter></function>",
+            request=qwen3coder_request,
+        )
+        assert result is not None
+        assert "tool_calls" in result
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Registration tests — verify all new parsers are discoverable

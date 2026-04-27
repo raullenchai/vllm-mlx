@@ -126,6 +126,18 @@ def serve_command(args):
             print("Error: --drafter (DFlash) is text-only; remove --mllm.")
             sys.exit(1)
 
+    # Validate ngram-mod incompatibilities
+    if getattr(args, "spec_type", "none") == "ngram-mod":
+        if getattr(args, "drafter", None):
+            print("Error: --spec-type ngram-mod and --drafter are mutually exclusive.")
+            sys.exit(1)
+        if getattr(args, "enable_mtp", False):
+            print("Error: --spec-type ngram-mod and --enable-mtp are mutually exclusive.")
+            sys.exit(1)
+        if getattr(args, "mllm", False):
+            print("Error: --spec-type ngram-mod is text-only; remove --mllm.")
+            sys.exit(1)
+
     # Auto-detect parser config from model name when not explicitly set
     if not args.tool_call_parser or not args.reasoning_parser:
         try:
@@ -391,6 +403,16 @@ def serve_command(args):
             dflash_block_min=getattr(args, "dflash_block_min", 8),
             dflash_block_max=getattr(args, "dflash_block_max", 22),
             dflash_turboquant_bits=getattr(args, "dflash_turboquant_bits", None),
+            spec_type=getattr(args, "spec_type", None),
+            ngram_mod_n=getattr(args, "ngram_mod_n", 16),
+            ngram_mod_pool_size=int(
+                float(getattr(args, "ngram_mod_pool_mb", 4.0)) * 1024 * 1024 / 4
+            ),
+            ngram_mod_min=getattr(args, "ngram_mod_min", 2),
+            ngram_mod_max=getattr(args, "ngram_mod_max", 16),
+            ngram_mod_reset_threshold=getattr(args, "ngram_mod_reset_threshold", 0.5),
+            ngram_mod_reset_streak=getattr(args, "ngram_mod_reset_streak", 3),
+            ngram_mod_force_greedy=getattr(args, "ngram_mod_force_greedy", False),
         )
     except Exception as e:
         # Show clean error instead of raw traceback
@@ -1485,6 +1507,65 @@ Examples:
         help=(
             "Optional KV-cache TurboQuant bits for the target model under "
             "DFlash. Requires mlx-turboquant (installed via the dflash[mlx] extra)."
+        ),
+    )
+    # Draftless speculative decoding (llama.cpp-style)
+    serve_parser.add_argument(
+        "--spec-type",
+        type=str,
+        choices=["none", "ngram-mod"],
+        default="none",
+        help=(
+            "Draftless speculative decoding strategy. 'ngram-mod' uses a "
+            "persistent hash pool that maps n-grams to the next token (port "
+            "of llama.cpp PR #19164). Mutually exclusive with --drafter and "
+            "--mllm; single-request only."
+        ),
+    )
+    serve_parser.add_argument(
+        "--ngram-mod-n",
+        type=int,
+        default=16,
+        help="ngram-mod: window size for hashing (default: 16).",
+    )
+    serve_parser.add_argument(
+        "--ngram-mod-pool-mb",
+        type=float,
+        default=4.0,
+        help="ngram-mod: hash pool size in MB (default: 4 → 1M int32 slots).",
+    )
+    serve_parser.add_argument(
+        "--ngram-mod-min",
+        type=int,
+        default=2,
+        help="ngram-mod: minimum draft length to verify (default: 2).",
+    )
+    serve_parser.add_argument(
+        "--ngram-mod-max",
+        type=int,
+        default=16,
+        help="ngram-mod: maximum draft length per round (default: 16).",
+    )
+    serve_parser.add_argument(
+        "--ngram-mod-reset-threshold",
+        type=float,
+        default=0.5,
+        help="ngram-mod: acceptance ratio under which a round counts as low (default: 0.5).",
+    )
+    serve_parser.add_argument(
+        "--ngram-mod-reset-streak",
+        type=int,
+        default=3,
+        help="ngram-mod: consecutive low rounds that wipe the pool (default: 3).",
+    )
+    serve_parser.add_argument(
+        "--ngram-mod-force-greedy",
+        action="store_true",
+        default=False,
+        help=(
+            "ngram-mod: force argmax decoding regardless of request "
+            "temperature. Output is provably bit-identical to no-spec greedy "
+            "but loses sampling diversity (agentic loops may not self-recover)."
         ),
     )
     # Bench command

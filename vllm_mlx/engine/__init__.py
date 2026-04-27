@@ -9,12 +9,14 @@ from ..engine_core import AsyncEngineCore, EngineConfig, EngineCore
 from .base import BaseEngine, GenerationOutput
 from .batched import BatchedEngine
 from .dflash import DFlashEngine
+from .ngram_mod import NGramModEngine
 
 __all__ = [
     "BaseEngine",
     "GenerationOutput",
     "BatchedEngine",
     "DFlashEngine",
+    "NGramModEngine",
     "EngineCore",
     "AsyncEngineCore",
     "EngineConfig",

@@ -102,6 +102,7 @@ async def status():
         or stats.get("prefix_cache"),
         "requests": stats.get("requests", []),
         "dflash": stats.get("dflash"),
+        "ngram_mod": stats.get("ngram_mod"),
     }
 
 

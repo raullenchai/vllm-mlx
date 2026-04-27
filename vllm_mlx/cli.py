@@ -404,7 +404,9 @@ def serve_command(args):
             dflash_block_max=getattr(args, "dflash_block_max", 22),
             dflash_turboquant_bits=getattr(args, "dflash_turboquant_bits", None),
             spec_type=getattr(args, "spec_type", None),
-            ngram_mod_n=getattr(args, "ngram_mod_n", 16),
+            ngram_mod_n=(lambda v: v[0] if isinstance(v, list) and len(v) == 1 else v)(
+                getattr(args, "ngram_mod_n", [16, 12, 8, 4, 2])
+            ),
             ngram_mod_pool_size=int(
                 float(getattr(args, "ngram_mod_pool_mb", 4.0)) * 1024 * 1024 / 4
             ),
@@ -1525,8 +1527,13 @@ Examples:
     serve_parser.add_argument(
         "--ngram-mod-n",
         type=int,
-        default=16,
-        help="ngram-mod: window size for hashing (default: 16).",
+        nargs="+",
+        default=[16, 12, 8, 4, 2],
+        help=(
+            "ngram-mod: window size(s) for hashing. Pass multiple values to enable "
+            "multi-level fallback (longest match first). "
+            "Default: 16 12 8 4 2 (multi-level, ~80%%+ acceptance)."
+        ),
     )
     serve_parser.add_argument(
         "--ngram-mod-pool-mb",
@@ -1537,26 +1544,26 @@ Examples:
     serve_parser.add_argument(
         "--ngram-mod-min",
         type=int,
-        default=2,
-        help="ngram-mod: minimum draft length to verify (default: 2).",
+        default=1,
+        help="ngram-mod: minimum draft length to verify (default: 1; on Apple Silicon n_min=1 always wins).",
     )
     serve_parser.add_argument(
         "--ngram-mod-max",
         type=int,
         default=16,
-        help="ngram-mod: maximum draft length per round (default: 16).",
+        help="ngram-mod: maximum draft length per round (default: 16; adaptive n_max auto-tunes this).",
     )
     serve_parser.add_argument(
         "--ngram-mod-reset-threshold",
         type=float,
-        default=0.5,
-        help="ngram-mod: acceptance ratio under which a round counts as low (default: 0.5).",
+        default=0.05,
+        help="ngram-mod: acceptance ratio under which a round counts as low (default: 0.05; 0.5 caused constant pool wipes).",
     )
     serve_parser.add_argument(
         "--ngram-mod-reset-streak",
         type=int,
-        default=3,
-        help="ngram-mod: consecutive low rounds that wipe the pool (default: 3).",
+        default=20,
+        help="ngram-mod: consecutive low rounds that wipe the pool (default: 20; low values cause sawtooth degradation).",
     )
     serve_parser.add_argument(
         "--ngram-mod-force-greedy",

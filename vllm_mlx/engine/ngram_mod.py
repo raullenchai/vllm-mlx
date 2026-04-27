@@ -22,7 +22,11 @@ from typing import Any
 import mlx.core as mx
 
 from ..api.utils import clean_output_text
-from ..speculative.ngram_mod import NGramModDecoder, ngram_mod_generate_step
+from ..speculative.ngram_mod import (
+    MultiLevelNGramDecoder,
+    NGramModDecoder,
+    ngram_mod_generate_step,
+)
 from .base import GenerationOutput
 from .batched import BatchedEngine
 
@@ -67,12 +71,12 @@ class NGramModEngine(BatchedEngine):
     def __init__(
         self,
         model_name: str,
-        n: int = 16,
+        n: int | list[int] = [16, 12, 8, 4, 2],
         pool_size: int = 1 << 20,
-        n_min: int = 2,
+        n_min: int = 1,
         n_max: int = 16,
-        reset_threshold: float = 0.5,
-        reset_streak: int = 3,
+        reset_threshold: float = 0.05,
+        reset_streak: int = 20,
         prefill_step_size: int = 512,
         force_greedy: bool = False,
         trust_remote_code: bool = True,
@@ -91,14 +95,24 @@ class NGramModEngine(BatchedEngine):
                 "ngram-mod is text-only; do not pass --mllm or use a multimodal model."
             )
 
-        self._decoder = NGramModDecoder(
-            n=n,
-            pool_size=pool_size,
-            n_min=n_min,
-            n_max=n_max,
-            reset_threshold=reset_threshold,
-            reset_streak=reset_streak,
-        )
+        if isinstance(n, list):
+            self._decoder: NGramModDecoder | MultiLevelNGramDecoder = MultiLevelNGramDecoder(
+                ns=n,
+                pool_sizes=pool_size,
+                n_min=n_min,
+                n_max=n_max,
+                reset_threshold=reset_threshold,
+                reset_streak=reset_streak,
+            )
+        else:
+            self._decoder = NGramModDecoder(
+                n=n,
+                pool_size=pool_size,
+                n_min=n_min,
+                n_max=n_max,
+                reset_threshold=reset_threshold,
+                reset_streak=reset_streak,
+            )
         self._prefill_step_size = int(prefill_step_size)
         self._force_greedy = bool(force_greedy)
 
@@ -527,6 +541,22 @@ class NGramModEngine(BatchedEngine):
         num_waiting = max(0, self._inflight - num_running)
 
         decoder_stats = self._decoder.get_stats()
+        is_multi = isinstance(self._decoder, MultiLevelNGramDecoder)
+
+        ngram_section: dict[str, Any] = {
+            "lifetime_acceptance_ratio": lifetime_ratio,
+            "pool_size": decoder_stats["pool_size"],
+            "pool_used": decoder_stats["used"],
+            "pool_load": decoder_stats["load"],
+            "pool_resets": decoder_stats["resets"],
+            "n_min": self._decoder.n_min,
+            "n_max": self._decoder.n_max,
+        }
+        if is_multi:
+            ngram_section["ns"] = decoder_stats["ns"]
+            ngram_section["levels"] = decoder_stats["levels"]
+        else:
+            ngram_section["n"] = decoder_stats["n"]
 
         return {
             "engine_type": "ngram-mod",
@@ -542,16 +572,7 @@ class NGramModEngine(BatchedEngine):
             "metal_peak_memory_gb": peak_mem_gb,
             "metal_cache_memory_gb": cache_mem_gb,
             "requests": running_requests,
-            "ngram_mod": {
-                "lifetime_acceptance_ratio": lifetime_ratio,
-                "n": decoder_stats["n"],
-                "pool_size": decoder_stats["pool_size"],
-                "pool_used": decoder_stats["used"],
-                "pool_load": decoder_stats["load"],
-                "pool_resets": decoder_stats["resets"],
-                "n_min": self._decoder.n_min,
-                "n_max": self._decoder.n_max,
-            },
+            "ngram_mod": ngram_section,
         }
 
     def get_cache_stats(self) -> dict[str, Any] | None:

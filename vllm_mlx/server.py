@@ -450,12 +450,12 @@ def load_model(
     dflash_block_max: int = 22,
     dflash_turboquant_bits: float | None = None,
     spec_type: str | None = None,
-    ngram_mod_n: int = 16,
+    ngram_mod_n: int | list[int] = [16, 12, 8, 4, 2],
     ngram_mod_pool_size: int = 1 << 20,
-    ngram_mod_min: int = 2,
+    ngram_mod_min: int = 1,
     ngram_mod_max: int = 16,
-    ngram_mod_reset_threshold: float = 0.5,
-    ngram_mod_reset_streak: int = 3,
+    ngram_mod_reset_threshold: float = 0.05,
+    ngram_mod_reset_streak: int = 20,
     ngram_mod_force_greedy: bool = False,
 ):
     """

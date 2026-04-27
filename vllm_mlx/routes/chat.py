@@ -458,11 +458,13 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if request.tools:
         chat_kwargs["tools"] = convert_tools_for_template(request.tools)
 
-    # Pass through enable_thinking if explicitly set by the client
-    if request.enable_thinking is not None:
-        chat_kwargs["enable_thinking"] = request.enable_thinking
-    elif cfg.no_thinking or cfg.tool_call_parser == "qwen3_coder_xml":
+    # qwen3_coder_xml tool-call format is incompatible with thinking mode —
+    # the model generates tool calls inside <think> blocks when thinking is
+    # on, which the parser never sees.  Force it off unconditionally.
+    if cfg.no_thinking or cfg.tool_call_parser == "qwen3_coder_xml":
         chat_kwargs["enable_thinking"] = False
+    elif request.enable_thinking is not None:
+        chat_kwargs["enable_thinking"] = request.enable_thinking
 
     # Cloud routing: offload large-context requests to cloud LLM
     if cfg.cloud_router and not engine.is_mllm and hasattr(engine, "build_prompt"):

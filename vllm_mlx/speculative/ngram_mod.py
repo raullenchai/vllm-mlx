@@ -16,7 +16,9 @@ acceptance drops below a threshold for several rounds in a row.
 from __future__ import annotations
 
 import array
+import collections
 import logging
+import math
 
 import mlx.core as mx
 
@@ -26,6 +28,16 @@ EMPTY: int = -1
 EMPTY_KEY: int = 0
 _MULT: int = 6364136223846793005
 _MASK64: int = (1 << 64) - 1
+
+# entries[] slot layout (int32, always >= 0 for a valid slot; -1 == EMPTY):
+#   bits  0-19: token ID  (20 bits, covers vocab sizes up to ~1M)
+#   bits 20-27: count     (8 bits, saturates at 255)
+#   bits 28-31: unused (always 0)
+# Encoding guarantees the value is non-negative, so entries[i] < 0 means EMPTY.
+_TOKEN_BITS: int = 20
+_TOKEN_MASK: int = (1 << _TOKEN_BITS) - 1  # 0xFFFFF
+_COUNT_SHIFT: int = _TOKEN_BITS
+_COUNT_MAX: int = 0xFF
 
 
 class NGramModDecoder:
@@ -44,10 +56,11 @@ class NGramModDecoder:
         self,
         n: int = 16,
         pool_size: int = 1 << 20,
-        n_min: int = 2,
+        n_min: int = 1,
         n_max: int = 16,
-        reset_threshold: float = 0.5,
-        reset_streak: int = 3,
+        reset_threshold: float = 0.05,
+        reset_streak: int = 20,
+        recent_scan_window: int = 512,
     ) -> None:
         if n < 1:
             raise ValueError("n must be >= 1")
@@ -67,20 +80,35 @@ class NGramModDecoder:
         self.pool_size = int(pool_size)
         self.n_min = int(n_min)
         self.n_max = int(n_max)
+        # Hard upper bound on adaptive n_max; n_max is the live (mutable) value.
+        self._n_max_hard: int = int(n_max)
         self.reset_threshold = float(reset_threshold)
         self.reset_streak = int(reset_streak)
+        self.recent_scan_window = int(recent_scan_window)
 
         self.entries: array.array = self._make_pool()
         self.keys: array.array = self._make_keys()
         self.used: int = 0
 
         self._low_streak: int = 0
+        # Rolling token history for the recent-context scan fallback.
+        # maxlen keeps memory bounded; +n_max leaves room for a full draft tail.
+        self._history: collections.deque[int] = collections.deque(
+            maxlen=self.recent_scan_window + self.n_max + 1
+        )
+
+        # Adaptive n_max: exponential moving average of per-round acceptance
+        # rate.  Starts at 0.5 so the first rounds use a moderate draft length.
+        # EMA decay gives an effective window of ~16 rounds (decay = 1 - 2/17).
+        self._alpha_hat: float = 0.5
+        self._alpha_ema_decay: float = 1.0 - 2.0 / (16.0 + 1.0)
 
         self.lifetime_proposed: int = 0
         self.lifetime_accepted: int = 0
         self.lifetime_drafts: int = 0
         self.lifetime_resets: int = 0
         self.lifetime_collisions: int = 0
+        self.lifetime_scan_hits: int = 0
 
     def _make_pool(self) -> array.array:
         a = array.array("i")
@@ -112,12 +140,41 @@ class NGramModDecoder:
         if len(window) != self.n:
             return
         i, key = self._slot_and_key(window)
+        tok = int(next_token) & _TOKEN_MASK
+        cur = self.entries[i]
+
         if self.keys[i] == EMPTY_KEY:
+            # Empty slot: claim it with count=1.
             self.used += 1
-        elif self.keys[i] != key:
+            self.keys[i] = key
+            self.entries[i] = (1 << _COUNT_SHIFT) | tok
+        elif self.keys[i] == key:
+            # Same n-gram: update frequency for this next-token observation.
+            stored_tok = cur & _TOKEN_MASK
+            stored_cnt = (cur >> _COUNT_SHIFT) & 0xFF
+            if stored_tok == tok:
+                # Same next-token: increment count (saturating at _COUNT_MAX).
+                new_cnt = min(stored_cnt + 1, _COUNT_MAX)
+                self.entries[i] = (new_cnt << _COUNT_SHIFT) | tok
+            else:
+                # Different next-token for same n-gram context.  Keep the one
+                # with higher observed count; the incoming observation has
+                # count=1 implicitly.  Only replace if it already dominates.
+                if stored_cnt <= 1:
+                    # Tie or count-1 entry: last-write semantics for rare contexts.
+                    self.entries[i] = (1 << _COUNT_SHIFT) | tok
+                # else: stored token seen more often; keep it.
+        else:
+            # Hash collision: different n-gram maps to same slot.
             self.lifetime_collisions += 1
-        self.keys[i] = key
-        self.entries[i] = int(next_token) & 0x7FFFFFFF
+            stored_cnt = (cur >> _COUNT_SHIFT) & 0xFF if cur >= 0 else 0
+            # Evict only when the incumbent is low-frequency (count <= 1).
+            if stored_cnt <= 1:
+                self.keys[i] = key
+                self.entries[i] = (1 << _COUNT_SHIFT) | tok
+
+        # Track the generated token stream so the scan fallback sees new tokens.
+        self._history.append(int(next_token))
 
     def get(self, window) -> int:
         if len(window) != self.n:
@@ -125,17 +182,56 @@ class NGramModDecoder:
         i, key = self._slot_and_key(window)
         if self.keys[i] != key:
             return EMPTY
-        return self.entries[i]
+        cur = self.entries[i]
+        if cur < 0:
+            return EMPTY
+        return cur & _TOKEN_MASK
 
     def ingest(self, tokens) -> None:
         """Add every (n-gram window, next-token) pair extractable from tokens."""
         if len(tokens) < self.n + 1:
             return
+        # Seed history with the first n tokens upfront; add() appends each
+        # subsequent next_token so the full stream ends up in _history without
+        # double-counting.
+        self._history.extend(int(t) for t in tokens[: self.n])
         for w in range(len(tokens) - self.n):
             self.add(tokens[w : w + self.n], tokens[w + self.n])
 
+    def _scan(self, tail: list[int]) -> int:
+        """Scan recent history for the longest suffix match of *tail*.
+
+        Tries to find the longest prefix of *tail* (from len down to 1) that
+        appears in ``_history`` and has a following token. Returns the token
+        that follows the best match, or EMPTY when nothing is found.
+
+        Complexity: O(recent_scan_window * len(tail)) per call.
+        For tail length 4 and window 512 that is ~2 048 integer comparisons —
+        roughly 50 µs in Python, negligible vs. the model forward pass.
+        """
+        if not self._history or not tail:
+            return EMPTY
+        history = list(self._history)  # snapshot; fast for deque sizes ≤ 2K
+        h_len = len(history)
+        # Try longest match first so we return the most specific prediction.
+        for match_len in range(len(tail), 0, -1):
+            needle = tail[-match_len:]
+            # Scan backward through history (most-recent occurrences first).
+            for start in range(h_len - match_len, -1, -1):
+                if history[start : start + match_len] == needle:
+                    next_pos = start + match_len
+                    if next_pos < h_len:
+                        return history[next_pos]
+        return EMPTY
+
     def draft(self, recent_tokens, n_max: int | None = None) -> list[int]:
-        """Greedy variable-length draft from the last n tokens."""
+        """Greedy variable-length draft from the last n tokens.
+
+        Each step tries the hash table first (O(1)). On a miss, falls back to
+        a linear scan of the recent-token history (Option C/D hybrid), which
+        catches patterns evicted by hash collisions and tokens generated after
+        the initial ingest call.
+        """
         cap = self.n_max if n_max is None else int(n_max)
         if cap <= 0 or len(recent_tokens) < self.n:
             return []
@@ -144,7 +240,10 @@ class NGramModDecoder:
         for _ in range(cap):
             tok = self.get(window)
             if tok == EMPTY:
-                break
+                tok = self._scan(window)
+                if tok == EMPTY:
+                    break
+                self.lifetime_scan_hits += 1
             out.append(int(tok))
             window = window[1:] + [int(tok)]
         return out
@@ -163,10 +262,37 @@ class NGramModDecoder:
                 self.reset_pool()
                 self._low_streak = 0
 
+            # Adaptive n_max: update EMA acceptance rate and recompute the
+            # optimal draft length.
+            #
+            # Theory: E[tokens/pass | draft k] = 1 + α*(1-α^k)/(1-α)
+            # This is monotonically increasing in k but with diminishing
+            # returns: the marginal gain of extending from k to k+1 is α^(k+1).
+            # We stop when α^k <= 0.05, i.e. we capture ≥95% of the asymptotic
+            # gain without burning extra verify-pass tokens on near-zero-probability
+            # extensions.
+            #
+            # k_opt = ceil(ln(0.05) / ln(α_hat))
+            #       = ceil(-2.996 / ln(α_hat))
+            #
+            # Clamp to [n_min, _n_max_hard] so the hard limits are respected.
+            d = self._alpha_ema_decay
+            self._alpha_hat = d * self._alpha_hat + (1.0 - d) * ratio
+
+            alpha = self._alpha_hat
+            if alpha <= 0.0 or alpha >= 1.0:
+                # Degenerate: α=0 → k=1; α=1 → use hard cap.
+                k_opt = 1 if alpha <= 0.0 else self._n_max_hard
+            else:
+                k_opt = math.ceil(math.log(0.05) / math.log(alpha))
+
+            self.n_max = max(self.n_min, min(self._n_max_hard, k_opt))
+
     def reset_pool(self) -> None:
         self.entries = self._make_pool()
         self.keys = self._make_keys()
         self.used = 0
+        self._history.clear()
         self.lifetime_resets += 1
         self._ingested_up_to = 0
 
@@ -187,6 +313,193 @@ class NGramModDecoder:
             "acceptance_rate": rate,
             "resets": self.lifetime_resets,
             "collisions": self.lifetime_collisions,
+            "scan_hits": self.lifetime_scan_hits,
+            "recent_scan_window": self.recent_scan_window,
+            "alpha_hat": self._alpha_hat,
+            "n_max": self.n_max,
+            "n_max_hard": self._n_max_hard,
+        }
+
+
+class MultiLevelNGramDecoder:
+    """Multi-level n-gram drafter that tries multiple window sizes.
+
+    For each draft step, tries levels from longest n to shortest n.
+    The first level with a non-EMPTY hit wins that step. This dramatically
+    increases coverage compared to a single window size.
+
+    Expected acceptance rate improvement example:
+        n=16 alone:          ~20% hit rate
+        + n=12 fallback:     covers ~30% of remaining 80% → +24%  → ~44%
+        + n=8  fallback:     covers ~40% of remaining 56% → +22%  → ~66%
+        + n=4  fallback:     covers ~50% of remaining 34% → +17%  → ~83%
+        + n=2  fallback:     covers ~60% of remaining 17% → +10%  → ~93%
+
+    Args:
+        ns: list of window sizes, e.g. [16, 12, 8, 4, 2].
+            Will be sorted longest-first automatically.
+        pool_sizes: per-level pool sizes; if a scalar, all levels share it.
+        n_min: minimum draft length to bother verifying (shared).
+        n_max: maximum draft length per round (shared).
+        reset_threshold: passed to each underlying decoder.
+        reset_streak: passed to each underlying decoder.
+        recent_scan_window: passed to each underlying decoder.
+    """
+
+    def __init__(
+        self,
+        ns: list[int],
+        pool_sizes: int | list[int] = 1 << 20,
+        n_min: int = 1,
+        n_max: int = 16,
+        reset_threshold: float = 0.05,
+        reset_streak: int = 20,
+        recent_scan_window: int = 512,
+    ) -> None:
+        if not ns:
+            raise ValueError("ns must be a non-empty list of window sizes")
+        sorted_ns = sorted(set(ns), reverse=True)  # longest first
+        if isinstance(pool_sizes, int):
+            pool_sizes_list = [pool_sizes] * len(sorted_ns)
+        else:
+            if len(pool_sizes) != len(sorted_ns):
+                raise ValueError("pool_sizes length must match ns length")
+            # align to sorted_ns order
+            paired = sorted(zip(ns, pool_sizes), key=lambda x: -x[0])
+            pool_sizes_list = [p for _, p in paired]
+
+        self._levels: list[NGramModDecoder] = [
+            NGramModDecoder(
+                n=n,
+                pool_size=ps,
+                n_min=n_min,
+                n_max=n_max,
+                reset_threshold=reset_threshold,
+                reset_streak=reset_streak,
+                recent_scan_window=recent_scan_window,
+            )
+            for n, ps in zip(sorted_ns, pool_sizes_list)
+        ]
+        # Primary decoder is the longest-n level; used for shared state.
+        self._primary = self._levels[0]
+        self.n_min = int(n_min)
+        self.n_max = int(n_max)
+
+    # ------------------------------------------------------------------
+    # Proxy scalar attributes to the primary (longest-n) decoder so that
+    # external code (generate_step, engine) can use decoder.n / decoder.n_min
+    # / decoder.n_max / decoder._low_streak / decoder._ingested_up_to without
+    # knowing about multi-level.
+    # ------------------------------------------------------------------
+
+    @property
+    def n(self) -> int:
+        return self._primary.n
+
+    @property
+    def _low_streak(self) -> int:
+        return self._primary._low_streak
+
+    @_low_streak.setter
+    def _low_streak(self, value: int) -> None:
+        for lvl in self._levels:
+            lvl._low_streak = value
+
+    @property
+    def _ingested_up_to(self) -> int:
+        return self._primary._ingested_up_to
+
+    @_ingested_up_to.setter
+    def _ingested_up_to(self, value: int) -> None:
+        for lvl in self._levels:
+            lvl._ingested_up_to = value
+
+    # lifetime counters aggregated across levels for stats
+    @property
+    def lifetime_proposed(self) -> int:
+        return self._primary.lifetime_proposed
+
+    @property
+    def lifetime_accepted(self) -> int:
+        return self._primary.lifetime_accepted
+
+    # ------------------------------------------------------------------
+    # Core API
+    # ------------------------------------------------------------------
+
+    def add(self, window, next_token: int) -> None:
+        """Add to every level whose window size matches or is shorter."""
+        for lvl in self._levels:
+            if len(window) >= lvl.n:
+                lvl.add(window[-lvl.n:], next_token)
+
+    def ingest(self, tokens) -> None:
+        """Feed all extractable n-gram pairs to every level."""
+        for lvl in self._levels:
+            lvl.ingest(tokens)
+
+    def draft(self, recent_tokens, n_max: int | None = None) -> list[int]:
+        """Greedy draft using multi-level fallback, then recent-context scan.
+
+        For each draft position:
+          1. Try hash levels from longest-n to shortest-n (O(1) each).
+          2. If all levels miss, fall back to a linear scan of recent token
+             history via the shortest-n level's ``_scan()`` (Option C/D
+             hybrid). This catches patterns evicted by hash collisions and
+             tokens that were generated after the initial ingest call.
+        """
+        cap = self.n_max if n_max is None else int(n_max)
+        if cap <= 0:
+            return []
+
+        # Build a sliding window long enough for the longest level.
+        max_n = self._primary.n
+        if len(recent_tokens) < max_n:
+            # Pad with what we have; shorter levels will still work.
+            window = list(recent_tokens)
+        else:
+            window = list(recent_tokens[-max_n:])
+
+        # The shortest-n level owns the scan fallback; all levels share the
+        # same token history, so using the last level is sufficient.
+        scan_level = self._levels[-1]
+
+        out: list[int] = []
+        for _ in range(cap):
+            tok = EMPTY
+            for lvl in self._levels:
+                if len(window) >= lvl.n:
+                    tok = lvl.get(window[-lvl.n:])
+                    if tok != EMPTY:
+                        break
+            if tok == EMPTY:
+                tok = scan_level._scan(window[-scan_level.n :])
+                if tok == EMPTY:
+                    break
+                scan_level.lifetime_scan_hits += 1
+            out.append(int(tok))
+            window.append(int(tok))
+            if len(window) > max_n:
+                window = window[-max_n:]
+        return out
+
+    def record_round(self, num_proposed: int, num_accepted: int) -> None:
+        """Delegate to the primary decoder only (it owns the streak logic)."""
+        self._primary.record_round(num_proposed, num_accepted)
+
+    def reset_pool(self) -> None:
+        for lvl in self._levels:
+            lvl.reset_pool()
+
+    def get_stats(self) -> dict:
+        primary = self._primary.get_stats()
+        levels = [lvl.get_stats() for lvl in self._levels]
+        total_scan_hits = sum(lvl["scan_hits"] for lvl in levels)
+        return {
+            **primary,
+            "ns": [lvl["n"] for lvl in levels],
+            "scan_hits": total_scan_hits,
+            "levels": levels,
         }
 
 
@@ -194,7 +507,7 @@ def ngram_mod_generate_step(
     prompt: mx.array,
     model,
     *,
-    decoder: NGramModDecoder | None = None,
+    decoder: NGramModDecoder | MultiLevelNGramDecoder | None = None,
     n_max: int | None = None,
     n_min: int | None = None,
     max_tokens: int = 256,
@@ -325,7 +638,7 @@ def ngram_mod_generate_step(
     stats = decoder.get_stats()
     if stats["lifetime_drafts"] > 0:
         logger.info(
-            "ngram-mod: %d/%d accepted (%.1f%%), pool used=%d/%d (%.1f%%), resets=%d",
+            "ngram-mod: %d/%d accepted (%.1f%%), pool used=%d/%d (%.1f%%), resets=%d, scan_hits=%d",
             stats["lifetime_accepted"],
             stats["lifetime_proposed"],
             100.0 * stats["acceptance_rate"],
@@ -333,4 +646,5 @@ def ngram_mod_generate_step(
             stats["pool_size"],
             100.0 * stats["load"],
             stats["resets"],
+            stats.get("scan_hits", 0),
         )

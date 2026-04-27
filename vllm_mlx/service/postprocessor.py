@@ -8,9 +8,11 @@ one cohesive orchestrator, because reasoning/tool/sanitize are tightly coupled.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING
 
+from ..api.tool_calling import parse_tool_calls
 from ..api.utils import sanitize_output, strip_special_tokens
 from ..domain.events import StreamEvent
 
@@ -48,6 +50,65 @@ def _find_json_start(text: str) -> int:
     return -1
 
 
+def _has_partial_calling_tool_marker(text: str) -> bool:
+    """Return True when a stream tail may become `Calling tool:`."""
+    marker = "Calling tool:"
+    tail = text.rstrip()
+    if tail.endswith("[") and _starts_current_line(tail, len(tail) - 1):
+        return True
+    for i in range(1, len(marker)):
+        partial = marker[:i]
+        if tail.endswith(partial):
+            start = len(tail) - len(partial)
+            if _starts_current_line(tail, start):
+                return True
+        if tail.endswith(f"[{partial}"):
+            start = len(tail) - len(partial) - 1
+            if _starts_current_line(tail, start):
+                return True
+    return False
+
+
+def _starts_current_line(text: str, start: int) -> bool:
+    """Return True when start is preceded only by whitespace on its line."""
+    line_start = max(text.rfind("\n", 0, start), text.rfind("\r", 0, start)) + 1
+    return text[line_start:start].strip() == ""
+
+
+def _find_trailing_calling_tool_prefix(text: str) -> int | None:
+    marker = "Calling tool:"
+    tail_end = len(text.rstrip())
+    tail = text[:tail_end]
+
+    if tail.endswith("["):
+        start = len(tail) - 1
+        if _starts_current_line(tail, start):
+            return start
+
+    for i in range(1, len(marker)):
+        partial = marker[:i]
+        if tail.endswith(partial):
+            start = len(tail) - len(partial)
+            if _starts_current_line(tail, start):
+                return start
+        if tail.endswith(f"[{partial}"):
+            start = len(tail) - len(partial) - 1
+            if _starts_current_line(tail, start):
+                return start
+    return None
+
+
+def _strip_trailing_calling_tool_prefix(text: str) -> str | None:
+    """Remove a trailing bracket/partial marker that may start a tool call."""
+    if not text:
+        return None
+
+    start = _find_trailing_calling_tool_prefix(text)
+    if start is not None:
+        return text[:start].rstrip()
+    return None
+
+
 class StreamingPostProcessor:
     """Processes streaming engine output into StreamEvents.
 
@@ -74,10 +135,18 @@ class StreamingPostProcessor:
         tools_requested: bool = False,
         enable_thinking: bool | None = None,
         json_mode: bool = False,
+        request_dict: dict | None = None,
     ):
         self.cfg = cfg
         self.tools_requested = tools_requested
         self.json_mode = json_mode
+        self.request_dict = request_dict
+        # When thinking is explicitly disabled the model output contains no
+        # <think> tags.  The Qwen3 reasoning parser's "Case 3" (no tags seen)
+        # would then classify *all* output — including tool calls — as
+        # reasoning, hiding them from the tool parser.  Bypass the reasoning
+        # parser entirely so tool calls flow straight through _process_standard.
+        self._thinking_disabled = enable_thinking is False
 
         # Per-request parser instances — each streaming request gets its
         # own parser to avoid state corruption under concurrent
@@ -116,6 +185,73 @@ class StreamingPostProcessor:
         # the first JSON delimiter ({ or [) is seen, then emit from there.
         self._json_preamble_stripped = False
         self._json_preamble_buffer = ""
+        self._in_suppressed_think = False
+
+    def _tool_call_has_required_args(self, name: str | None, arguments) -> bool:
+        if not name or not isinstance(self.request_dict, dict):
+            return True
+        tools = self.request_dict.get("tools")
+        if not isinstance(tools, list):
+            return True
+
+        required = []
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            function = tool.get("function")
+            if not isinstance(function, dict) or function.get("name") != name:
+                continue
+            parameters = function.get("parameters")
+            if isinstance(parameters, dict):
+                required = parameters.get("required") or []
+            break
+        if not required:
+            return True
+
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except (TypeError, ValueError):
+                return False
+        if not isinstance(arguments, dict):
+            return False
+        return all(key in arguments for key in required)
+
+    def _tool_calls_to_stream_chunks(self, tool_calls) -> list[dict]:
+        chunks = []
+        for i, tc in enumerate(tool_calls):
+            if hasattr(tc, "function"):
+                call_id = tc.id
+                name = tc.function.name
+                arguments = tc.function.arguments
+            elif "function" in tc:
+                call_id = tc.get("id")
+                name = tc["function"]["name"]
+                arguments = tc["function"]["arguments"]
+            else:
+                call_id = tc.get("id")
+                name = tc["name"]
+                arguments = tc["arguments"]
+
+            if not self._tool_call_has_required_args(name, arguments):
+                logger.debug(
+                    "Dropping malformed tool call missing required arguments: %s",
+                    name,
+                )
+                continue
+
+            chunks.append(
+                {
+                    "index": len(chunks),
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "arguments": arguments,
+                    },
+                }
+            )
+        return chunks
 
     @staticmethod
     def _create_reasoning_parser(cfg: ServerConfig):
@@ -180,6 +316,7 @@ class StreamingPostProcessor:
         self._think_prefix_sent = False
         self._json_preamble_stripped = False
         self._json_preamble_buffer = ""
+        self._in_suppressed_think = False  # for _thinking_disabled think-block filter
 
         if self.reasoning_parser:
             self.reasoning_parser.reset_state()
@@ -198,10 +335,13 @@ class StreamingPostProcessor:
                 return [self._make_finish_event(output)]
             return []
 
-        # Step 1: Separate content from reasoning
+        # Step 1: Separate content from reasoning.
+        # Skip the reasoning parser when thinking is explicitly disabled —
+        # the Qwen3 "Case 3" path would treat all output (including tool calls)
+        # as reasoning, routing them away from the tool parser.
         if output.channel:
             return self._process_channel_routed(delta_text, output)
-        elif self.reasoning_parser:
+        elif self.reasoning_parser and not self._thinking_disabled:
             return self._process_with_reasoning(delta_text, output)
         else:
             return self._process_standard(delta_text, output)
@@ -218,7 +358,7 @@ class StreamingPostProcessor:
             content, reasoning = delta_text, None
 
         # Tool call detection on content
-        if self.tool_parser and content:
+        if self._should_detect_tool_calls(content):
             result = self._detect_tool_calls(content)
             if result is None:
                 return []  # suppressed (inside tool markup)
@@ -278,6 +418,17 @@ class StreamingPostProcessor:
             events.append(StreamEvent(type="reasoning", reasoning=reasoning))
         return events
 
+    def _should_detect_tool_calls(self, content: str | None) -> bool:
+        if not content:
+            return False
+        if self.tool_parser:
+            return True
+        return (
+            "Calling tool:" in content or "Calling tool:" in self.tool_accumulated_text
+            or _has_partial_calling_tool_marker(content)
+            or _has_partial_calling_tool_marker(self.tool_accumulated_text + content)
+        )
+
     def _process_with_reasoning(
         self, delta_text: str, output: GenerationOutput
     ) -> list[StreamEvent]:
@@ -309,7 +460,7 @@ class StreamingPostProcessor:
                 reasoning = None
 
         # Tool call detection
-        if self.tool_parser and content:
+        if self._should_detect_tool_calls(content):
             result = self._detect_tool_calls(content)
             if result is None:
                 return []
@@ -373,6 +524,14 @@ class StreamingPostProcessor:
         """Handle standard models (no reasoning parser, no channel router)."""
         content = strip_special_tokens(delta_text)
 
+        # When thinking is disabled but the model still emits <think>...</think>
+        # (can happen with some quantized models that ignore the nothink prefix),
+        # strip think-block text from content so it never reaches the tool parser.
+        # Surface it as reasoning_content so OpenCode shows it as "Thinking:".
+        _think_text: str = ""
+        if self._thinking_disabled and content:
+            content, _think_text = self._split_think_content(content)
+
         # JSON mode preamble stripping (#46): when response_format is set and
         # no reasoning parser is active, the model may emit a thinking preamble
         # (e.g. "Let me think...\n{json}") before the actual JSON. Suppress
@@ -396,20 +555,28 @@ class StreamingPostProcessor:
             content = "<think>" + content
             self._think_prefix_sent = True
 
-        # Tool call detection
-        if self.tool_parser and delta_text:
-            result = self._detect_tool_calls(delta_text)
+        # Tool call detection — use think-stripped content when thinking disabled,
+        # raw delta_text otherwise (preserves original behaviour for other models).
+        _tc_input = content if self._thinking_disabled else delta_text
+        if _tc_input and self._should_detect_tool_calls(_tc_input):
+            result = self._detect_tool_calls(_tc_input)
             if result is None:
+                if _think_text:
+                    return [StreamEvent(type="reasoning", reasoning=_think_text)]
                 return []
             if result.get("tool_calls"):
-                return [
+                tc_events: list[StreamEvent] = []
+                if _think_text:
+                    tc_events.append(StreamEvent(type="reasoning", reasoning=_think_text))
+                tc_events.append(
                     StreamEvent(
                         type="tool_call",
                         tool_calls=result["tool_calls"],
                         finish_reason="tool_calls" if output.finished else None,
                         tool_calls_detected=True,
                     )
-                ]
+                )
+                return tc_events
             content = strip_special_tokens(result.get("content", ""))
 
         if self.tool_calls_detected:
@@ -429,7 +596,7 @@ class StreamingPostProcessor:
 
         finish_reason = self._compute_finish_reason(output)
 
-        if not content and not finish_reason:
+        if not content and not finish_reason and not _think_text:
             return []
 
         if content:
@@ -440,18 +607,22 @@ class StreamingPostProcessor:
         # When finish_reason is set, emit ONE finish event with content merged in.
         # Never emit separate content + finish events — that would cause
         # double-emission of the same content and duplicate logprobs.
+        events: list[StreamEvent] = []
+        if _think_text:
+            events.append(StreamEvent(type="reasoning", reasoning=_think_text))
         if finish_reason:
-            return [
+            events.append(
                 StreamEvent(
                     type="finish",
                     finish_reason=finish_reason,
                     content=content,
                     tool_calls_detected=self.tool_calls_detected,
                 )
-            ]
+            )
+            return events
         if content:
-            return [StreamEvent(type="content", content=content)]
-        return []
+            events.append(StreamEvent(type="content", content=content))
+        return events
 
     def finalize(self) -> list[StreamEvent]:
         """Finalize stream — flush remaining tool calls, emit corrections.
@@ -469,7 +640,9 @@ class StreamingPostProcessor:
             and not self.tool_calls_detected
             and self.tool_parser.has_pending_tool_call(_fallback_text)
         ):
-            result = self.tool_parser.extract_tool_calls(_fallback_text)
+            result = self.tool_parser.extract_tool_calls(
+                _fallback_text, self.request_dict
+            )
             if result.tools_called:
                 tc_list = [
                     {
@@ -493,6 +666,22 @@ class StreamingPostProcessor:
                 )
                 self.tool_calls_detected = True
 
+        if "Calling tool:" in _fallback_text and not self.tool_calls_detected:
+            _, tool_calls = parse_tool_calls(_fallback_text, self.request_dict)
+            if tool_calls:
+                chunks = self._tool_calls_to_stream_chunks(tool_calls)
+                if not chunks:
+                    return events
+                events.append(
+                    StreamEvent(
+                        type="tool_call",
+                        tool_calls=chunks,
+                        finish_reason="tool_calls",
+                        tool_calls_detected=True,
+                    )
+                )
+                self.tool_calls_detected = True
+
         return events
 
     def _detect_tool_calls(self, content: str) -> dict | None:
@@ -502,7 +691,12 @@ class StreamingPostProcessor:
         Returns {"tool_calls": [...]} if tool calls detected.
         Returns {"content": "..."} for normal content pass-through.
         """
-        if not self.tool_markup_possible and "<" not in content and "[" not in content:
+        if (
+            not self.tool_markup_possible
+            and "<" not in content
+            and "[" not in content
+            and "Calling tool:" not in content
+        ):
             self.tool_accumulated_text += content
             return {"content": content}
 
@@ -511,18 +705,88 @@ class StreamingPostProcessor:
 
         tool_previous = self.tool_accumulated_text
         self.tool_accumulated_text += content
-        tool_result = self.tool_parser.extract_tool_calls_streaming(
-            tool_previous, self.tool_accumulated_text, content
-        )
+        if self.tool_parser:
+            tool_result = self.tool_parser.extract_tool_calls_streaming(
+                tool_previous,
+                self.tool_accumulated_text,
+                content,
+                request=self.request_dict,
+            )
+        else:
+            tool_result = {"content": content}
 
         if tool_result is None:
+            if "Calling tool:" in self.tool_accumulated_text:
+                _, tool_calls = parse_tool_calls(
+                    self.tool_accumulated_text, self.request_dict
+                )
+                if tool_calls:
+                    chunks = self._tool_calls_to_stream_chunks(tool_calls)
+                    if not chunks:
+                        return None
+                    self.tool_calls_detected = True
+                    return {"tool_calls": chunks}
             return None  # inside tool markup
 
         if "tool_calls" in tool_result:
             self.tool_calls_detected = True
             return tool_result
 
+        if "Calling tool:" in self.tool_accumulated_text:
+            _, tool_calls = parse_tool_calls(
+                self.tool_accumulated_text, self.request_dict
+            )
+            if tool_calls:
+                chunks = self._tool_calls_to_stream_chunks(tool_calls)
+                if not chunks:
+                    return None
+                self.tool_calls_detected = True
+                return {"tool_calls": chunks}
+            return None
+
+        if _has_partial_calling_tool_marker(self.tool_accumulated_text):
+            content = tool_result.get("content", "")
+            stripped = _strip_trailing_calling_tool_prefix(content)
+            if stripped:
+                return {"content": stripped}
+            return None
+
         return {"content": tool_result.get("content", "")}
+
+    def _split_think_content(self, text: str) -> tuple[str, str]:
+        """Split delta text into (content_outside_think, think_block_text).
+
+        Handles streaming: tracks _in_suppressed_think across deltas.
+        think_block_text should be surfaced as reasoning; content_outside_think
+        passes through to the tool parser as regular content.
+        """
+        if not text:
+            return text, ""
+
+        think_parts: list[str] = []
+        content_parts: list[str] = []
+        pos = 0
+        while pos < len(text):
+            if self._in_suppressed_think:
+                end = text.find("</think>", pos)
+                if end == -1:
+                    think_parts.append(text[pos:])
+                    pos = len(text)
+                else:
+                    think_parts.append(text[pos:end])
+                    self._in_suppressed_think = False
+                    pos = end + len("</think>")
+            else:
+                start = text.find("<think>", pos)
+                if start == -1:
+                    content_parts.append(text[pos:])
+                    pos = len(text)
+                else:
+                    content_parts.append(text[pos:start])
+                    self._in_suppressed_think = True
+                    pos = start + len("<think>")
+
+        return "".join(content_parts), "".join(think_parts)
 
     def _compute_finish_reason(self, output: GenerationOutput) -> str | None:
         if not output.finished:

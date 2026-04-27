@@ -53,6 +53,150 @@ def _get_arguments_config(func_name: str, tools: list[dict] | None) -> dict:
     return {}
 
 
+_PARAM_NAME_ALIASES = {
+    "filePath": {
+        "file",
+        "filename",
+        "path",
+        "targetfile",
+        "targetpath",
+    },
+    "oldString": {
+        "find",
+        "findstring",
+        "old",
+        "oldtext",
+        "original",
+        "originaltext",
+        "search",
+        "searchstring",
+    },
+    "newString": {
+        "new",
+        "newtext",
+        "replace",
+        "replacement",
+        "replacementstring",
+        "replacestring",
+    },
+    "content": {
+        "body",
+        "code",
+        "contents",
+        "filecontent",
+        "source",
+        "text",
+    },
+}
+
+
+def _param_name_key(param_name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", param_name.lower())
+
+
+def _resolve_tool_name(name: str, tools: list[dict] | None) -> str:
+    """Resolve a potentially malformed function name to a valid tool name.
+
+    Handles: extra JSON content appended to name, wrong but similar names
+    (e.g. "sh" → "bash", "task_id" → "task").
+    """
+    m = re.match(r"^[A-Za-z_][A-Za-z0-9_]*", name.strip())
+    clean = m.group(0) if m else name.strip()
+    if not tools:
+        return clean
+    valid = [
+        t.get("function", {}).get("name", "")
+        for t in tools
+        if isinstance(t, dict) and t.get("function", {}).get("name")
+    ]
+    if not valid:
+        return clean
+    if clean in valid:
+        return clean
+    # Prefix/suffix match — handles "task_id"→"task", "sh"→"bash"
+    for v in valid:
+        if clean.startswith(v) or v.startswith(clean) or v.endswith(clean):
+            return v
+    return clean
+
+
+def _normalize_param_name(param_name: str, param_config: dict) -> str:
+    """Map common model-emitted argument aliases to the tool schema key."""
+    normalized = param_name.strip()
+    if not isinstance(param_config, dict) or not param_config:
+        return normalized
+    if normalized in param_config:
+        return normalized
+
+    normalized_key = _param_name_key(normalized)
+    for schema_name in param_config:
+        if not isinstance(schema_name, str):
+            continue
+        if schema_name.lower() == normalized.lower():
+            return schema_name
+        if _param_name_key(schema_name) == normalized_key:
+            return schema_name
+
+    for schema_name, aliases in _PARAM_NAME_ALIASES.items():
+        if schema_name in param_config and normalized_key in aliases:
+            return schema_name
+
+    return normalized
+
+
+def _decode_json_like(value: Any) -> Any:
+    """Decode JSON-looking strings, including double-encoded values."""
+    if not isinstance(value, str):
+        return value
+
+    current: Any = value.strip()
+    for _ in range(3):
+        if not isinstance(current, str):
+            return current
+        stripped = current.strip()
+        if not stripped or stripped[0] not in '[{"':
+            return current
+        try:
+            parsed = json.loads(stripped)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return current
+        if parsed == current:
+            return parsed
+        current = parsed
+    return current
+
+
+def _schema_type(schema: Any) -> str | None:
+    """Infer a JSON schema type for tool argument conversion."""
+    if isinstance(schema, str):
+        return schema.strip().lower()
+    if not isinstance(schema, dict):
+        return None
+
+    schema_type = schema.get("type")
+    if isinstance(schema_type, list):
+        schema_type = next((item for item in schema_type if item != "null"), None)
+    if isinstance(schema_type, str):
+        return schema_type.strip().lower()
+
+    for key in ("anyOf", "oneOf", "allOf"):
+        options = schema.get(key)
+        if not isinstance(options, list):
+            continue
+        for option in options:
+            option_type = _schema_type(option)
+            if option_type and option_type != "null":
+                return option_type
+
+    if "items" in schema:
+        return "array"
+    if "properties" in schema or "additionalProperties" in schema:
+        return "object"
+    if "enum" in schema:
+        return "string"
+    return None
+
+
 def _convert_param_value(
     param_value: str, param_name: str, param_config: dict, func_name: str
 ) -> Any:
@@ -61,13 +205,12 @@ def _convert_param_value(
         return None
 
     if param_name not in param_config:
-        return param_value
+        return _decode_json_like(param_value)
 
     cfg = param_config[param_name]
-    if isinstance(cfg, dict) and "type" in cfg:
-        param_type = str(cfg["type"]).strip().lower()
-    else:
-        param_type = "string"
+    param_type = _schema_type(cfg)
+    if param_type is None:
+        return _decode_json_like(param_value)
 
     if param_type in ("string", "str", "text", "varchar", "char", "enum"):
         return param_value
@@ -87,10 +230,9 @@ def _convert_param_value(
         if param_type in ("object", "array", "arr") or param_type.startswith(
             ("dict", "list")
         ):
-            try:
-                return json.loads(param_value)
-            except (json.JSONDecodeError, TypeError, ValueError):
-                pass
+            decoded = _decode_json_like(param_value)
+            if decoded is not param_value:
+                return decoded
         try:
             return ast.literal_eval(param_value)
         except (ValueError, SyntaxError):
@@ -156,24 +298,75 @@ class Qwen3CoderToolParser(ToolParser):
         self._streaming_request = None
         self.prev_tool_call_arr = []
 
+    def has_pending_tool_call(self, text: str) -> bool:
+        return (
+            self.tool_call_start_token in text
+            or self.tool_call_prefix in text
+            or self.has_text_format_tool_call(text)
+        )
+
+    def _bare_function_positions(self, text: str) -> list[int]:
+        positions = []
+        idx = 0
+        while True:
+            idx = text.find(self.tool_call_prefix, idx)
+            if idx == -1:
+                break
+            last_tool_start = text.rfind(self.tool_call_start_token, 0, idx)
+            last_tool_end = text.rfind(self.tool_call_end_token, 0, idx)
+            if last_tool_start == -1 or last_tool_end > last_tool_start:
+                positions.append(idx)
+            idx += len(self.tool_call_prefix)
+        return positions
+
+    def _tool_start_positions(self, text: str) -> list[tuple[int, bool]]:
+        positions = []
+        idx = 0
+        while True:
+            idx = text.find(self.tool_call_start_token, idx)
+            if idx == -1:
+                break
+            positions.append((idx, True))
+            idx += len(self.tool_call_start_token)
+        positions.extend((idx, False) for idx in self._bare_function_positions(text))
+        return sorted(positions, key=lambda item: item[0])
+
+    def _completed_tool_count(self, text: str) -> int:
+        count = 0
+        for start, wrapped in self._tool_start_positions(text):
+            end_token = self.tool_call_end_token if wrapped else self.function_end_token
+            if text.find(end_token, start) != -1:
+                count += 1
+        return count
+
     def _parse_xml_function_call(
         self, function_call_str: str, tools: list[dict] | None
     ) -> dict | None:
         """Parse a single function call from XML and return a tool call dict."""
-        try:
-            end_index = function_call_str.index(">")
-        except ValueError:
+        gt_index = function_call_str.find(">")
+        if gt_index == -1:
             return None
-        function_name = function_call_str[:end_index]
+        nl_index = function_call_str.find("\n", 0, gt_index)
+        if nl_index != -1:
+            # Model omitted '>' after function name: "name\n</parameter>ARG>VAL"
+            # Use newline as name boundary and fix the malformed first param.
+            function_name = function_call_str[:nl_index].strip()
+            params_raw = function_call_str[nl_index + 1:]
+            # "</parameter>ARG>" → "<parameter=ARG>" for the first parameter
+            params_raw = re.sub(r"^</parameter>([^>]*>)", r"<parameter=\1", params_raw)
+            parameters = params_raw
+        else:
+            function_name = function_call_str[:gt_index]
+            parameters = function_call_str[gt_index + 1:]
+        function_name = _resolve_tool_name(function_name, tools)
         param_config = _get_arguments_config(function_name, tools)
-        parameters = function_call_str[end_index + 1 :]
         param_dict = {}
         for match_text in self.tool_call_parameter_regex.findall(parameters):
             try:
                 idx = match_text.index(">")
             except ValueError:
                 continue
-            p_name = match_text[:idx]
+            p_name = _normalize_param_name(match_text[:idx], param_config)
             p_value = str(match_text[idx + 1 :])
             if p_value.startswith("\n"):
                 p_value = p_value[1:]
@@ -254,6 +447,8 @@ class Qwen3CoderToolParser(ToolParser):
         if not previous_text:
             self._reset_streaming_state()
             self._streaming_request = request
+        elif request is not None and self._streaming_request is None:
+            self._streaming_request = request
 
         if not delta_text:
             return None
@@ -263,7 +458,7 @@ class Qwen3CoderToolParser(ToolParser):
 
         # Check if we need to advance to next tool
         if self.json_closed and not self.in_function:
-            tool_ends = current_text.count(self.tool_call_end_token)
+            tool_ends = self._completed_tool_count(current_text)
             if tool_ends > self.current_tool_index:
                 self.current_tool_index += 1
                 self.header_sent = False
@@ -279,15 +474,20 @@ class Qwen3CoderToolParser(ToolParser):
 
         # Handle content before tool calls
         if not self.is_tool_call_started:
+            bare_function_idx = delta_text.find(self.tool_call_prefix)
             if (
                 self.tool_call_start_token_id is not None
                 and self.tool_call_start_token_id in delta_token_ids
-            ) or self.tool_call_start_token in delta_text:
+            ) or self.tool_call_start_token in delta_text or bare_function_idx != -1:
                 self.is_tool_call_started = True
                 if self.tool_call_start_token in delta_text:
                     content_before = delta_text[
                         : delta_text.index(self.tool_call_start_token)
                     ]
+                    if content_before:
+                        return {"content": content_before}
+                elif bare_function_idx > 0:
+                    content_before = delta_text[:bare_function_idx]
                     if content_before:
                         return {"content": content_before}
                 # Fall through to header parsing below instead of returning
@@ -300,30 +500,20 @@ class Qwen3CoderToolParser(ToolParser):
                     return None
                 return {"content": delta_text}
 
-        # Find current tool call portion
-        tool_starts_count = current_text.count(self.tool_call_start_token)
-        if self.current_tool_index >= tool_starts_count:
-            return None
-
-        tool_start_positions: list[int] = []
-        idx = 0
-        while True:
-            idx = current_text.find(self.tool_call_start_token, idx)
-            if idx == -1:
-                break
-            tool_start_positions.append(idx)
-            idx += len(self.tool_call_start_token)
-
+        # Find current tool call portion. Qwen3 sometimes omits the
+        # <tool_call> wrapper and starts directly with <function=...>.
+        tool_start_positions = self._tool_start_positions(current_text)
         if self.current_tool_index >= len(tool_start_positions):
             return None
 
-        tool_start_idx = tool_start_positions[self.current_tool_index]
-        tool_end_idx = current_text.find(self.tool_call_end_token, tool_start_idx)
+        tool_start_idx, wrapped = tool_start_positions[self.current_tool_index]
+        end_token = self.tool_call_end_token if wrapped else self.function_end_token
+        tool_end_idx = current_text.find(end_token, tool_start_idx)
         if tool_end_idx == -1:
             tool_text = current_text[tool_start_idx:]
         else:
             tool_text = current_text[
-                tool_start_idx : tool_end_idx + len(self.tool_call_end_token)
+                tool_start_idx : tool_end_idx + len(end_token)
             ]
 
         # Parse function header
@@ -333,8 +523,14 @@ class Qwen3CoderToolParser(ToolParser):
                     self.tool_call_prefix
                 )
                 func_end = tool_text.find(">", func_start)
+                func_nl = tool_text.find("\n", func_start)
                 if func_end != -1:
-                    self.current_function_name = tool_text[func_start:func_end]
+                    if func_nl != -1 and func_nl < func_end:
+                        raw_name = tool_text[func_start:func_nl].strip()
+                    else:
+                        raw_name = tool_text[func_start:func_end]
+                    _tools = request.get("tools") if isinstance(request, dict) else None
+                    self.current_function_name = _resolve_tool_name(raw_name, _tools)
                     self._current_tool_id = _generate_tool_id()
                     self.header_sent = True
                     self.in_function = True
@@ -427,7 +623,7 @@ class Qwen3CoderToolParser(ToolParser):
                     break
 
                 name_end = remaining.find(">")
-                current_param_name = remaining[:name_end]
+                raw_param_name = remaining[:name_end]
                 value_start = param_start + name_end + 1
                 value_text = tool_text[value_start:]
                 if value_text.startswith("\n"):
@@ -456,9 +652,6 @@ class Qwen3CoderToolParser(ToolParser):
                 if pv.endswith("\n"):
                     pv = pv[:-1]
 
-                self.accumulated_params[current_param_name] = pv
-
-                # Type conversion
                 tools = None
                 if self._streaming_request:
                     tools = (
@@ -469,6 +662,10 @@ class Qwen3CoderToolParser(ToolParser):
                 param_config = _get_arguments_config(
                     self.current_function_name or "", tools
                 )
+                current_param_name = _normalize_param_name(raw_param_name, param_config)
+                self.accumulated_params[current_param_name] = pv
+
+                # Type conversion
                 converted = _convert_param_value(
                     pv,
                     current_param_name,
@@ -486,6 +683,11 @@ class Qwen3CoderToolParser(ToolParser):
 
             if json_fragments:
                 combined = "".join(json_fragments)
+                if not self.json_closed and self.function_end_token in tool_text:
+                    self.json_closed = True
+                    self.in_function = False
+                    self.accumulated_params = {}
+                    combined += "}"
                 return {
                     "tool_calls": [
                         {

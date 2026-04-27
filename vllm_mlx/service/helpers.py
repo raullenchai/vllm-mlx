@@ -44,7 +44,50 @@ _TOOL_USE_SYSTEM_SUFFIX = (
     "a reasonable default exists. Do NOT explain what you will do — just do it. "
     "Be direct and concise in your responses. "
     "Do NOT think out loud or show your reasoning process. "
-    "Give direct answers only — no preamble like 'The user asks...' or 'Let me think...'."
+    "Give direct answers only — no preamble like 'The user asks...' or 'Let me think...'.\n"
+    "When creating or writing files, ALWAYS use the write tool with the exact file path "
+    "and complete file content. Do NOT use bash heredoc (cat > file << 'EOF') for file creation."
+)
+
+_TOOL_CONTINUATION_USER_PROMPT = (
+    "Continue the original task after the tool result above. "
+    "If any work remains and a suitable tool is available, call the next tool now. "
+    "Do not describe the next action. Do not stop with only reasoning. "
+    "Only give a final answer when the task is complete."
+)
+
+_TOOL_CONTINUATION_REPEATED_READ_PROMPT = (
+    "You just repeated the same read-only tool call after receiving its result. "
+    "Use the tool result already present in the conversation. "
+    "Do not call the same read-only tool with the same arguments again. "
+    "Make a state-changing tool call, run a diagnostic command, or provide the "
+    "final answer if the task is complete."
+)
+
+_TOOL_CONTINUATION_REPEATED_CALL_PROMPT = (
+    "You just called the same tool with identical arguments twice in a row. "
+    "The previous result is already in the conversation — do not repeat the call. "
+    "If the tool returned an error, diagnose the root cause and take a different action. "
+    "Do not retry the exact same call again."
+)
+
+_TOOL_CONTINUATION_RETRY_PROMPT = (
+    "Your previous response was only narration/planning after a tool result. "
+    "That is invalid for this tool-using client. "
+    "Call the next required tool now. Do not output any explanatory text."
+)
+
+_TOOL_CALL_REQUIRED_RETRY_PROMPT = (
+    "Your previous response produced narration or repeated text instead of a tool call. "
+    "That is invalid for this tool-using client. "
+    "Call the first or next required tool now. Do not output explanatory text."
+)
+
+_TOOL_CALL_JSON_RETRY_PROMPT = (
+    "Your previous tool call was incomplete or had invalid JSON arguments. "
+    "That is invalid for this tool-using client. "
+    "Call the required tool again now with one complete, valid JSON object for "
+    "the function arguments. Do not output explanatory text."
 )
 
 
@@ -293,6 +336,57 @@ def _parse_tool_calls_with_parser(
         return parse_tool_calls(output_text, request_dict)
 
 
+def _coerce_tool_call_params(tool_calls: list, tools: list) -> None:
+    """Coerce model-generated string values into proper types per schema.
+
+    Qwen models sometimes JSON-encode array/object params as strings inside
+    the tool-call JSON (e.g. todos="[{...}]" instead of todos=[{...}]).
+    This walks each arg and parses stringified arrays/objects in-place.
+    """
+    tool_defs = [t.model_dump() if hasattr(t, "model_dump") else t for t in tools]
+    schema_map: dict[str, str] = {}
+    for td in tool_defs:
+        fn = td.get("function", {})
+        name = fn.get("name", "")
+        props = (fn.get("parameters") or {}).get("properties") or {}
+        for param, pschema in props.items():
+            schema_map[f"{name}.{param}"] = pschema.get("type", "")
+
+    for tc in tool_calls:
+        func = tc.function if hasattr(tc, "function") else tc.get("function", {})
+        func_name = func.name if hasattr(func, "name") else func.get("name", "")
+        args_str = (
+            func.arguments if hasattr(func, "arguments") else func.get("arguments", "{}")
+        )
+        try:
+            args = json.loads(args_str) if isinstance(args_str, str) else args_str
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(args, dict):
+            continue
+
+        changed = False
+        for param, value in list(args.items()):
+            expected_type = schema_map.get(f"{func_name}.{param}", "")
+            if expected_type in ("array", "object") and isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    if (expected_type == "array" and isinstance(parsed, list)) or (
+                        expected_type == "object" and isinstance(parsed, dict)
+                    ):
+                        args[param] = parsed
+                        changed = True
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        if changed:
+            new_args = json.dumps(args)
+            if hasattr(func, "arguments"):
+                func.arguments = new_args
+            else:
+                func["arguments"] = new_args
+
+
 def _validate_tool_call_params(tool_calls: list, tools: list) -> None:
     """Validate tool call parameter values against their schemas (post-generation)."""
     from ..api.tool_logits import _extract_param_schemas, validate_param_value
@@ -356,6 +450,140 @@ def _inject_json_instruction(messages: list, instruction: str) -> list:
         messages.insert(0, {"role": "system", "content": instruction})
 
     return messages
+
+
+def _message_role(message) -> str | None:
+    return (
+        message.get("role") if isinstance(message, dict) else getattr(message, "role", None)
+    )
+
+
+def _message_content(message):
+    return (
+        message.get("content")
+        if isinstance(message, dict)
+        else getattr(message, "content", None)
+    )
+
+
+def _is_tool_result_message(message) -> bool:
+    role = _message_role(message)
+    if role == "tool":
+        return True
+    if role != "user":
+        return False
+    content = _message_content(message)
+    if not isinstance(content, str):
+        return False
+    stripped = content.lstrip()
+    return stripped.startswith("[Tool Result") or stripped.startswith("<tool_response>")
+
+
+def _object_value(obj, key: str):
+    return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+
+def _normalize_tool_arguments(arguments) -> str:
+    if arguments is None:
+        return ""
+    if not isinstance(arguments, str):
+        try:
+            return json.dumps(arguments, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError):
+            return str(arguments)
+
+    stripped = arguments.strip()
+    try:
+        decoded = json.loads(stripped)
+    except (json.JSONDecodeError, ValueError):
+        return stripped
+    try:
+        return json.dumps(decoded, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return stripped
+
+
+def _assistant_tool_call_signature(message) -> tuple[str, str] | None:
+    if _message_role(message) != "assistant":
+        return None
+
+    tool_calls = _object_value(message, "tool_calls")
+    if not tool_calls:
+        return None
+
+    tool_call = tool_calls[0]
+    function = _object_value(tool_call, "function")
+    if not function:
+        return None
+
+    name = _object_value(function, "name")
+    if not name:
+        return None
+
+    arguments = _normalize_tool_arguments(_object_value(function, "arguments"))
+    return str(name), arguments
+
+
+def _has_repeated_recent_read_tool_call(messages: list) -> bool:
+    """Detect repeated read-only tool calls without a state-changing call between."""
+    last_signature = None
+    saw_last = False
+
+    for message in reversed(messages):
+        signature = _assistant_tool_call_signature(message)
+        if not signature:
+            continue
+
+        name, _arguments = signature
+        if name != "read":
+            if saw_last:
+                return False
+            continue
+
+        if not saw_last:
+            last_signature = signature
+            saw_last = True
+            continue
+
+        if signature == last_signature:
+            return True
+
+    return False
+
+
+def _has_repeated_any_tool_call(messages: list) -> bool:
+    """Detect two consecutive identical tool calls (any tool name)."""
+    last_signature = None
+
+    for message in reversed(messages):
+        signature = _assistant_tool_call_signature(message)
+        if signature is None:
+            continue
+        if last_signature is None:
+            last_signature = signature
+            continue
+        if signature == last_signature:
+            return True
+        break
+
+    return False
+
+
+def _append_tool_continuation_prompt(messages: list, tools_requested: bool) -> tuple[list, bool]:
+    """Add a hidden continuation nudge after tool results for local tool models."""
+    if not tools_requested or not messages:
+        return messages, False
+    if not _is_tool_result_message(messages[-1]):
+        return messages, False
+    prompt = (
+        _TOOL_CONTINUATION_REPEATED_CALL_PROMPT
+        if _has_repeated_any_tool_call(messages)
+        else _TOOL_CONTINUATION_REPEATED_READ_PROMPT
+        if _has_repeated_recent_read_tool_call(messages)
+        else _TOOL_CONTINUATION_USER_PROMPT
+    )
+    return messages + [{"role": "user", "content": prompt}], True
+
 
 
 def _maybe_pin_system_prompt(messages: list) -> None:

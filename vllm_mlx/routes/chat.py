@@ -4,8 +4,10 @@
 import gc
 import json
 import logging
+import re
 import time
 import uuid
+from collections import Counter
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -40,7 +42,11 @@ from ..config import get_config
 from ..engine import GenerationOutput
 from ..middleware.auth import check_rate_limit, verify_api_key
 from ..service.helpers import (
+    _TOOL_CALL_JSON_RETRY_PROMPT,
+    _TOOL_CALL_REQUIRED_RETRY_PROMPT,
+    _TOOL_CONTINUATION_RETRY_PROMPT,
     _TOOL_USE_SYSTEM_SUFFIX,
+    _append_tool_continuation_prompt,
     _build_usage,
     _disconnect_guard,
     _extract_token_logprob,
@@ -52,6 +58,7 @@ from ..service.helpers import (
     _resolve_temperature,
     _resolve_top_p,
     _validate_model_name,
+    _coerce_tool_call_params,
     _validate_tool_call_params,
     _wait_with_disconnect,
     get_engine,
@@ -61,6 +68,140 @@ from ..service.helpers import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_REPETITION_WORD_RE = re.compile(r"[A-Za-z0-9_'-]+")
+_TOOL_TEXT_REPETITION_MIN_WORDS = 32
+_TOOL_TEXT_REPETITION_MIN_COUNT = 24
+_TOOL_TEXT_REPETITION_RATIO = 0.60
+
+
+def _tool_choice_allows_tool_calls(tool_choice) -> bool:
+    if tool_choice == "none":
+        return False
+    if isinstance(tool_choice, dict) and tool_choice.get("type") == "none":
+        return False
+    return True
+
+
+def _is_repetitive_tool_text(text: str) -> bool:
+    words = _REPETITION_WORD_RE.findall(text.lower())
+    if len(words) < _TOOL_TEXT_REPETITION_MIN_WORDS:
+        return False
+
+    tail = words[-96:]
+    most_common_count = Counter(tail).most_common(1)[0][1]
+    if (
+        most_common_count >= _TOOL_TEXT_REPETITION_MIN_COUNT
+        and most_common_count / len(tail) >= _TOOL_TEXT_REPETITION_RATIO
+    ):
+        return True
+
+    for size in (2, 3, 4):
+        if len(tail) < size * 8:
+            continue
+        ngrams = [" ".join(tail[i : i + size]) for i in range(len(tail) - size + 1)]
+        ngram_count = Counter(ngrams).most_common(1)[0][1]
+        if ngram_count >= 8 and (ngram_count * size) / len(tail) >= 0.50:
+            return True
+
+    return False
+
+
+def _buffered_stream_text(buffered_events: list[tuple]) -> str:
+    parts = []
+    for event, _ in buffered_events:
+        parts.append(getattr(event, "content", None) or "")
+        parts.append(getattr(event, "reasoning", None) or "")
+    return "".join(parts)
+
+
+def _tool_call_value(obj, key: str, default=None):
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _buffered_tool_calls_complete(
+    buffered_events: list[tuple],
+    request_tools=None,
+) -> bool:
+    """Return True when streamed tool-call chunks assemble to valid JSON with required params."""
+    calls: dict[int, dict[str, str | None]] = {}
+    for event, _ in buffered_events:
+        for tool_call in getattr(event, "tool_calls", None) or []:
+            index = _tool_call_value(tool_call, "index")
+            if not isinstance(index, int):
+                index = len(calls)
+            assembled = calls.setdefault(
+                index,
+                {"id": None, "name": None, "arguments": ""},
+            )
+
+            call_id = _tool_call_value(tool_call, "id")
+            if call_id:
+                assembled["id"] = str(call_id)
+
+            function = _tool_call_value(tool_call, "function", {}) or {}
+            name = _tool_call_value(function, "name")
+            if name:
+                assembled["name"] = str(name)
+
+            arguments = _tool_call_value(function, "arguments")
+            if arguments is not None:
+                assembled["arguments"] = (
+                    (assembled["arguments"] or "") + str(arguments)
+                )
+
+    if not calls:
+        return False
+
+    required_by_tool: dict[str, list[str]] = {}
+    if request_tools:
+        for tool in request_tools:
+            fn = (
+                tool.get("function", {})
+                if isinstance(tool, dict)
+                else getattr(tool, "function", None) or {}
+            )
+            fn_name = (
+                fn.get("name") if isinstance(fn, dict) else getattr(fn, "name", None)
+            )
+            params = (
+                fn.get("parameters", {})
+                if isinstance(fn, dict)
+                else getattr(fn, "parameters", None) or {}
+            )
+            required = (
+                params.get("required")
+                if isinstance(params, dict)
+                else getattr(params, "required", None)
+            ) or []
+            if fn_name:
+                required_by_tool[str(fn_name)] = list(required)
+
+    for assembled in calls.values():
+        if not assembled.get("name"):
+            return False
+        arguments = (assembled.get("arguments") or "").strip()
+        if not arguments:
+            return False
+        try:
+            parsed = json.loads(arguments)
+        except (TypeError, ValueError):
+            return False
+        if not isinstance(parsed, dict):
+            return False
+        fn_name = assembled.get("name") or ""
+        for req_key in required_by_tool.get(fn_name, []):
+            if req_key not in parsed:
+                logger.warning(
+                    "[tool-buffering] assembled tool call '%s' missing required param '%s'",
+                    fn_name,
+                    req_key,
+                )
+                return False
+
+    return True
 
 
 @router.post(
@@ -273,6 +414,11 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
             system_msg = {"role": "system", "content": _inject_suffix.strip()}
             messages = [system_msg] + list(messages)
 
+    messages, added_tool_continuation_prompt = _append_tool_continuation_prompt(
+        list(messages),
+        bool(request.tools),
+    )
+
     # Auto-pin system prompt prefix cache blocks
     if cfg.pin_system_prompt:
         _maybe_pin_system_prompt(messages)
@@ -312,11 +458,76 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if request.tools:
         chat_kwargs["tools"] = convert_tools_for_template(request.tools)
 
-    # Pass through enable_thinking if explicitly set by the client
-    if request.enable_thinking is not None:
-        chat_kwargs["enable_thinking"] = request.enable_thinking
-    elif cfg.no_thinking:
+    # Wire repetition_penalty: honour explicit client value; no server default.
+    # A server default of 1.3 penalizes prompt tokens (short prompts fit in the
+    # 20-token window) including words the model needs in its thinking.
+    if request.repetition_penalty and request.repetition_penalty != 1.0:
+        chat_kwargs["repetition_penalty"] = request.repetition_penalty
+
+    # N-gram blocking: default n=20 for reasoning models to prevent paragraph-level
+    # repetition loops (e.g. thinking that re-generates the same 3 sentences on
+    # every step). Requires a 19-token exact context match before blocking — safe
+    # for normal reasoning but catches the n-gram speculation feedback loop where
+    # generated text enters the pool and the draft proposes the same continuation.
+    # Previously disabled due to hard-ban+rep_penalty bugs on prompt tokens; those
+    # are fixed, so this is now safe.
+    if "no_repeat_ngram_size" not in chat_kwargs:
+        if hasattr(request, "no_repeat_ngram_size") and request.no_repeat_ngram_size:
+            chat_kwargs["no_repeat_ngram_size"] = int(request.no_repeat_ngram_size)
+        elif cfg.reasoning_parser_name and not request.tools:
+            # Only apply for non-tool requests. Tool requests have thinking
+            # disabled (enable_thinking=False), so no thinking loops are possible.
+            # For tool requests, n-gram blocking forces slight variations in
+            # repeated tool calls, bypassing OpenCode's doom-loop detector.
+            chat_kwargs["no_repeat_ngram_size"] = 20
+
+    # Presence penalty: pass through client value only; no server default.
+    # The hard ban (count>=3 in last 10) + no_repeat_ngram_size handle extreme
+    # repetition. A large default presence_penalty disrupts coherence at temp=0
+    # by penalizing high-prob tokens like "a" / "the" into wrong alternatives.
+    if hasattr(request, "presence_penalty") and request.presence_penalty:
+        chat_kwargs["presence_penalty"] = float(request.presence_penalty)
+
+    # Temperature override for tool requests: removed. The engine forces
+    # effective_temperature=0 for all tool-enabled prompts directly, and
+    # no_repeat_ngram_size=20 prevents word-level loops at greedy temp.
+
+    # For tool-enabled requests with a reasoning parser, disable thinking.
+    # With thinking ON and qwen3_coder_xml, the model loops in <think> for
+    # 30k+ tokens before emitting a tool call (even at temp=0.55 with
+    # no_repeat_ngram_size=20). With thinking OFF, tool calls are generated
+    # in ~30 tokens and the tool call loop works correctly.
+    if cfg.no_thinking:
         chat_kwargs["enable_thinking"] = False
+    elif request.enable_thinking is not None:
+        chat_kwargs["enable_thinking"] = request.enable_thinking
+    elif cfg.reasoning_parser_name and request.tools:
+        chat_kwargs["enable_thinking"] = False
+
+    # Strip any OpenCode-style bare <think> prefill injected as a partial
+    # assistant turn.  Some agents append {"role": "assistant", "content":
+    # "<think>\n"} to force reasoning mode, but this prevents the chat
+    # template from generating its own assistant prefix (including the
+    # nothink block when enable_thinking=False, or the proper <think>\n
+    # opening when thinking is on).  Remove the bare marker unconditionally
+    # so the template controls the assistant prefix.
+    if messages:
+        _last = messages[-1]
+        _last_role = (
+            _last.get("role") if isinstance(_last, dict)
+            else getattr(_last, "role", None)
+        )
+        if _last_role == "assistant":
+            _last_content = (
+                _last.get("content", "") if isinstance(_last, dict)
+                else getattr(_last, "content", "")
+            ) or ""
+            if _last_content.strip() in ("<think>", "<think>\n", "<think>\n\n"):
+                messages = list(messages[:-1])
+                logger.info(
+                    "[think-strip] removed bare <think> assistant prefill — "
+                    "letting template control assistant prefix"
+                )
 
     # Cloud routing: offload large-context requests to cloud LLM
     if cfg.cloud_router and not engine.is_mllm and hasattr(engine, "build_prompt"):
@@ -407,7 +618,13 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
                 raise
         return StreamingResponse(
             _disconnect_guard(
-                stream_chat_completion(engine, messages, request, **chat_kwargs),
+                stream_chat_completion(
+                    engine,
+                    messages,
+                    request,
+                    tool_continuation_retry=added_tool_continuation_prompt,
+                    **chat_kwargs,
+                ),
                 raw_request,
             ),
             media_type="text/event-stream",
@@ -509,8 +726,9 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     # Parse tool calls from output using configured parser
     cleaned_text, tool_calls = _parse_tool_calls_with_parser(output.text, request)
 
-    # Validate tool call parameter values against schemas
+    # Coerce stringified array/object params then validate
     if tool_calls and request.tools:
+        _coerce_tool_call_params(tool_calls, request.tools)
         _validate_tool_call_params(tool_calls, request.tools)
 
     # Extract reasoning content FIRST.
@@ -578,6 +796,7 @@ async def stream_chat_completion(
     engine,
     messages: list,
     request: ChatCompletionRequest,
+    tool_continuation_retry: bool = False,
     **kwargs,
 ) -> AsyncIterator[str]:
     """Stream chat completion response.
@@ -634,93 +853,34 @@ async def stream_chat_completion(
             logger.info(f"[SSE-ROLE] {_first_sse.strip()[:200]}")
         yield _first_sse
 
-        # Initialize post-processor
-        processor = StreamingPostProcessor(
-            cfg,
-            tools_requested=bool(request.tools),
-            json_mode=bool(
-                request.response_format
-                and getattr(request.response_format, "type", "text") != "text"
-            ),
-        )
-        processor.set_thinking_model(request.model)
-        processor.reset()
-
         # Track token counts for usage reporting
         prompt_tokens = 0
         completion_tokens = 0
 
-        # Stream content — PostProcessor handles reasoning/tool/sanitize
-        async for output in engine.stream_chat(messages=messages, **kwargs):
-            if hasattr(output, "prompt_tokens") and output.prompt_tokens:
-                prompt_tokens = output.prompt_tokens
-            if hasattr(output, "completion_tokens") and output.completion_tokens:
-                completion_tokens = output.completion_tokens
-
-            for event in processor.process_chunk(output):
-                if event.type == "content":
-                    if not want_logprobs:
-                        _sse = _fast_sse_chunk(event.content, "content")
-                        if _sse:
-                            yield _sse
-                    else:
-                        chunk = ChatCompletionChunk(
-                            id=response_id,
-                            model=_resolve_model_name(request.model),
-                            choices=[
-                                ChatCompletionChunkChoice(
-                                    delta=ChatCompletionChunkDelta(
-                                        content=event.content,
-                                    ),
-                                    logprobs=_build_chunk_logprobs(output),
-                                )
-                            ],
+        def _format_stream_event(event, output: GenerationOutput) -> list[str]:
+            if event.type == "content":
+                if not want_logprobs:
+                    _sse = _fast_sse_chunk(event.content, "content")
+                    return [_sse] if _sse else []
+                chunk = ChatCompletionChunk(
+                    id=response_id,
+                    model=_resolve_model_name(request.model),
+                    choices=[
+                        ChatCompletionChunkChoice(
+                            delta=ChatCompletionChunkDelta(
+                                content=event.content,
+                            ),
+                            logprobs=_build_chunk_logprobs(output),
                         )
-                        yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                    ],
+                )
+                return [f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"]
 
-                elif event.type == "reasoning":
-                    yield _fast_sse_chunk(event.reasoning, "reasoning_content")
+            if event.type == "reasoning":
+                return [_fast_sse_chunk(event.reasoning, "reasoning_content")]
 
-                elif event.type == "tool_call":
-                    chunk = ChatCompletionChunk(
-                        id=response_id,
-                        model=_resolve_model_name(request.model),
-                        choices=[
-                            ChatCompletionChunkChoice(
-                                delta=ChatCompletionChunkDelta(
-                                    tool_calls=event.tool_calls,
-                                ),
-                                finish_reason=event.finish_reason,
-                            )
-                        ],
-                        usage=get_usage(output) if output.finished else None,
-                    )
-                    _tc_sse = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
-                    logger.info(f"[SSE-TC] {_tc_sse.strip()[:300]}")
-                    yield _tc_sse
-
-                elif event.type == "finish":
-                    chunk = ChatCompletionChunk(
-                        id=response_id,
-                        model=_resolve_model_name(request.model),
-                        choices=[
-                            ChatCompletionChunkChoice(
-                                delta=ChatCompletionChunkDelta(
-                                    content=event.content,
-                                    reasoning_content=event.reasoning,
-                                ),
-                                finish_reason=event.finish_reason,
-                                logprobs=_build_chunk_logprobs(output),
-                            )
-                        ],
-                        usage=get_usage(output) if output.finished else None,
-                    )
-                    yield f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
-
-        # Fallback tool call detection
-        for event in processor.finalize():
             if event.type == "tool_call":
-                tool_chunk = ChatCompletionChunk(
+                chunk = ChatCompletionChunk(
                     id=response_id,
                     model=_resolve_model_name(request.model),
                     choices=[
@@ -728,13 +888,262 @@ async def stream_chat_completion(
                             delta=ChatCompletionChunkDelta(
                                 tool_calls=event.tool_calls,
                             ),
-                            finish_reason="tool_calls",
+                            finish_reason=event.finish_reason,
                         )
                     ],
+                    usage=get_usage(output) if output.finished else None,
                 )
-                _fb_sse = f"data: {tool_chunk.model_dump_json(exclude_none=True)}\n\n"
-                logger.info(f"[SSE-FALLBACK-TC] {_fb_sse.strip()[:300]}")
-                yield _fb_sse
+                _tc_sse = f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
+                logger.info(f"[SSE-TC] {_tc_sse.strip()[:300]}")
+                return [_tc_sse]
+
+            if event.type == "finish":
+                chunk = ChatCompletionChunk(
+                    id=response_id,
+                    model=_resolve_model_name(request.model),
+                    choices=[
+                        ChatCompletionChunkChoice(
+                            delta=ChatCompletionChunkDelta(
+                                content=event.content,
+                                reasoning_content=event.reasoning,
+                            ),
+                            finish_reason=event.finish_reason,
+                            logprobs=_build_chunk_logprobs(output),
+                        )
+                    ],
+                    usage=get_usage(output) if output.finished else None,
+                )
+                return [f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"]
+
+            return []
+
+        retry_attempts = 0
+        active_messages = messages
+        tool_retries_enabled = bool(request.tools) and _tool_choice_allows_tool_calls(
+            request.tool_choice
+        )
+        max_tool_continuation_retries = (
+            2 if (tool_continuation_retry or tool_retries_enabled) else 0
+        )
+        retry_prompt = (
+            _TOOL_CONTINUATION_RETRY_PROMPT
+            if tool_continuation_retry
+            else _TOOL_CALL_REQUIRED_RETRY_PROMPT
+        )
+
+        while True:
+            # Initialize post-processor
+            processor = StreamingPostProcessor(
+                cfg,
+                tools_requested=bool(request.tools),
+                json_mode=bool(
+                    request.response_format
+                    and getattr(request.response_format, "type", "text") != "text"
+                ),
+                request_dict=request.model_dump(),
+                enable_thinking=kwargs.get("enable_thinking"),
+            )
+            processor.set_thinking_model(request.model)
+            processor.reset()
+
+            buffered_events: list[tuple] = []
+            buffered_tool_call_events: list[tuple] = []
+            deferred_finish: tuple | None = None
+            emitted_tool_call = False
+            last_output = None
+            retry_reason = None
+            _buffered_text_cache = ""
+            _buf_evt_count = 0
+
+            # Stream content — PostProcessor handles reasoning/tool/sanitize
+            async for output in engine.stream_chat(messages=active_messages, **kwargs):
+                last_output = output
+                if hasattr(output, "prompt_tokens") and output.prompt_tokens:
+                    prompt_tokens = output.prompt_tokens
+                if hasattr(output, "completion_tokens") and output.completion_tokens:
+                    completion_tokens = output.completion_tokens
+
+                retry_window = (
+                    retry_attempts < max_tool_continuation_retries
+                    and not emitted_tool_call
+                )
+
+                for event in processor.process_chunk(output):
+                    if retry_window and event.type in ("content", "reasoning"):
+                        _buffered_text_cache += (getattr(event, "content", None) or "") + (getattr(event, "reasoning", None) or "")
+                        _buf_evt_count += 1
+                        # Only check every 32 events — _is_repetitive_tool_text
+                        # requires ≥32 words and runs a full regex scan each call;
+                        # checking on every event is O(N²) over the stream.
+                        if _buf_evt_count % 32 == 0 and _is_repetitive_tool_text(
+                            _buffered_text_cache
+                        ):
+                            retry_reason = "repetitive text before tool call"
+                            logger.info(
+                                "[tool-continuation] detected repetitive text "
+                                "before tool call; aborting current stream"
+                            )
+                            break
+                        for _sse in _format_stream_event(event, output):
+                            yield _sse
+                        continue
+
+                    if (
+                        retry_window
+                        and event.type == "finish"
+                        and event.finish_reason == "stop"
+                    ):
+                        deferred_finish = (event, output)
+                        continue
+
+                    if (
+                        tool_retries_enabled
+                        and event.type == "finish"
+                        and buffered_tool_call_events
+                    ):
+                        deferred_finish = (event, output)
+                        continue
+
+                    if tool_retries_enabled and event.type == "tool_call":
+                        buffered_tool_call_events.append((event, output))
+                        continue
+
+                    if event.type == "tool_call":
+                        emitted_tool_call = True
+                        for buffered_event, buffered_output in buffered_events:
+                            for _sse in _format_stream_event(
+                                buffered_event, buffered_output
+                            ):
+                                yield _sse
+                        buffered_events.clear()
+
+                    for _sse in _format_stream_event(event, output):
+                        yield _sse
+
+                if retry_reason:
+                    break
+
+            # Fallback tool call detection
+            if not retry_reason:
+                for event in processor.finalize():
+                    if event.type == "tool_call":
+                        if tool_retries_enabled:
+                            buffered_tool_call_events.append((event, last_output))
+                            continue
+
+                        emitted_tool_call = True
+                        for buffered_event, buffered_output in buffered_events:
+                            for _sse in _format_stream_event(
+                                buffered_event, buffered_output
+                            ):
+                                yield _sse
+                        buffered_events.clear()
+
+                        tool_chunk = ChatCompletionChunk(
+                            id=response_id,
+                            model=_resolve_model_name(request.model),
+                            choices=[
+                                ChatCompletionChunkChoice(
+                                    delta=ChatCompletionChunkDelta(
+                                        tool_calls=event.tool_calls,
+                                    ),
+                                    finish_reason="tool_calls",
+                                )
+                            ],
+                        )
+                        _fb_sse = (
+                            f"data: {tool_chunk.model_dump_json(exclude_none=True)}\n\n"
+                        )
+                        logger.info(f"[SSE-FALLBACK-TC] {_fb_sse.strip()[:300]}")
+                        yield _fb_sse
+
+            if not retry_reason and buffered_tool_call_events:
+                if _buffered_tool_calls_complete(buffered_tool_call_events, request.tools):
+                    emitted_tool_call = True
+                    for buffered_event, buffered_output in buffered_events:
+                        for _sse in _format_stream_event(
+                            buffered_event, buffered_output
+                        ):
+                            yield _sse
+                    buffered_events.clear()
+
+                    for tool_event, tool_output in buffered_tool_call_events:
+                        if tool_output is None:
+                            continue
+                        # Coerce stringified array/object args before emitting
+                        _tc = getattr(tool_event, "tool_calls", None)
+                        if _tc and request.tools:
+                            _coerce_tool_call_params(_tc, request.tools)
+                        for _sse in _format_stream_event(tool_event, tool_output):
+                            yield _sse
+                    buffered_tool_call_events.clear()
+
+                    if deferred_finish:
+                        event, output = deferred_finish
+                        for _sse in _format_stream_event(event, output):
+                            yield _sse
+                        deferred_finish = None
+                else:
+                    retry_reason = "incomplete tool call JSON"
+
+            if not retry_reason and deferred_finish and not emitted_tool_call:
+                retry_reason = "text-only stop"
+            elif not retry_reason and _buf_evt_count > 0 and not emitted_tool_call:
+                retry_reason = "stream exhausted without tool call"
+
+            if retry_reason and retry_attempts < max_tool_continuation_retries:
+                retry_attempts += 1
+                logger.info(
+                    "[tool-continuation] retrying after %s following "
+                    "tool result (attempt %d/%d)",
+                    retry_reason,
+                    retry_attempts,
+                    max_tool_continuation_retries,
+                )
+                selected_retry_prompt = (
+                    _TOOL_CALL_JSON_RETRY_PROMPT
+                    if retry_reason == "incomplete tool call JSON"
+                    else retry_prompt
+                )
+                active_messages = list(messages) + [
+                    {"role": "user", "content": selected_retry_prompt}
+                ]
+                continue
+
+            if retry_reason and (buffered_events or buffered_tool_call_events):
+                logger.warning(
+                    "[tool-continuation] suppressing buffered %s after retry "
+                    "budget exhausted",
+                    retry_reason,
+                )
+                buffered_events.clear()
+                buffered_tool_call_events.clear()
+                deferred_finish = None
+                finish_chunk = ChatCompletionChunk(
+                    id=response_id,
+                    model=_resolve_model_name(request.model),
+                    choices=[
+                        ChatCompletionChunkChoice(
+                            delta=ChatCompletionChunkDelta(),
+                            finish_reason=(
+                                last_output.finish_reason if last_output else "stop"
+                            )
+                            or "stop",
+                        )
+                    ],
+                    usage=get_usage(last_output) if last_output else None,
+                )
+                yield f"data: {finish_chunk.model_dump_json(exclude_none=True)}\n\n"
+
+            for buffered_event, buffered_output in buffered_events:
+                for _sse in _format_stream_event(buffered_event, buffered_output):
+                    yield _sse
+            if deferred_finish:
+                event, output = deferred_finish
+                for _sse in _format_stream_event(event, output):
+                    yield _sse
+
+            break
 
         # Log throughput
         elapsed = time.perf_counter() - start_time

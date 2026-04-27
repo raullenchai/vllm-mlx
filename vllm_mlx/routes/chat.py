@@ -458,21 +458,25 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if request.tools:
         chat_kwargs["tools"] = convert_tools_for_template(request.tools)
 
-    # qwen3_coder_xml tool-call format is incompatible with thinking mode —
-    # the model generates tool calls inside <think> blocks when thinking is
-    # on, which the parser never sees.  Force it off unconditionally.
-    if cfg.no_thinking or cfg.tool_call_parser == "qwen3_coder_xml":
+    # Only force thinking off when explicitly configured on the server.
+    # For qwen3_coder_xml: Qwen3 generates <tool_call> AFTER </think>, never
+    # inside the think block, so thinking mode is safe and actually required —
+    # disabling thinking causes the model to generate plain text + EOS on
+    # complex contexts instead of tool calls.  The <think> prefill stripping
+    # below handles OpenCode's implicit reasoning injection.
+    if cfg.no_thinking:
         chat_kwargs["enable_thinking"] = False
     elif request.enable_thinking is not None:
         chat_kwargs["enable_thinking"] = request.enable_thinking
 
-    # When thinking is disabled, strip any OpenCode-style <think> prefill.
-    # Some agents (OpenCode) append a partial assistant turn starting with
-    # "<think>" to force reasoning mode — this bypasses enable_thinking=False
-    # because the template never adds its own nothink prefix when an assistant
-    # turn is already present.  Remove the bare marker so the template inserts
-    # the proper "<think>\n\n</think>\n\n" nothink prefix instead.
-    if chat_kwargs.get("enable_thinking") is False and messages:
+    # Strip any OpenCode-style bare <think> prefill injected as a partial
+    # assistant turn.  Some agents append {"role": "assistant", "content":
+    # "<think>\n"} to force reasoning mode, but this prevents the chat
+    # template from generating its own assistant prefix (including the
+    # nothink block when enable_thinking=False, or the proper <think>\n
+    # opening when thinking is on).  Remove the bare marker unconditionally
+    # so the template controls the assistant prefix.
+    if messages:
         _last = messages[-1]
         _last_role = (
             _last.get("role") if isinstance(_last, dict)
@@ -486,7 +490,8 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
             if _last_content.strip() in ("<think>", "<think>\n", "<think>\n\n"):
                 messages = list(messages[:-1])
                 logger.info(
-                    "[nothink] stripped partial <think> prefill from last assistant message"
+                    "[think-strip] removed bare <think> assistant prefill — "
+                    "letting template control assistant prefix"
                 )
 
     # Cloud routing: offload large-context requests to cloud LLM

@@ -302,7 +302,8 @@ class NGramModEngine(BatchedEngine):
                     running.append(tok)
                     if len(running) > 30:
                         running = running[-20:]
-                return mx.array(results, dtype=mx.uint32)
+                # Shape must be [1, n_pred] so _step's .squeeze(0) gives [n_pred]
+                return mx.array(results, dtype=mx.uint32)[None, :]
 
         def _make_gen():
             return ngram_mod_generate_step(

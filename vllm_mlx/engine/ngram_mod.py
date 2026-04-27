@@ -171,6 +171,7 @@ class NGramModEngine(BatchedEngine):
         temperature: float,
         top_p: float,
         stop: list[str] | None = None,
+        repetition_penalty: float = 1.0,
     ):
         loop = asyncio.get_running_loop()
         executor = self._executor
@@ -210,9 +211,29 @@ class NGramModEngine(BatchedEngine):
             tool_prompt,
         )
 
+        _rep_penalty = float(repetition_penalty)
+
+        def _apply_repetition_penalty(logprobs: mx.array, recent: list[int]) -> mx.array:
+            # Penalise recently generated tokens to prevent repetition loops.
+            # recent: list of token IDs from seq (prompt + generated so far).
+            # logprobs are log-softmax'd (≤ 0); multiplying by penalty > 1 makes
+            # them more negative, reducing sampling probability.
+            if not recent:
+                return logprobs
+            unique = list(set(recent))
+            idx = mx.array(unique, mx.int32)
+            vocab = logprobs.shape[-1]
+            # mask: [vocab_size] bool — True at penalised positions
+            mask = mx.one_hot(idx, vocab, dtype=mx.float32).sum(axis=0) > 0
+            # Broadcast mask to logprobs shape (e.g. [1, n_predict, vocab])
+            for _ in range(logprobs.ndim - 1):
+                mask = mask[None]
+            return mx.where(mask, logprobs * _rep_penalty, logprobs)
+
         if effective_temperature > 0:
             def sampler(logprobs):
-                scaled = logprobs / effective_temperature
+                lp = _apply_repetition_penalty(logprobs, seq[-20:]) if _rep_penalty != 1.0 else logprobs
+                scaled = lp / effective_temperature
                 if 0.0 < top_p < 1.0:
                     sorted_logits = mx.sort(scaled, axis=-1)[..., ::-1]
                     sorted_probs = mx.softmax(sorted_logits, axis=-1)
@@ -223,7 +244,8 @@ class NGramModEngine(BatchedEngine):
                 return mx.random.categorical(scaled)
         else:
             def sampler(logprobs):
-                return mx.argmax(logprobs, axis=-1)
+                lp = _apply_repetition_penalty(logprobs, seq[-20:]) if _rep_penalty != 1.0 else logprobs
+                return mx.argmax(lp, axis=-1)
 
         def _make_gen():
             return ngram_mod_generate_step(
@@ -426,9 +448,11 @@ class NGramModEngine(BatchedEngine):
                 self._track_request_start()
                 cumulative = ""
                 last: dict | None = None
+                _rep_penalty = float(kwargs.pop("repetition_penalty", 1.0))
                 try:
                     async for chunk in self._stream_ngram_mod(
-                        prompt, max_tokens, temperature, top_p, stop=stop
+                        prompt, max_tokens, temperature, top_p, stop=stop,
+                        repetition_penalty=_rep_penalty,
                     ):
                         last = chunk
                         new_text = chunk.get("text") or ""

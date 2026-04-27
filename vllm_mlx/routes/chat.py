@@ -458,6 +458,14 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if request.tools:
         chat_kwargs["tools"] = convert_tools_for_template(request.tools)
 
+    # Wire repetition_penalty: honour explicit client value; otherwise apply a
+    # mild default for reasoning models with tools to prevent thinking loops
+    # (greedy decoding can trap on repeated tokens like "Use Use Use…").
+    if request.repetition_penalty and request.repetition_penalty != 1.0:
+        chat_kwargs["repetition_penalty"] = request.repetition_penalty
+    elif cfg.reasoning_parser_name and request.tools:
+        chat_kwargs["repetition_penalty"] = 1.15
+
     # Only force thinking off when explicitly configured on the server.
     # For qwen3_coder_xml: Qwen3 generates <tool_call> AFTER </think>, never
     # inside the think block, so thinking mode is safe and actually required —

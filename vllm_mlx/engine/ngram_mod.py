@@ -212,8 +212,13 @@ class NGramModEngine(BatchedEngine):
         )
 
         _rep_penalty = float(repetition_penalty)
+        # Mutable list shared with sampler closure; updated after each yielded token.
+        # ngram_mod_generate_step maintains its own internal `seq` that we can't
+        # reference from outside, so we maintain a parallel tracking list here.
+        _recent: list[int] = list(token_ids)
 
-        def _apply_repetition_penalty(logprobs: mx.array, recent: list[int]) -> mx.array:
+        def _apply_repetition_penalty(logprobs: mx.array) -> mx.array:
+            recent = _recent[-20:]
             if not recent:
                 return logprobs
             vocab = logprobs.shape[-1]
@@ -221,17 +226,16 @@ class NGramModEngine(BatchedEngine):
 
             # Soft multiplicative penalty for recently generated tokens.
             # log-probs are ≤ 0; multiplying by >1 makes them more negative.
-            if _rep_penalty != 1.0:
-                unique = list(set(recent))
-                idx = mx.array(unique, mx.int32)
-                mask = mx.one_hot(idx, vocab, dtype=mx.float32).sum(axis=0) > 0
-                for _ in range(result.ndim - 1):
-                    mask = mask[None]
-                result = mx.where(mask, result * _rep_penalty, result)
+            unique = list(set(recent))
+            idx = mx.array(unique, mx.int32)
+            mask = mx.one_hot(idx, vocab, dtype=mx.float32).sum(axis=0) > 0
+            for _ in range(result.ndim - 1):
+                mask = mask[None]
+            result = mx.where(mask, result * _rep_penalty, result)
 
             # Hard ban: tokens repeating ≥ 3x in last 10 positions get -1e9.
             # Soft penalty alone cannot break temperature=0 attractor states
-            # (logprob near 0 * 1.15 is still near 0 vs competitors at -5+).
+            # (logprob near 0 × 1.3 is still near 0 vs competitors at -5+).
             tail = recent[-10:]
             banned = [t for t in set(tail) if tail.count(t) >= 3]
             if banned:
@@ -245,7 +249,7 @@ class NGramModEngine(BatchedEngine):
 
         if effective_temperature > 0:
             def sampler(logprobs):
-                lp = _apply_repetition_penalty(logprobs, seq[-20:]) if _rep_penalty != 1.0 else logprobs
+                lp = _apply_repetition_penalty(logprobs) if _rep_penalty != 1.0 else logprobs
                 scaled = lp / effective_temperature
                 if 0.0 < top_p < 1.0:
                     sorted_logits = mx.sort(scaled, axis=-1)[..., ::-1]
@@ -257,7 +261,7 @@ class NGramModEngine(BatchedEngine):
                 return mx.random.categorical(scaled)
         else:
             def sampler(logprobs):
-                lp = _apply_repetition_penalty(logprobs, seq[-20:]) if _rep_penalty != 1.0 else logprobs
+                lp = _apply_repetition_penalty(logprobs) if _rep_penalty != 1.0 else logprobs
                 return mx.argmax(lp, axis=-1)
 
         def _make_gen():
@@ -311,6 +315,12 @@ class NGramModEngine(BatchedEngine):
                 first_token_at = time.time()
 
             generated += 1
+
+            # Update shared recent-token list so the sampler closure sees
+            # the current generation history on subsequent steps.
+            _recent.append(int(tok))
+            if len(_recent) > 200:
+                del _recent[:100]
 
             if tok in eos_ids:
                 finish_reason = "stop"

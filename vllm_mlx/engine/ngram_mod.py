@@ -276,8 +276,33 @@ class NGramModEngine(BatchedEngine):
                 return mx.random.categorical(scaled)
         else:
             def sampler(logprobs):
-                lp = _apply_repetition_penalty(logprobs) if _rep_penalty != 1.0 else logprobs
-                return mx.argmax(lp, axis=-1)
+                if _rep_penalty == 1.0:
+                    return mx.argmax(logprobs, axis=-1)
+                # For greedy decoding, apply penalty per-position so that
+                # a speculative batch of N tokens (n_max up to 16) doesn't
+                # bypass the ban by sharing a single stale _recent snapshot.
+                # Convert to numpy once, iterate positions in Python.
+                import numpy as np
+                lp_np = np.array(logprobs)  # [1, n_predict, vocab] — forces eval
+                n_pred = lp_np.shape[-2] if lp_np.ndim >= 3 else 1
+                running = list(_recent[-20:])
+                results = []
+                for i in range(n_pred):
+                    pos = lp_np[0, i] if n_pred > 1 else lp_np.reshape(-1)
+                    # Soft penalty
+                    for t in set(running[-20:]):
+                        pos[t] *= _rep_penalty
+                    # Hard ban
+                    tail = running[-10:]
+                    for t in set(tail):
+                        if tail.count(t) >= 3:
+                            pos[t] = -1e9
+                    tok = int(np.argmax(pos))
+                    results.append(tok)
+                    running.append(tok)
+                    if len(running) > 30:
+                        running = running[-20:]
+                return mx.array(results, dtype=mx.uint32)
 
         def _make_gen():
             return ngram_mod_generate_step(

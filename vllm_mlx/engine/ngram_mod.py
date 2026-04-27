@@ -219,6 +219,19 @@ class NGramModEngine(BatchedEngine):
 
         _ban_log_fired = False
 
+        _vocab_range: mx.array | None = None
+
+        def _make_token_mask(token_ids: list[int], vocab: int) -> mx.array:
+            # Returns float [vocab] with 1.0 at each position in token_ids.
+            # Uses arange comparison — works on all MLX versions.
+            nonlocal _vocab_range
+            if _vocab_range is None or _vocab_range.shape[0] != vocab:
+                _vocab_range = mx.arange(vocab, dtype=mx.int32)
+            ids = mx.array(token_ids, dtype=mx.int32)  # [n]
+            # [n, vocab] bool: each row is True at one token position
+            matches = ids[:, None] == _vocab_range[None, :]
+            return matches.any(axis=0).astype(mx.float32)  # [vocab]
+
         def _apply_repetition_penalty(logprobs: mx.array) -> mx.array:
             nonlocal _ban_log_fired
             recent = _recent[-20:]
@@ -230,27 +243,21 @@ class NGramModEngine(BatchedEngine):
             # Soft multiplicative penalty for recently generated tokens.
             # log-probs are ≤ 0; multiplying by >1 makes them more negative.
             unique = list(set(recent))
-            idx = mx.array(unique, mx.int32)
-            soft_mask = mx.one_hot(idx, vocab, dtype=mx.float32).sum(axis=0)
+            soft_mask = _make_token_mask(unique, vocab)  # [vocab]
             for _ in range(result.ndim - 1):
                 soft_mask = soft_mask[None]
-            # Where mask=1: apply penalty; where mask=0: keep original.
             result = result * (1.0 + soft_mask * (_rep_penalty - 1.0))
 
             # Hard ban: tokens repeating ≥ 3x in last 10 positions.
-            # Use arithmetic subtraction instead of mx.where to avoid
-            # potential scalar-broadcast issues in MLX.
             tail = recent[-10:]
             banned = [t for t in set(tail) if tail.count(t) >= 3]
             if banned:
                 if not _ban_log_fired:
-                    logger.info("[rep-penalty] hard-ban fired: tokens=%s recent_tail=%s", banned, tail)
+                    logger.info("[rep-penalty] hard-ban fired: tokens=%s", banned)
                     _ban_log_fired = True
-                bidx = mx.array(banned, mx.int32)
-                ban_float = mx.one_hot(bidx, vocab, dtype=mx.float32).sum(axis=0)
+                ban_float = _make_token_mask(banned, vocab)  # [vocab]
                 for _ in range(result.ndim - 1):
                     ban_float = ban_float[None]
-                # Subtract 2e9 at banned positions (effectively -inf).
                 result = result - ban_float * 2e9
 
             return result

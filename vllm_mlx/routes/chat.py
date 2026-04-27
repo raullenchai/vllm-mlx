@@ -459,12 +459,24 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
         chat_kwargs["tools"] = convert_tools_for_template(request.tools)
 
     # Wire repetition_penalty: honour explicit client value; otherwise apply a
-    # mild default for reasoning models with tools to prevent thinking loops
-    # (greedy decoding can trap on repeated tokens like "Use Use Use…").
+    # mild default for reasoning models with tools to prevent thinking loops.
     if request.repetition_penalty and request.repetition_penalty != 1.0:
         chat_kwargs["repetition_penalty"] = request.repetition_penalty
     elif cfg.reasoning_parser_name and request.tools:
         chat_kwargs["repetition_penalty"] = 1.3
+
+    # For reasoning models with tools, temperature=0 (greedy) causes
+    # phrase-level repetition loops in the thinking phase — anti-repetition
+    # alone cannot fix this without degrading output quality. Override to
+    # a small temperature (0.6) unless the client explicitly set one.
+    # Pure completion requests (no tools) keep whatever temperature was set.
+    if (
+        cfg.reasoning_parser_name
+        and request.tools
+        and request.temperature is None  # client did not override
+        and chat_kwargs.get("temperature", 0.0) == 0.0
+    ):
+        chat_kwargs["temperature"] = 0.6
 
     # Only force thinking off when explicitly configured on the server.
     # For qwen3_coder_xml: Qwen3 generates <tool_call> AFTER </think>, never

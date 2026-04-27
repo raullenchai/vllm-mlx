@@ -278,38 +278,29 @@ class NGramModEngine(BatchedEngine):
             def sampler(logprobs):
                 if _rep_penalty == 1.0:
                     return mx.argmax(logprobs, axis=-1)
-                # Per-position greedy with two anti-repetition mechanisms:
-                # 1. Token-level hard ban (>=3x in last 10)
-                # 2. No-repeat-ngram (ban token that would continue a 4-gram seen before)
+                # Per-position greedy with token-level hard ban (>=3x in last 10).
+                # Note: temperature=0 + anti-repetition still causes phrase-level
+                # cycles for complex reasoning. Prefer routing tool+reasoning
+                # requests to temperature>0 (see routes/chat.py) so this branch
+                # only handles edge cases.
                 import numpy as np
                 lp_np = np.array(logprobs.astype(mx.float32))  # bf16→f32 then eval
                 n_pred = lp_np.shape[-2] if lp_np.ndim >= 3 else 1
-                # Keep longer window for ngram detection (last 64 tokens)
-                running = list(_recent[-64:])
+                running = list(_recent[-20:])
                 results = []
                 for i in range(n_pred):
                     pos = lp_np[0, i].copy() if n_pred > 1 else lp_np.reshape(-1).copy()
-                    # Soft multiplicative penalty for recently seen tokens
                     for t in set(running[-20:]):
                         pos[t] *= _rep_penalty
-                    # Hard token ban: >=3x in last 10
                     tail10 = running[-10:]
                     for t in set(tail10):
                         if tail10.count(t) >= 3:
                             pos[t] = -1e9
-                    # No-repeat-ngram (size 4): if last 3 tokens match an earlier
-                    # prefix in running history, ban the token that followed it then.
-                    if len(running) >= 3:
-                        prefix = tuple(running[-3:])
-                        for j in range(len(running) - 3):
-                            if tuple(running[j:j+3]) == prefix:
-                                banned_next = running[j + 3]
-                                pos[banned_next] = -1e9
                     tok = int(np.argmax(pos))
                     results.append(tok)
                     running.append(tok)
-                    if len(running) > 128:
-                        running = running[-64:]
+                    if len(running) > 30:
+                        running = running[-20:]
                 return mx.array(results, dtype=mx.uint32)[None, :]
 
         def _make_gen():

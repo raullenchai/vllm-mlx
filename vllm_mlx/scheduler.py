@@ -1149,6 +1149,16 @@ class Scheduler:
         self._clear_cache_interval = 32
         self._memory_log_interval = 256
 
+        # Prompt-boundary cache snapshot callback for the new mlx-lm 0.31+ API.
+        # Built lazily once memory_aware_cache exists and reused per step.
+        # Without this hook, hybrid models can't satisfy repeated identical
+        # prompts via supersequence fallback (issue #163).
+        self._prompt_cache_save_cb = (
+            self._make_prompt_cache_save_callback()
+            if self.memory_aware_cache is not None
+            else None
+        )
+
     def _get_actual_tokenizer(self, tokenizer: Any) -> Any:
         """
         Get the actual tokenizer from a processor or tokenizer.
@@ -1265,12 +1275,18 @@ class Scheduler:
                 requests=self.requests,
             )
         elif need_chunked and not _has_old_batch_api:
-            logger.warning(
-                "[chunked_prefill] Skipped — mlx-lm 0.31+ removed the internal "
-                "Batch API. Using native prefill_step_size=%d instead. "
-                "Memory-aware cache and mid-prefill snapshots are unavailable.",
-                self.config.prefill_step_size,
-            )
+            # mlx-lm 0.31+ removed _process_prompts, so the full chunked
+            # prefill monkey-patch can't run. The prompt-boundary cache
+            # snapshot (the part that actually feeds the prefix cache)
+            # is wired into Scheduler.step() via end_of_prompt response
+            # signals — see _snapshot_promoted_prompts (issue #163).
+            if chunked_budget > 0:
+                logger.warning(
+                    "[chunked_prefill] Skipped — mlx-lm 0.31+ removed the "
+                    "internal Batch API. Using native prefill_step_size=%d "
+                    "instead. Mid-prefill snapshots are unavailable.",
+                    self.config.prefill_step_size,
+                )
 
         # Install MTP if the model supports it
         if self.config.enable_mtp:
@@ -1327,6 +1343,53 @@ class Scheduler:
                 )
 
         return _prompt_cache_save
+
+    def _snapshot_promoted_prompts(self, prompt_responses) -> None:
+        """Snapshot prompt-only cache for sequences just promoted to generation.
+
+        Reads the public ``end_of_prompt`` flag from mlx-lm 0.31+'s prompt
+        responses, then uses the public ``BatchGenerator.extract_cache`` API
+        to capture the per-uid cache state. Each capture is forwarded to the
+        prompt-cache-save callback so a future request with the identical
+        prompt finds an exact-match entry in the prefix cache.
+
+        This is the new-API equivalent of the ``_patched_process_prompts``
+        hook installed by ``_install_chunked_prefill`` for the legacy Batch
+        API. Without it, hybrid models (Mamba/DeltaNet+Transformer) MISS
+        the prefix cache forever because their non-trimmable cache layers
+        cannot satisfy the supersequence fallback path (issue #163).
+        """
+        if self._prompt_cache_save_cb is None or not prompt_responses:
+            return
+
+        promoted_uids = [
+            resp.uid
+            for resp in prompt_responses
+            if getattr(resp, "end_of_prompt", False)
+        ]
+        if not promoted_uids:
+            return
+
+        try:
+            extracted = self.batch_generator.extract_cache(promoted_uids)
+        except Exception as exc:
+            logger.debug("[prompt_cache_save] extract_cache failed: %s", exc)
+            return
+
+        for uid, payload in extracted.items():
+            # Promoted sequences (stage == 2) return (cache, tokens). Any
+            # other shape means the uid was already removed before the
+            # snapshot — skip silently.
+            if isinstance(payload, tuple) and len(payload) == 2:
+                cache, _tokens = payload
+                try:
+                    self._prompt_cache_save_cb(uid, cache)
+                except Exception as exc:
+                    logger.debug(
+                        "[prompt_cache_save] callback failed for uid=%s: %s",
+                        uid,
+                        exc,
+                    )
 
     def _make_mid_prefill_save_callback(self, save_interval: int):
         """Create a callback for saving intermediate KV cache during chunked prefill.
@@ -2346,7 +2409,8 @@ class Scheduler:
                     # mlx-lm 0.31+ returns (prompt_responses, generation_responses) tuple
                     # older versions return a flat list of responses
                     if isinstance(raw_next, tuple):
-                        _, responses = raw_next
+                        prompt_responses, responses = raw_next
+                        self._snapshot_promoted_prompts(prompt_responses)
                     else:
                         responses = raw_next
 

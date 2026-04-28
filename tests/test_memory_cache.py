@@ -553,3 +553,89 @@ class TestGetAvailableMemory:
             # Should return 0 when psutil not available
             # Note: This test may not work as expected due to import caching
             pass
+
+
+class TestConcurrentAccess:
+    """Regression for issue #163 — fetch and store on different threads
+    used to race on the orphaned-sorted-key window during eviction."""
+
+    def _make_cache(self):
+        config = MemoryCacheConfig(max_memory_mb=64, max_entries=64)
+        return MemoryAwarePrefixCache(MagicMock(), config)
+
+    def test_lock_present(self):
+        cache = self._make_cache()
+        assert hasattr(cache, "_lock")
+
+    def test_concurrent_fetch_and_store_no_keyerror(self):
+        import threading
+
+        cache = self._make_cache()
+        # Pre-populate with overlapping prefixes to maximize eviction
+        # opportunities when stores fire.
+        for i in range(40):
+            cache.store(list(range(i, i + 16)), [MockKVCache(8, 4)])
+
+        errors: list[BaseException] = []
+        stop = threading.Event()
+
+        def writer():
+            i = 100
+            while not stop.is_set():
+                try:
+                    cache.store(list(range(i, i + 16)), [MockKVCache(8, 4)])
+                    i += 1
+                except BaseException as exc:  # noqa: BLE001
+                    errors.append(exc)
+
+        def reader():
+            while not stop.is_set():
+                try:
+                    for i in range(0, 80, 3):
+                        cache.fetch(list(range(i, i + 16)))
+                except BaseException as exc:  # noqa: BLE001
+                    errors.append(exc)
+
+        threads = [
+            threading.Thread(target=writer),
+            threading.Thread(target=reader),
+            threading.Thread(target=reader),
+        ]
+        for t in threads:
+            t.start()
+        threading.Event().wait(0.5)
+        stop.set()
+        for t in threads:
+            t.join(timeout=2)
+
+        assert errors == [], f"Concurrent access raised: {errors[:3]}"
+
+    def test_eviction_orders_remove_before_pop(self):
+        """Even without the lock, fetch should never see an orphaned key.
+
+        We simulate the eviction window by overriding ``_remove_from_sorted``
+        to capture order — entries.pop must happen *after* the sorted index
+        is cleared.
+        """
+        cache = self._make_cache()
+        cache.store([1, 2, 3], [MockKVCache(8, 4)])
+
+        order: list[str] = []
+        orig_remove = cache._remove_from_sorted
+        orig_pop = cache._entries.pop
+
+        def trace_remove(key):
+            order.append("remove_sorted")
+            orig_remove(key)
+
+        def trace_pop(key, *a, **kw):
+            order.append("pop_entries")
+            return orig_pop(key, *a, **kw)
+
+        cache._remove_from_sorted = trace_remove
+        cache._entries.pop = trace_pop
+
+        cache.remove([1, 2, 3])
+        # remove_sorted must precede pop_entries — see _evict_lru / remove
+        # docstrings.
+        assert order == ["remove_sorted", "pop_entries"], order

@@ -28,6 +28,7 @@ import bisect
 import copy
 import logging
 import math
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
@@ -483,7 +484,11 @@ class MemoryAwarePrefixCache:
     - OrderedDict for O(1) LRU operations
 
     Thread Safety:
-        This class is NOT thread-safe. Use external locking if needed.
+        ``fetch``, ``store``, ``remove`` and ``clear`` hold an internal lock,
+        so it is safe to call them from different threads (e.g. the asyncio
+        event loop calling ``fetch`` while the mlx-step worker calls
+        ``store``). Read-only attribute access (``__contains__``, ``__len__``,
+        ``get_stats``) is single-op and relies on the GIL — no lock needed.
     """
 
     def __init__(
@@ -519,6 +524,10 @@ class MemoryAwarePrefixCache:
 
         # Track the match type from the last fetch() call
         self._last_match_type: str | None = None
+
+        # Guards _entries / _sorted_keys mutations against concurrent
+        # fetch/store/evict from multiple threads (asyncio loop + mlx-step).
+        self._lock = threading.Lock()
 
         logger.info(
             f"MemoryAwarePrefixCache initialized: "
@@ -560,6 +569,12 @@ class MemoryAwarePrefixCache:
 
         tokens_key = tuple(tokens)
 
+        with self._lock:
+            return self._fetch_locked(tokens, tokens_key)
+
+    def _fetch_locked(
+        self, tokens: list[int], tokens_key: tuple[int, ...]
+    ) -> tuple[list[Any] | None, list[int]]:
         # --- O(1) exact match ---
         if tokens_key in self._entries:
             entry = self._entries[tokens_key]
@@ -766,12 +781,15 @@ class MemoryAwarePrefixCache:
 
         tokens_key = tuple(tokens)
 
-        # If already cached, just update LRU order (skip expensive trim/quantize)
-        if tokens_key in self._entries:
-            self._entries.move_to_end(tokens_key)
-            return True
+        # Fast path: already cached — bump LRU and skip expensive trim/quantize.
+        # Holds the lock briefly so the bump is consistent with concurrent fetch.
+        with self._lock:
+            if tokens_key in self._entries:
+                self._entries.move_to_end(tokens_key)
+                return True
 
-        # Trim oversized KV arrays to actual used size
+        # Trim oversized KV arrays to actual used size (pure compute, no shared
+        # state — kept outside the lock so concurrent fetch isn't blocked).
         cache = _trim_to_offset(cache)
 
         # Compress cache for storage (TurboQuant or standard quantization)
@@ -792,7 +810,7 @@ class MemoryAwarePrefixCache:
                 cache, self._config.kv_bits, self._config.kv_group_size
             )
 
-        # Create entry and estimate memory
+        # Create entry and estimate memory (pure compute, no shared state).
         entry = _CacheEntry.create(tokens, cache)
 
         # Check if single entry exceeds limit
@@ -803,49 +821,63 @@ class MemoryAwarePrefixCache:
             )
             return False
 
-        # Prefix-subset eviction: remove entries whose token sequence
-        # is a strict prefix of the new entry.  Uses sorted index for
-        # O(log N + K) lookup instead of O(N) scan.
-        if evict_prefixes and self._sorted_keys:
-            to_remove = []
-            idx = bisect.bisect_left(self._sorted_keys, tokens_key)
-            # Scan backwards — prefixes of tokens_key are immediately before idx
-            for i in range(idx - 1, -1, -1):
-                key = self._sorted_keys[i]
-                klen = len(key)
-                if klen >= len(tokens_key):
-                    continue
-                if tokens_key[:klen] == key:
-                    to_remove.append(key)
-                elif key[0] != tokens_key[0]:
-                    break
-            for key in to_remove:
-                old = self._entries.pop(key)
-                self._current_memory -= old.memory_bytes
-                self._stats.evictions += 1
-                self._remove_from_sorted(key)
-                logger.debug(
-                    f"[prefix_evict] removed {len(key)} tokens, "
-                    f"freed {old.memory_bytes / _BYTES_PER_MB:.2f}MB, "
-                    f"new_entry={len(tokens_key)} tokens"
-                )
-            if to_remove:
-                self._stats.entry_count = len(self._entries)
-                self._stats.current_memory_bytes = self._current_memory
+        with self._lock:
+            # Re-check exact match: a concurrent store may have inserted
+            # the same key while we were trimming/compressing outside the
+            # lock. Just bump LRU and bail.
+            if tokens_key in self._entries:
+                self._entries.move_to_end(tokens_key)
+                return True
 
-        # Evict until we have room
-        while (
-            self._current_memory + entry.memory_bytes > self._max_memory
-            or len(self._entries) >= self._config.max_entries
-        ) and self._entries:
-            self._evict_lru()
+            # Prefix-subset eviction: remove entries whose token sequence
+            # is a strict prefix of the new entry.  Uses sorted index for
+            # O(log N + K) lookup instead of O(N) scan.
+            if evict_prefixes and self._sorted_keys:
+                to_remove = []
+                idx = bisect.bisect_left(self._sorted_keys, tokens_key)
+                # Scan backwards — prefixes of tokens_key are immediately before idx
+                for i in range(idx - 1, -1, -1):
+                    key = self._sorted_keys[i]
+                    klen = len(key)
+                    if klen >= len(tokens_key):
+                        continue
+                    if tokens_key[:klen] == key:
+                        to_remove.append(key)
+                    elif key[0] != tokens_key[0]:
+                        break
+                for key in to_remove:
+                    # Remove from sorted index FIRST so a concurrent fetch
+                    # never sees a key in the index that's missing from
+                    # _entries (was the source of issue #163's KeyError
+                    # under the higher store() rate from PR #165).
+                    self._remove_from_sorted(key)
+                    old = self._entries.pop(key)
+                    self._current_memory -= old.memory_bytes
+                    self._stats.evictions += 1
+                    logger.debug(
+                        f"[prefix_evict] removed {len(key)} tokens, "
+                        f"freed {old.memory_bytes / _BYTES_PER_MB:.2f}MB, "
+                        f"new_entry={len(tokens_key)} tokens"
+                    )
+                if to_remove:
+                    self._stats.entry_count = len(self._entries)
+                    self._stats.current_memory_bytes = self._current_memory
 
-        # Store entry
-        self._entries[tokens_key] = entry
-        self._current_memory += entry.memory_bytes
-        bisect.insort(self._sorted_keys, tokens_key)
-        self._stats.entry_count = len(self._entries)
-        self._stats.current_memory_bytes = self._current_memory
+            # Evict until we have room
+            while (
+                self._current_memory + entry.memory_bytes > self._max_memory
+                or len(self._entries) >= self._config.max_entries
+            ) and self._entries:
+                self._evict_lru()
+
+            # Store entry. Insert into _entries before _sorted_keys so
+            # that even if a future change drops the lock, fetch never
+            # observes a key in sorted_keys that's missing from entries.
+            self._entries[tokens_key] = entry
+            self._current_memory += entry.memory_bytes
+            bisect.insort(self._sorted_keys, tokens_key)
+            self._stats.entry_count = len(self._entries)
+            self._stats.current_memory_bytes = self._current_memory
 
         logger.debug(
             f"Stored cache: {len(tokens)} tokens, "
@@ -862,14 +894,19 @@ class MemoryAwarePrefixCache:
             self._sorted_keys.pop(idx)
 
     def _evict_lru(self) -> None:
-        """Evict the least recently used entry."""
+        """Evict the least recently used entry.
+
+        Caller must hold ``self._lock``.
+        """
         if not self._entries:
             return
 
-        # popitem(last=False) removes oldest entry (FIFO order = LRU)
-        tokens_key, entry = self._entries.popitem(last=False)
-        self._current_memory -= entry.memory_bytes
+        # Peek the oldest key, drop sorted-index entry first so a fetch
+        # without the lock can't trip the orphaned-sorted-key KeyError.
+        tokens_key = next(iter(self._entries))
         self._remove_from_sorted(tokens_key)
+        entry = self._entries.pop(tokens_key)
+        self._current_memory -= entry.memory_bytes
         self._stats.evictions += 1
         self._stats.entry_count = len(self._entries)
         self._stats.current_memory_bytes = self._current_memory
@@ -890,21 +927,23 @@ class MemoryAwarePrefixCache:
             True if entry was found and removed.
         """
         tokens_key = tuple(tokens)
-        entry = self._entries.pop(tokens_key, None)
-        if entry is not None:
-            self._current_memory -= entry.memory_bytes
+        with self._lock:
+            if tokens_key not in self._entries:
+                return False
             self._remove_from_sorted(tokens_key)
+            entry = self._entries.pop(tokens_key)
+            self._current_memory -= entry.memory_bytes
             self._stats.entry_count = len(self._entries)
             self._stats.current_memory_bytes = self._current_memory
-            return True
-        return False
+        return True
 
     def clear(self) -> None:
         """Clear all cached entries."""
-        self._entries.clear()
-        self._sorted_keys.clear()
-        self._current_memory = 0
-        self._stats = CacheStats(max_memory_bytes=self._max_memory)
+        with self._lock:
+            self._entries.clear()
+            self._sorted_keys.clear()
+            self._current_memory = 0
+            self._stats = CacheStats(max_memory_bytes=self._max_memory)
         logger.debug("Cache cleared")
 
     def get_stats(self) -> dict[str, Any]:

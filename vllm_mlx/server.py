@@ -449,6 +449,15 @@ def load_model(
     dflash_block_min: int = 8,
     dflash_block_max: int = 22,
     dflash_turboquant_bits: float | None = None,
+    dflash_ddtree_budget: int = 0,
+    dflash_ddtree_block_size: int | None = None,
+    dflash_fallback_mode: str | None = None,
+    dflash_disable_threshold: float | None = None,
+    dflash_disable_window: int | None = None,
+    dflash_disable_cooldown: int | None = None,
+    dflash_ngram_num_draft_tokens: int | None = None,
+    dflash_ngram_size: int | None = None,
+    dflash_ngram_min_matches: int | None = None,
 ):
     """
     Load a model (auto-detects MLLM vs LLM).
@@ -509,6 +518,8 @@ def load_model(
             adaptive_min=dflash_block_min,
             adaptive_max=dflash_block_max,
             turboquant_bits=dflash_turboquant_bits,
+            ddtree_budget=dflash_ddtree_budget,
+            ddtree_block_size=dflash_ddtree_block_size,
             gpu_memory_utilization=gpu_memory_utilization,
         )
     else:

@@ -74,12 +74,17 @@ _TOOL_TEXT_REPETITION_MIN_COUNT = 24
 _TOOL_TEXT_REPETITION_RATIO = 0.60
 
 
-def _tool_choice_allows_tool_calls(tool_choice) -> bool:
-    if tool_choice == "none":
+def _tool_choice_requires_tool_call(tool_choice) -> bool:
+    if tool_choice is None:
         return False
-    if isinstance(tool_choice, dict) and tool_choice.get("type") == "none":
-        return False
-    return True
+    if isinstance(tool_choice, str):
+        return tool_choice not in {"none", "auto"}
+    if isinstance(tool_choice, dict):
+        choice_type = tool_choice.get("type")
+        if choice_type in {None, "none", "auto"}:
+            return False
+        return True
+    return False
 
 
 def _is_repetitive_tool_text(text: str) -> bool:
@@ -818,12 +823,10 @@ async def stream_chat_completion(
 
         retry_attempts = 0
         active_messages = messages
-        tool_retries_enabled = bool(request.tools) and _tool_choice_allows_tool_calls(
+        tool_retries_enabled = bool(request.tools) and _tool_choice_requires_tool_call(
             request.tool_choice
         )
-        max_tool_continuation_retries = (
-            2 if (tool_continuation_retry or tool_retries_enabled) else 0
-        )
+        max_tool_continuation_retries = 2 if tool_retries_enabled else 0
         retry_prompt = (
             _TOOL_CONTINUATION_RETRY_PROMPT
             if tool_continuation_retry

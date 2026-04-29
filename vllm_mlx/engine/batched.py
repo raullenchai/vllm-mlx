@@ -673,6 +673,7 @@ class BatchedEngine(BaseEngine):
             top_p=top_p,
             images=all_images if all_images else None,
             videos=all_videos if all_videos else None,
+            tools_requested=bool(tools),
             **kwargs,
         )
 
@@ -785,6 +786,7 @@ class BatchedEngine(BaseEngine):
         prefix_boundary = self._compute_prefix_boundary(messages, tools)
         if prefix_boundary > 0:
             kwargs["prefix_boundary"] = prefix_boundary
+        kwargs["tools_requested"] = bool(tools)
 
         async for output in self.stream_generate(
             prompt=prompt,

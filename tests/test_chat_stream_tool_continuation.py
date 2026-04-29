@@ -221,6 +221,7 @@ async def test_tool_continuation_retries_when_stream_exhausts_without_finish(
                 },
             }
         ],
+        tool_choice="required",
     )
     engine = _EngineThatExhaustsThenCallsTool()
 
@@ -268,6 +269,7 @@ async def test_tool_request_retries_when_model_repeats_text_before_tool_call(
                 },
             }
         ],
+        tool_choice="required",
     )
     engine = _EngineThatExhaustsThenCallsTool()
 
@@ -313,6 +315,7 @@ async def test_tool_request_retries_when_tool_call_json_is_truncated(monkeypatch
                 },
             }
         ],
+        tool_choice="required",
     )
     engine = _EngineThatTruncatesThenCallsTool()
 
@@ -331,3 +334,48 @@ async def test_tool_request_retries_when_tool_call_json_is_truncated(monkeypatch
     assert engine.messages_seen[1][-1]["content"] == _TOOL_CALL_JSON_RETRY_PROMPT
     assert not any("call_truncated" in chunk for chunk in chunks)
     assert any("call_complete" in chunk for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_tool_auto_allows_text_final_after_tool_result(monkeypatch):
+    """Do not force another tool call when auto tool choice produces final text."""
+    from vllm_mlx.service import postprocessor
+
+    _FakeStreamingPostProcessor.instances = 0
+    monkeypatch.setattr(
+        postprocessor,
+        "StreamingPostProcessor",
+        _FakeStreamingPostProcessor,
+    )
+
+    request = ChatCompletionRequest(
+        model="test-model",
+        messages=[{"role": "user", "content": "do work"}],
+        stream=True,
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "bash",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ],
+        tool_choice="auto",
+    )
+    engine = _EngineThatExhaustsThenCallsTool()
+
+    chunks = [
+        chunk
+        async for chunk in stream_chat_completion(
+            engine,
+            [{"role": "tool", "content": "done"}],
+            request,
+            tool_continuation_retry=True,
+            max_tokens=16,
+        )
+    ]
+
+    assert engine.calls == 1
+    assert any("Thinking only." in chunk for chunk in chunks)
+    assert not any('"tool_calls"' in chunk for chunk in chunks)

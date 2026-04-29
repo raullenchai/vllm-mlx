@@ -21,6 +21,7 @@ import sys
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 from ..api.utils import clean_output_text
@@ -28,6 +29,16 @@ from .base import GenerationOutput
 from .batched import BatchedEngine
 
 logger = logging.getLogger(__name__)
+
+
+_TOOL_STOP_AFTER_STRINGS = (
+    "</tool_call>",
+    "</minimax:tool_call>",
+    "</invoke>",
+    "<tool_call|>",
+    "<|tool_call_end|>",
+    "<｜tool▁call▁end｜>",
+)
 
 
 def _init_dflash_step_thread() -> None:
@@ -44,6 +55,7 @@ def _init_dflash_step_thread() -> None:
 @dataclass
 class _ActiveRequest:
     started_at: float
+    mode: str = "dflash"
     first_token_at: float | None = None
     prompt_tokens: int = 0
     generated_tokens: int = 0
@@ -53,6 +65,9 @@ class _ActiveRequest:
     acceptance_ratio: float = 0.0
     block_size: int = 0
     block_history: list[int] = field(default_factory=list)
+    tree_budget: int = 0
+    avg_tree_node_count: float = 0.0
+    ddtree_fast_path_ratio: float = 0.0
 
 
 class DFlashEngine(BatchedEngine):
@@ -67,6 +82,8 @@ class DFlashEngine(BatchedEngine):
         adaptive_min: int = 8,
         adaptive_max: int = 22,
         turboquant_bits: float | None = None,
+        ddtree_budget: int = 0,
+        ddtree_block_size: int | None = None,
         trust_remote_code: bool = True,
         gpu_memory_utilization: float = 0.90,
     ) -> None:
@@ -90,6 +107,9 @@ class DFlashEngine(BatchedEngine):
         self._adaptive_min = int(adaptive_min)
         self._adaptive_max = int(adaptive_max)
         self._turboquant_bits = turboquant_bits
+        self._ddtree_budget = max(0, int(ddtree_budget or 0))
+        self._ddtree_block_size = ddtree_block_size
+        self._ddtree_last: dict[str, Any] = {}
 
         self._lock = asyncio.Lock()
         self._executor: concurrent.futures.ThreadPoolExecutor | None = None
@@ -104,6 +124,7 @@ class DFlashEngine(BatchedEngine):
         self._lifetime_proposed = 0
         self._lifetime_accepted = 0
         self._lifetime_responses = 0
+        self._ddtree_responses = 0
         self._start_time = time.time()
 
     # ------------------------------------------------------------------
@@ -239,6 +260,68 @@ class DFlashEngine(BatchedEngine):
                 return
             yield resp
 
+    async def _stream_ddtree(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        stop: list[str] | None,
+        tools_requested: bool,
+    ):
+        """Run the Rapid-MLX DDTree loop on the DFlash MLX worker thread."""
+        from ..speculative.ddtree.engine import generate_ddtree
+
+        if temperature not in (0, 0.0) or top_p not in (0, 0.0, 1, 1.0):
+            logger.debug(
+                "[DDTree] greedy DDTree path ignores sampler settings: temperature=%s top_p=%s",
+                temperature,
+                top_p,
+            )
+
+        loop = asyncio.get_running_loop()
+        executor = self._executor
+        assert executor is not None, "DFlashEngine not started"
+
+        def _run():
+            return generate_ddtree(
+                target_model=self._model,
+                draft_model=self._drafter,
+                tokenizer=self._tokenizer,
+                prompt_tokens=prompt,
+                max_new_tokens=max_tokens,
+                tree_budget=self._ddtree_budget,
+                block_size=(
+                    self._ddtree_block_size
+                    if self._ddtree_block_size is not None
+                    else self._block_size_override
+                ),
+                adaptive_block_size=self._adaptive_cfg,
+                target_turboquant_bits=self._turboquant_bits,
+                stop_strings=stop,
+                stop_after_strings=(
+                    list(_TOOL_STOP_AFTER_STRINGS) if tools_requested else None
+                ),
+            )
+
+        result = await loop.run_in_executor(executor, _run)
+        self._ddtree_last = dict(result)
+        yield SimpleNamespace(
+            text=result.get("text", ""),
+            tokens=list(result.get("generated_token_ids", []) or []),
+            prompt_tokens=int(result.get("prompt_tokens") or 0),
+            generation_tokens=int(result.get("generated_tokens") or 0),
+            finish_reason=result.get("finish_reason") or "stop",
+            proposed_tokens=int(result.get("proposed_tokens") or 0),
+            accepted_tokens=int(result.get("accepted_tokens") or 0),
+            speculative_steps=int(result.get("speculative_steps") or 0),
+            avg_acceptance_ratio=float(result.get("avg_acceptance_ratio") or 0.0),
+            block_size_history=tuple(result.get("block_size_history") or ()),
+            avg_tree_node_count=float(result.get("avg_tree_node_count") or 0.0),
+            ddtree_fast_path_ratio=float(result.get("ddtree_fast_path_ratio") or 0.0),
+            tree_budget=int(result.get("tree_budget") or self._ddtree_budget),
+        )
+
     async def generate(
         self,
         prompt: str,
@@ -250,37 +333,28 @@ class DFlashEngine(BatchedEngine):
         videos: list[str] | None = None,
         **kwargs,
     ) -> GenerationOutput:
-        if not self._loaded:
-            await self.start()
-        if images or videos:
-            raise ValueError("DFlash mode does not support images or videos.")
-
-        self._inflight += 1
-        try:
-            async with self._lock:
-                self._track_request_start()
-                last_resp = None
-                full_text_parts: list[str] = []
-                try:
-                    async for resp in self._stream_dflash(
-                        prompt, max_tokens, temperature, top_p
-                    ):
-                        last_resp = resp
-                        if resp.text:
-                            full_text_parts.append(resp.text)
-                        self._update_active(resp, new_text=resp.text or "")
-                finally:
-                    self._track_request_end()
-
-                return GenerationOutput(
-                    text=clean_output_text("".join(full_text_parts)),
-                    prompt_tokens=last_resp.prompt_tokens if last_resp else 0,
-                    completion_tokens=last_resp.generation_tokens if last_resp else 0,
-                    finished=True,
-                    finish_reason=(last_resp.finish_reason if last_resp else None) or "stop",
-                )
-        finally:
-            self._inflight -= 1
+        last = None
+        text_parts: list[str] = []
+        async for output in self.stream_generate(
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            stop=stop,
+            images=images,
+            videos=videos,
+            **kwargs,
+        ):
+            last = output
+            if output.new_text:
+                text_parts.append(output.new_text)
+        return GenerationOutput(
+            text=clean_output_text("".join(text_parts)),
+            prompt_tokens=last.prompt_tokens if last else 0,
+            completion_tokens=last.completion_tokens if last else 0,
+            finished=True,
+            finish_reason=(last.finish_reason if last else None) or "stop",
+        )
 
     async def stream_generate(
         self,
@@ -301,13 +375,29 @@ class DFlashEngine(BatchedEngine):
         self._inflight += 1
         try:
             async with self._lock:
-                self._track_request_start()
+                mode = "ddtree" if self._ddtree_budget > 0 else "dflash"
+                tools_requested = bool(kwargs.pop("tools_requested", False))
+                self._track_request_start(mode)
                 cumulative = ""
                 last_resp = None
                 try:
-                    async for resp in self._stream_dflash(
-                        prompt, max_tokens, temperature, top_p
-                    ):
+                    stream = (
+                        self._stream_ddtree
+                        if mode == "ddtree"
+                        else self._stream_dflash
+                    )
+                    if mode == "ddtree":
+                        response_stream = stream(
+                            prompt,
+                            max_tokens,
+                            temperature,
+                            top_p,
+                            stop,
+                            tools_requested,
+                        )
+                    else:
+                        response_stream = stream(prompt, max_tokens, temperature, top_p)
+                    async for resp in response_stream:
                         last_resp = resp
                         new_text = resp.text or ""
                         cumulative += new_text
@@ -343,9 +433,12 @@ class DFlashEngine(BatchedEngine):
     # Stats
     # ------------------------------------------------------------------
 
-    def _track_request_start(self) -> None:
+    def _track_request_start(self, mode: str = "dflash") -> None:
         self._active = _ActiveRequest(
-            started_at=time.time(), block_size=self._current_block_size
+            started_at=time.time(),
+            mode=mode,
+            block_size=self._current_block_size,
+            tree_budget=self._ddtree_budget if mode == "ddtree" else 0,
         )
 
     def _track_request_end(self) -> None:
@@ -353,6 +446,8 @@ class DFlashEngine(BatchedEngine):
             self._lifetime_responses += 1
             self._lifetime_proposed += self._active.proposed_tokens
             self._lifetime_accepted += self._active.accepted_tokens
+            if self._active.mode == "ddtree":
+                self._ddtree_responses += 1
         self._active = None
 
     def _update_active(self, resp: Any, new_text: str = "") -> None:
@@ -367,6 +462,10 @@ class DFlashEngine(BatchedEngine):
         a.accepted_tokens = int(resp.accepted_tokens or 0)
         a.speculative_steps = int(resp.speculative_steps or 0)
         a.acceptance_ratio = float(resp.avg_acceptance_ratio or 0.0)
+        a.avg_tree_node_count = float(getattr(resp, "avg_tree_node_count", 0.0) or 0.0)
+        a.ddtree_fast_path_ratio = float(
+            getattr(resp, "ddtree_fast_path_ratio", 0.0) or 0.0
+        )
         history = list(resp.block_size_history or ())
         if history:
             a.block_history = history
@@ -408,7 +507,7 @@ class DFlashEngine(BatchedEngine):
                     tps = self._active.generated_tokens / window
             running_requests.append(
                 {
-                    "request_id": "dflash-active",
+                    "request_id": f"{self._active.mode}-active",
                     "status": "running",
                     "phase": (
                         "generation" if self._active.first_token_at else "prefill"
@@ -424,6 +523,9 @@ class DFlashEngine(BatchedEngine):
                     "speculative_steps": self._active.speculative_steps,
                     "accepted_tokens": self._active.accepted_tokens,
                     "proposed_tokens": self._active.proposed_tokens,
+                    "tree_budget": self._active.tree_budget,
+                    "avg_tree_node_count": self._active.avg_tree_node_count,
+                    "ddtree_fast_path_ratio": self._active.ddtree_fast_path_ratio,
                     "cache_hit_type": None,
                     "cached_tokens": 0,
                     "progress": 0.0,
@@ -454,6 +556,7 @@ class DFlashEngine(BatchedEngine):
             "metal_cache_memory_gb": cache_mem_gb,
             "requests": running_requests,
             "dflash": {
+                "mode": "ddtree" if self._ddtree_budget > 0 else "dflash",
                 "lifetime_acceptance_ratio": lifetime_ratio,
                 "current_block_size": self._current_block_size,
                 "adaptive_enabled": self._adaptive_enabled,
@@ -461,6 +564,18 @@ class DFlashEngine(BatchedEngine):
                 "adaptive_max": self._adaptive_max,
                 "observed_block_min": self._observed_block_min,
                 "observed_block_max": self._observed_block_max,
+                "ddtree_budget": self._ddtree_budget,
+                "ddtree_block_size": self._ddtree_block_size,
+                "ddtree_requests": self._ddtree_responses,
+                "ddtree_last_fast_path_ratio": self._ddtree_last.get(
+                    "ddtree_fast_path_ratio", 0.0
+                ),
+                "ddtree_last_avg_tree_node_count": self._ddtree_last.get(
+                    "avg_tree_node_count", 0.0
+                ),
+                "ddtree_last_generation_tps": self._ddtree_last.get(
+                    "generation_tps", 0.0
+                ),
             },
         }
 

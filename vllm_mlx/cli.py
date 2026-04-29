@@ -391,6 +391,17 @@ def serve_command(args):
             dflash_block_min=getattr(args, "dflash_block_min", 8),
             dflash_block_max=getattr(args, "dflash_block_max", 22),
             dflash_turboquant_bits=getattr(args, "dflash_turboquant_bits", None),
+            dflash_ddtree_budget=getattr(args, "dflash_ddtree_budget", 0),
+            dflash_ddtree_block_size=getattr(args, "dflash_ddtree_block_size", None),
+            dflash_fallback_mode=getattr(args, "dflash_fallback_mode", None),
+            dflash_disable_threshold=getattr(args, "dflash_disable_threshold", None),
+            dflash_disable_window=getattr(args, "dflash_disable_window", None),
+            dflash_disable_cooldown=getattr(args, "dflash_disable_cooldown", None),
+            dflash_ngram_num_draft_tokens=getattr(
+                args, "ngram_num_draft_tokens", None
+            ),
+            dflash_ngram_size=getattr(args, "ngram_size", None),
+            dflash_ngram_min_matches=getattr(args, "ngram_min_matches", None),
         )
     except Exception as e:
         # Show clean error instead of raw traceback
@@ -1365,6 +1376,24 @@ Examples:
             "Useful for faster responses when chain-of-thought is not needed."
         ),
     )
+    serve_parser.add_argument(
+        "--structured-cot",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--structured-cot-tools",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--structured-cot-token-budget",
+        type=int,
+        default=256,
+        help=argparse.SUPPRESS,
+    )
     # GC control (Tier 0 optimization)
     serve_parser.add_argument(
         "--gc-control",
@@ -1486,6 +1515,62 @@ Examples:
             "Optional KV-cache TurboQuant bits for the target model under "
             "DFlash. Requires mlx-turboquant (installed via the dflash[mlx] extra)."
         ),
+    )
+    serve_parser.add_argument(
+        "--dflash-ddtree-budget",
+        type=int,
+        default=0,
+        help="Enable DDTree verification with the given tree node budget. Use 4 for Qwen3.6 A3B.",
+    )
+    serve_parser.add_argument(
+        "--dflash-ddtree-block-size",
+        type=int,
+        default=None,
+        help="Override the DDTree draft block size. Defaults to --dflash-block-size or drafter config.",
+    )
+    # Accepted for compatibility with earlier DFlash experiments. Rapid's
+    # DDTree path does not use these fallback knobs.
+    serve_parser.add_argument(
+        "--dflash-fallback-mode",
+        choices=["ngram", "ar", "none"],
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--dflash-disable-threshold",
+        type=float,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--dflash-disable-window",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--dflash-disable-cooldown",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--ngram-num-draft-tokens",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--ngram-size",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    serve_parser.add_argument(
+        "--ngram-min-matches",
+        type=int,
+        default=None,
+        help=argparse.SUPPRESS,
     )
     # Bench command
     bench_parser = subparsers.add_parser("bench", help="Run benchmark")

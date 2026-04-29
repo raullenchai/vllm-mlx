@@ -573,6 +573,31 @@ rapid-mlx serve /path/to/Qwen3.6-35B-A3B-4bit \
   --port 8010
 ```
 
+#### DDTree mode
+
+DDTree is an experimental tree verifier for the DFlash path. It uses the same
+target model and DFlash drafter, but enables DDTree verification with
+`--dflash-ddtree-budget`. For Qwen3.6 A3B models, start with budget `4`.
+
+```bash
+rapid-mlx serve /Users/samuelfajreldines/dev/models/Qwen3.6-35B-A3B-4bit \
+  --drafter /Users/samuelfajreldines/dev/models/Qwen3.6-35B-A3B-DFlash \
+  --dflash-block-size 2 \
+  --dflash-no-adaptive \
+  --dflash-ddtree-budget 4 \
+  --dflash-ddtree-block-size 2 \
+  --served-model-name qwen3.6-35b-a3b-dflash-local \
+  --port 8010 \
+  --default-temperature 0 \
+  --reasoning-parser qwen3 \
+  --tool-call-parser qwen3_coder_xml \
+  --enable-auto-tool-choice
+```
+
+For raw throughput benchmarks, add `--no-thinking` so Qwen does not spend extra
+tokens in reasoning. For coding agents such as opencode, keep the reasoning
+parser and tool parser enabled as shown above.
+
 The server exposes the same `/v1/chat/completions` API as the regular path. `/v1/status` adds a `dflash` block with the lifetime acceptance ratio, current block size, and observed bounds — also surfaced live in `--tui`.
 
 Mutually exclusive with `--enable-mtp` and `--mllm`.
@@ -638,6 +663,8 @@ Also: logprobs API, structured JSON output (`response_format`), continuous batch
 | `--dflash-block-min` | Adaptive block-size lower bound | `8` |
 | `--dflash-block-max` | Adaptive block-size upper bound | `22` |
 | `--dflash-turboquant-bits` | KV-cache TurboQuant bits for the target (requires `mlx-turboquant`) | *(off)* |
+| `--dflash-ddtree-budget` | Enable DDTree verification with the given tree node budget. Use `4` for Qwen3.6 A3B. | `0` |
+| `--dflash-ddtree-block-size` | Override the DDTree draft block size. Defaults to `--dflash-block-size` or the drafter config. | *(from DFlash settings)* |
 
 ### Monitor TUI
 

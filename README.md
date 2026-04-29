@@ -652,14 +652,12 @@ rapid-mlx serve <model> --tui
 ```
 
 For DFlash/DDTree requests, the request table uses these columns:
-`time`, `surface`, `input`, `output`, `TTFT`, `prefill`, `decode`, `end-to-end`,
-`perf`, `path`, `acc/cyc`, `block`, and `finish`. `TTFT` is time to first token,
-`decode` is `output_tokens / (total_time - TTFT)`, and `end-to-end` is
-`output_tokens / total_time`. `perf` compares the request's `decode` throughput
-against the best observed decode throughput in the current TUI history,
-preferring a no-speculation/zero-acceptance request as the baseline when one is
-available. `path` and `acc/cyc` show which speculative path ran and how many
-tokens it accepted per cycle.
+`time`, `surface`, `input`, `output`, `TTFT`, `prefill`, `tokens/s`, `path`,
+`acc/cyc`, `block`, and `finish`. `TTFT` is time to first token, `prefill` is
+prompt tokens per second, and `tokens/s` is total generated tokens divided by
+request elapsed time, regardless of whether those tokens came from cache,
+DDTree, n-gram, or target-model decoding. `path` and `acc/cyc` show which
+speculative path ran and how many tokens it accepted per cycle.
 
 Also: logprobs API, structured JSON output (`response_format`), continuous batching, KV cache quantization (`--kv-cache-quantization`), and [2100+ tests](tests/).
 

@@ -138,25 +138,7 @@ def _entry_prefill_tps(item: dict) -> float:
     return (prompt_tokens / ttft) if ttft is not None and ttft > 0.01 else 0.0
 
 
-def _entry_decode_tps(item: dict) -> float:
-    explicit = item.get("decode_tps")
-    if explicit is not None and _num(explicit) > 0:
-        return _num(explicit)
-    generation_tps = item.get("generation_tps")
-    if generation_tps is not None and _num(generation_tps) > 0:
-        return _num(generation_tps)
-    elapsed = _entry_elapsed(item)
-    ttft = _entry_ttft(item)
-    if ttft is None:
-        return 0.0
-    decode_time = elapsed - ttft
-    return (_entry_generated_tokens(item) / decode_time) if decode_time > 0.01 else 0.0
-
-
-def _entry_end_to_end_tps(item: dict) -> float:
-    explicit = item.get("effective_tps")
-    if explicit is not None:
-        return _num(explicit)
+def _entry_tokens_per_second(item: dict) -> float:
     elapsed = _entry_elapsed(item)
     return (_entry_generated_tokens(item) / elapsed) if elapsed > 0.01 else 0.0
 
@@ -165,30 +147,6 @@ def _avg_accept_tokens(item: dict) -> float:
     accepted = _integer(item.get("speculative_accepted_tokens", item.get("accepted_tokens", 0)))
     steps = _integer(item.get("speculative_steps", 0))
     return (accepted / steps) if steps > 0 else 0.0
-
-
-def _reference_decode_tps(entries: list[dict]) -> float:
-    baseline_values = [
-        _entry_decode_tps(item)
-        for item in entries
-        if _avg_accept_tokens(item) <= 0.05 and _entry_decode_tps(item) > 0
-    ]
-    if baseline_values:
-        return max(baseline_values)
-    return max((_entry_decode_tps(item) for item in entries), default=0.0)
-
-
-def _performance(item: dict, reference_decode_tps: float) -> tuple[str, str]:
-    decode_tps = _entry_decode_tps(item)
-    if decode_tps <= 0 or reference_decode_tps <= 0:
-        return "n/a", "dim"
-
-    ratio = decode_tps / reference_decode_tps
-    if ratio >= 0.90:
-        return "good", "green"
-    if ratio >= 0.60:
-        return "medium", "yellow"
-    return "bad", "red"
 
 
 def _spec_path(item: dict) -> str:
@@ -260,7 +218,6 @@ def _build_screen(
 
     running_requests = list(status.get("requests") or [])
     entries = list((requests_data or {}).get("entries") or [])
-    reference_decode_tps = _reference_decode_tps(entries)
     active_request = (requests_data or {}).get("active") or {}
     if active_request and running <= 0:
         running = 1
@@ -379,8 +336,7 @@ def _build_screen(
     last_elapsed = _num(last.get("elapsed", 0.0))
     last_ttft = _entry_ttft(last)
     last_prefill_tps = _entry_prefill_tps(last)
-    last_decode_tps = _entry_decode_tps(last)
-    last_e2e_tps = _entry_end_to_end_tps(last)
+    last_tokens_per_second = _entry_tokens_per_second(last)
     last_prompt_tokens = _integer(last.get("prompt_tokens", 0))
     last_generated_tokens = _integer(last.get("generated_tokens", 0))
     last_finish = last.get("finish_reason", "n/a")
@@ -388,7 +344,6 @@ def _build_screen(
     last_accept = last.get("acceptance_ratio")
     last_block = last.get("block_size")
     last_path = _spec_path(last)
-    last_perf, last_perf_color = _performance(last, reference_decode_tps)
 
     rows.append(_c(tty_on, "bold", "Last request"))
     if not last:
@@ -418,20 +373,18 @@ def _build_screen(
             + gap
             + _row("prefill", f"{last_prefill_tps:.1f} tok/s", mid, "cyan", tty_on)
             + gap
-            + _row("decode", f"{last_decode_tps:.1f} tok/s", right, "green", tty_on)
+            + _row("tokens/s", f"{last_tokens_per_second:.1f}", right, "green", tty_on)
         )
         rows.append(
             _row(
-                "end-to-end",
-                f"{last_e2e_tps:.1f} tok/s",
+                "elapsed",
+                _fmt_seconds(last_elapsed),
                 left,
-                "green",
+                "white",
                 tty_on,
             )
             + gap
-            + _row("elapsed", _fmt_seconds(last_elapsed), mid, "white", tty_on)
-            + gap
-            + _row("performance", last_perf, right, last_perf_color, tty_on)
+            + _row("surface", str(last_surface), mid, "white", tty_on)
         )
         accept_text = (
             f"{_num(last_accept):.0%} {_bar(_num(last_accept), 1.0, 12)}"
@@ -440,11 +393,9 @@ def _build_screen(
         )
         block_text = str(last_block) if last_block is not None else "n/a"
         rows.append(
-            _row("surface", str(last_surface), left, "white", tty_on)
+            _row("spec accept", accept_text, left, "magenta", tty_on)
             + gap
-            + _row("spec accept", accept_text, mid, "magenta", tty_on)
-            + gap
-            + _row("block size", block_text, right, "magenta", tty_on)
+            + _row("block size", block_text, mid, "magenta", tty_on)
         )
         if last_path != "n/a":
             spec_accepted = _integer(last.get("speculative_accepted_tokens", 0))
@@ -481,18 +432,9 @@ def _build_screen(
             [value for value in (_entry_ttft(item) for item in entries) if value is not None]
         )
         avg_prefill_tps = _mean([_entry_prefill_tps(item) for item in entries])
-        avg_decode_tps = _mean([_entry_decode_tps(item) for item in entries])
-        avg_e2e_tps = _mean([_entry_end_to_end_tps(item) for item in entries])
+        avg_tokens_per_second = _mean([_entry_tokens_per_second(item) for item in entries])
         avg_accept_tokens = _mean(
             [value for value in (_avg_accept_tokens(item) for item in entries) if value > 0]
-        )
-        avg_perf, avg_perf_color = _performance(
-            {
-                "decode_tps": avg_decode_tps,
-                "generated_tokens": 1,
-                "elapsed": 1,
-            },
-            reference_decode_tps,
         )
         accept_values = [
             _num(item.get("acceptance_ratio"))
@@ -501,27 +443,23 @@ def _build_screen(
         ]
         avg_accept = _mean(accept_values) if accept_values else None
         if avg_accept is not None:
-            header = "  input output   TTFT   prefill   decode  end-to-end  acc/cyc  perf"
+            header = "  input output   TTFT   prefill  tokens/s  acc/cyc"
             row = (
                 f"{avg_prompt:>7.1f} "
                 f"{avg_out:>6.1f} "
                 f"{avg_ttft:>6.2f}s "
                 f"{avg_prefill_tps:>9.1f} "
-                f"{avg_decode_tps:>8.1f} "
-                f"{avg_e2e_tps:>11.1f} "
-                f"{avg_accept_tokens:>7.1f}  "
-                f"{_c(tty_on, avg_perf_color, avg_perf)}"
+                f"{avg_tokens_per_second:>8.1f} "
+                f"{avg_accept_tokens:>7.1f}"
             )
         else:
-            header = "  input output   TTFT   prefill   decode  end-to-end  perf"
+            header = "  input output   TTFT   prefill  tokens/s"
             row = (
                 f"{avg_prompt:>7.1f} "
                 f"{avg_out:>6.1f} "
                 f"{avg_ttft:>6.2f}s "
                 f"{avg_prefill_tps:>9.1f} "
-                f"{avg_decode_tps:>8.1f} "
-                f"{avg_e2e_tps:>11.1f} "
-                f"{_c(tty_on, avg_perf_color, avg_perf)}"
+                f"{avg_tokens_per_second:>8.1f}"
             )
         rows.append(_c(tty_on, "dim", _clamp(header, width)))
         rows.append(_clamp(row, width))
@@ -540,11 +478,11 @@ def _build_screen(
         )
         if any_accept:
             header = (
-                "  time      surface              input output  TTFT   prefill   decode  end-to-end perf    path        acc/cyc block finish"
+                "  time      surface              input output  TTFT   prefill tokens/s path        acc/cyc block finish"
             )
         else:
             header = (
-                "  time      surface              input output  TTFT   prefill   decode  end-to-end perf    finish"
+                "  time      surface              input output  TTFT   prefill tokens/s finish"
             )
         rows.append(_c(tty_on, "dim", _clamp(header, width)))
         for item in reversed(recent_entries):
@@ -563,11 +501,8 @@ def _build_screen(
                 f"{_integer(item.get('generated_tokens', 0)):>6} "
                 f"{ttft_s} "
                 f"{_entry_prefill_tps(item):>9.1f} "
-                f"{_entry_decode_tps(item):>8.1f} "
-                f"{_entry_end_to_end_tps(item):>10.1f} "
+                f"{_entry_tokens_per_second(item):>8.1f} "
             )
-            perf, perf_color = _performance(item, reference_decode_tps)
-            perf_s = _c(tty_on, perf_color, perf.ljust(7))
             if any_accept:
                 accept_s = f"{_avg_accept_tokens(item):>7.1f}"
                 block = item.get("block_size")
@@ -575,14 +510,12 @@ def _build_screen(
                 path_s = _spec_path(item)[:10].ljust(10)
                 row = (
                     base
-                    + f"{perf_s} "
                     + f"{path_s}  {accept_s}  {block_s}  "
                     + str(item.get("finish_reason", "n/a"))[:8]
                 )
             else:
                 row = (
                     base
-                    + f"{perf_s} "
                     + str(item.get("finish_reason", "n/a"))[:12]
                 )
             rows.append(_clamp(row, width))
@@ -638,11 +571,11 @@ def _build_screen(
         )
         if any_dflash:
             header = (
-                "  id            phase       input output  TTFT   prefill   decode  end-to-end perf    path        acc/cyc block"
+                "  id            phase       input output  TTFT   prefill tokens/s path        acc/cyc block"
             )
         else:
             header = (
-                "  id            phase       input output  TTFT   prefill   decode  end-to-end perf    max"
+                "  id            phase       input output  TTFT   prefill tokens/s max"
             )
         rows.append(_c(tty_on, "dim", _clamp(header, width)))
         for item in running_requests[:4]:
@@ -650,8 +583,6 @@ def _build_screen(
             phase = str(item.get("phase") or item.get("status") or "")[:10].ljust(10)
             ptoks = _integer(item.get("prompt_tokens", 0))
             otoks = _integer(item.get("completion_tokens", 0))
-            perf, perf_color = _performance(item, reference_decode_tps)
-            perf_s = _c(tty_on, perf_color, perf.ljust(7))
             ttft = _entry_ttft(item)
             ttft_s = "  -  " if ttft is None else f"{ttft:>5.2f}"
             if any_dflash:
@@ -662,9 +593,7 @@ def _build_screen(
                     f"  {rid} {phase} "
                     f"{ptoks:>7} {otoks:>6} {ttft_s} "
                     f"{_entry_prefill_tps(item):>9.1f} "
-                    f"{_entry_decode_tps(item):>8.1f} "
-                    f"{_entry_end_to_end_tps(item):>10.1f} "
-                    f"{perf_s} "
+                    f"{_entry_tokens_per_second(item):>8.1f} "
                     f"{path_s} {accept_s:>7.1f} {bs:>5}"
                 )
             else:
@@ -673,9 +602,8 @@ def _build_screen(
                     f"  {rid} {phase} "
                     f"{ptoks:>7} {otoks:>6} {ttft_s} "
                     f"{_entry_prefill_tps(item):>9.1f} "
-                    f"{_entry_decode_tps(item):>8.1f} "
-                    f"{_entry_end_to_end_tps(item):>10.1f} "
-                    f"{perf_s} {mx:>5}"
+                    f"{_entry_tokens_per_second(item):>8.1f} "
+                    f"{mx:>5}"
                 )
             rows.append(_clamp(row, width))
 

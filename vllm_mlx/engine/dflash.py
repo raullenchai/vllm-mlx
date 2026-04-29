@@ -68,6 +68,10 @@ class _ActiveRequest:
     tree_budget: int = 0
     avg_tree_node_count: float = 0.0
     ddtree_fast_path_ratio: float = 0.0
+    ngram_acceptance_ratio: float = 0.0
+    ngram_cycles: int = 0
+    ngram_fallback_cycles: int = 0
+    ngram_tool_guard_cycles: int = 0
 
 
 class DFlashEngine(BatchedEngine):
@@ -84,6 +88,13 @@ class DFlashEngine(BatchedEngine):
         turboquant_bits: float | None = None,
         ddtree_budget: int = 0,
         ddtree_block_size: int | None = None,
+        fallback_mode: str | None = None,
+        ngram_num_draft_tokens: int | None = None,
+        ngram_size: int | None = None,
+        ngram_min_matches: int | None = None,
+        ngram_disable_threshold: float | None = None,
+        ngram_disable_window: int | None = None,
+        ngram_disable_cooldown: int | None = None,
         trust_remote_code: bool = True,
         gpu_memory_utilization: float = 0.90,
     ) -> None:
@@ -110,6 +121,18 @@ class DFlashEngine(BatchedEngine):
         self._ddtree_budget = max(0, int(ddtree_budget or 0))
         self._ddtree_block_size = ddtree_block_size
         self._ddtree_last: dict[str, Any] = {}
+        self._dflash_fallback_mode = fallback_mode
+        self._ngram_first_enabled = (
+            self._ddtree_budget > 0 and fallback_mode == "ngram"
+        )
+        self._ngram_num_draft_tokens = max(1, int(ngram_num_draft_tokens or 4))
+        self._ngram_size = max(1, int(ngram_size or 3))
+        self._ngram_min_matches = max(1, int(ngram_min_matches or 1))
+        self._ngram_disable_threshold = float(
+            0.55 if ngram_disable_threshold is None else ngram_disable_threshold
+        )
+        self._ngram_disable_window = max(1, int(ngram_disable_window or 4))
+        self._ngram_disable_cooldown = max(0, int(ngram_disable_cooldown or 8))
 
         self._lock = asyncio.Lock()
         self._executor: concurrent.futures.ThreadPoolExecutor | None = None
@@ -302,6 +325,28 @@ class DFlashEngine(BatchedEngine):
                 stop_after_strings=(
                     list(_TOOL_STOP_AFTER_STRINGS) if tools_requested else None
                 ),
+                ngram_num_draft_tokens=(
+                    self._ngram_num_draft_tokens
+                    if self._ngram_first_enabled
+                    else None
+                ),
+                ngram_size=self._ngram_size if self._ngram_first_enabled else None,
+                ngram_min_matches=(
+                    self._ngram_min_matches if self._ngram_first_enabled else None
+                ),
+                ngram_disable_threshold=(
+                    self._ngram_disable_threshold
+                    if self._ngram_first_enabled
+                    else None
+                ),
+                ngram_disable_window=(
+                    self._ngram_disable_window if self._ngram_first_enabled else None
+                ),
+                ngram_disable_cooldown=(
+                    self._ngram_disable_cooldown
+                    if self._ngram_first_enabled
+                    else None
+                ),
             )
 
         result = await loop.run_in_executor(executor, _run)
@@ -320,6 +365,12 @@ class DFlashEngine(BatchedEngine):
             avg_tree_node_count=float(result.get("avg_tree_node_count") or 0.0),
             ddtree_fast_path_ratio=float(result.get("ddtree_fast_path_ratio") or 0.0),
             tree_budget=int(result.get("tree_budget") or self._ddtree_budget),
+            ngram_acceptance_ratio=float(
+                result.get("ngram_acceptance_ratio") or 0.0
+            ),
+            ngram_cycles=int(result.get("ngram_cycles_completed") or 0),
+            ngram_fallback_cycles=int(result.get("ngram_fallback_cycles") or 0),
+            ngram_tool_guard_cycles=int(result.get("ngram_tool_guard_cycles") or 0),
         )
 
     async def generate(
@@ -375,7 +426,11 @@ class DFlashEngine(BatchedEngine):
         self._inflight += 1
         try:
             async with self._lock:
-                mode = "ddtree" if self._ddtree_budget > 0 else "dflash"
+                mode = (
+                    "ddtree-ngram"
+                    if self._ngram_first_enabled
+                    else ("ddtree" if self._ddtree_budget > 0 else "dflash")
+                )
                 tools_requested = bool(kwargs.pop("tools_requested", False))
                 self._track_request_start(mode)
                 cumulative = ""
@@ -383,10 +438,10 @@ class DFlashEngine(BatchedEngine):
                 try:
                     stream = (
                         self._stream_ddtree
-                        if mode == "ddtree"
+                        if mode in ("ddtree", "ddtree-ngram")
                         else self._stream_dflash
                     )
-                    if mode == "ddtree":
+                    if mode in ("ddtree", "ddtree-ngram"):
                         response_stream = stream(
                             prompt,
                             max_tokens,
@@ -438,7 +493,9 @@ class DFlashEngine(BatchedEngine):
             started_at=time.time(),
             mode=mode,
             block_size=self._current_block_size,
-            tree_budget=self._ddtree_budget if mode == "ddtree" else 0,
+            tree_budget=(
+                self._ddtree_budget if mode in ("ddtree", "ddtree-ngram") else 0
+            ),
         )
 
     def _track_request_end(self) -> None:
@@ -446,7 +503,7 @@ class DFlashEngine(BatchedEngine):
             self._lifetime_responses += 1
             self._lifetime_proposed += self._active.proposed_tokens
             self._lifetime_accepted += self._active.accepted_tokens
-            if self._active.mode == "ddtree":
+            if self._active.mode in ("ddtree", "ddtree-ngram"):
                 self._ddtree_responses += 1
         self._active = None
 
@@ -465,6 +522,16 @@ class DFlashEngine(BatchedEngine):
         a.avg_tree_node_count = float(getattr(resp, "avg_tree_node_count", 0.0) or 0.0)
         a.ddtree_fast_path_ratio = float(
             getattr(resp, "ddtree_fast_path_ratio", 0.0) or 0.0
+        )
+        a.ngram_acceptance_ratio = float(
+            getattr(resp, "ngram_acceptance_ratio", 0.0) or 0.0
+        )
+        a.ngram_cycles = int(getattr(resp, "ngram_cycles", 0) or 0)
+        a.ngram_fallback_cycles = int(
+            getattr(resp, "ngram_fallback_cycles", 0) or 0
+        )
+        a.ngram_tool_guard_cycles = int(
+            getattr(resp, "ngram_tool_guard_cycles", 0) or 0
         )
         history = list(resp.block_size_history or ())
         if history:
@@ -526,6 +593,10 @@ class DFlashEngine(BatchedEngine):
                     "tree_budget": self._active.tree_budget,
                     "avg_tree_node_count": self._active.avg_tree_node_count,
                     "ddtree_fast_path_ratio": self._active.ddtree_fast_path_ratio,
+                    "ngram_acceptance_ratio": self._active.ngram_acceptance_ratio,
+                    "ngram_cycles": self._active.ngram_cycles,
+                    "ngram_fallback_cycles": self._active.ngram_fallback_cycles,
+                    "ngram_tool_guard_cycles": self._active.ngram_tool_guard_cycles,
                     "cache_hit_type": None,
                     "cached_tokens": 0,
                     "progress": 0.0,
@@ -556,7 +627,11 @@ class DFlashEngine(BatchedEngine):
             "metal_cache_memory_gb": cache_mem_gb,
             "requests": running_requests,
             "dflash": {
-                "mode": "ddtree" if self._ddtree_budget > 0 else "dflash",
+                "mode": (
+                    "ddtree-ngram"
+                    if self._ngram_first_enabled
+                    else ("ddtree" if self._ddtree_budget > 0 else "dflash")
+                ),
                 "lifetime_acceptance_ratio": lifetime_ratio,
                 "current_block_size": self._current_block_size,
                 "adaptive_enabled": self._adaptive_enabled,
@@ -575,6 +650,25 @@ class DFlashEngine(BatchedEngine):
                 ),
                 "ddtree_last_generation_tps": self._ddtree_last.get(
                     "generation_tps", 0.0
+                ),
+                "ngram_first_enabled": self._ngram_first_enabled,
+                "ngram_num_draft_tokens": self._ngram_num_draft_tokens,
+                "ngram_size": self._ngram_size,
+                "ngram_min_matches": self._ngram_min_matches,
+                "ngram_disable_threshold": self._ngram_disable_threshold,
+                "ngram_disable_window": self._ngram_disable_window,
+                "ngram_disable_cooldown": self._ngram_disable_cooldown,
+                "ngram_last_acceptance_ratio": self._ddtree_last.get(
+                    "ngram_acceptance_ratio", 0.0
+                ),
+                "ngram_last_cycles": self._ddtree_last.get(
+                    "ngram_cycles_completed", 0
+                ),
+                "ngram_last_fallback_cycles": self._ddtree_last.get(
+                    "ngram_fallback_cycles", 0
+                ),
+                "ngram_last_tool_guard_cycles": self._ddtree_last.get(
+                    "ngram_tool_guard_cycles", 0
                 ),
             },
         }

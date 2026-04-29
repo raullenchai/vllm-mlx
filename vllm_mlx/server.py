@@ -520,6 +520,13 @@ def load_model(
             turboquant_bits=dflash_turboquant_bits,
             ddtree_budget=dflash_ddtree_budget,
             ddtree_block_size=dflash_ddtree_block_size,
+            fallback_mode=dflash_fallback_mode,
+            ngram_num_draft_tokens=dflash_ngram_num_draft_tokens,
+            ngram_size=dflash_ngram_size,
+            ngram_min_matches=dflash_ngram_min_matches,
+            ngram_disable_threshold=dflash_disable_threshold,
+            ngram_disable_window=dflash_disable_window,
+            ngram_disable_cooldown=dflash_disable_cooldown,
             gpu_memory_utilization=gpu_memory_utilization,
         )
     else:

@@ -26,6 +26,8 @@ from dflash_mlx.runtime import (
     target_forward_with_hidden_states,
 )
 
+from ..prompt_lookup import PromptLookupDecoder
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.environ.get(name)
@@ -79,6 +81,32 @@ def _truncate_for_stop_text(
     if best_index is None or best_end is None:
         return text, False
     return text[:best_end], True
+
+
+_TOOL_CALL_MARKERS = (
+    "<tool_call",
+    "</tool_call",
+    "<function=",
+    "</function>",
+    "<parameter=",
+    "</parameter>",
+)
+
+
+def _looks_like_tool_call_draft(
+    tokenizer: Any,
+    history: list[int],
+    pending_token: int,
+    draft_tokens: list[int],
+) -> bool:
+    probe = list(history[-96:]) + [int(pending_token), *[int(t) for t in draft_tokens]]
+    try:
+        text = tokenizer.decode(probe)
+    except TypeError:
+        text = tokenizer.decode(probe, skip_special_tokens=False)
+    except Exception:
+        return False
+    return any(marker in text for marker in _TOOL_CALL_MARKERS)
 
 
 def _import_ddtree_modules() -> tuple[Any, Any, Any, Any, Any, Any, Any]:
@@ -203,6 +231,12 @@ def generate_ddtree(
     stop_strings: list[str] | None = None,
     stop_after_strings: list[str] | None = None,
     should_stop: Any = None,
+    ngram_num_draft_tokens: int | None = None,
+    ngram_size: int | None = None,
+    ngram_min_matches: int | None = None,
+    ngram_disable_threshold: float | None = None,
+    ngram_disable_window: int | None = None,
+    ngram_disable_cooldown: int | None = None,
 ) -> dict[str, Any]:
     (
         build_ddtree_tree_from_topk,
@@ -264,13 +298,36 @@ def generate_ddtree(
     cycles_completed = 0
     phase_timings_us = {
         "draft": 0.0,
+        "ngram_verify": 0.0,
         "tree_build": 0.0,
         "tree_verify": 0.0,
         "commit": 0.0,
     }
     fast_path_count = 0
+    ddtree_cycles_completed = 0
     stop_hit = False
     cancelled = False
+    ngram_decoder: PromptLookupDecoder | None = None
+    ngram_recent: list[tuple[int, int]] = []
+    ngram_cooldown_remaining = 0
+    ngram_cycles_completed = 0
+    ngram_fallback_cycles = 0
+    ngram_disabled_cycles = 0
+    ngram_tool_guard_cycles = 0
+    ngram_proposed_tokens = 0
+    ngram_accepted_tokens = 0
+    if ngram_num_draft_tokens is not None:
+        ngram_decoder = PromptLookupDecoder(
+            num_draft_tokens=max(1, int(ngram_num_draft_tokens)),
+            ngram_size=max(1, int(ngram_size or 3)),
+            min_matches=max(1, int(ngram_min_matches or 1)),
+        )
+        ngram_decoder.add_prompt_tokens(prompt_token_ids)
+    ngram_threshold = float(
+        0.55 if ngram_disable_threshold is None else ngram_disable_threshold
+    )
+    ngram_window = max(1, int(ngram_disable_window or 4))
+    ngram_cooldown = max(0, int(ngram_disable_cooldown or 8))
 
     def stop_requested() -> bool:
         if should_stop is None:
@@ -294,98 +351,207 @@ def generate_ddtree(
             break
         remaining = max_new_tokens - len(generated_token_ids)
         block_len = max(1, min(current_block_size, remaining))
-        block_size_history.append(block_len)
+        root_token = int(staged_first[0].item() if staged_first.ndim > 0 else staged_first.item())
+        used_ngram = False
+        tree_node_count = 0
 
-        block_token_ids = mx.full((block_len,), int(draft_model.config.mask_token_id), dtype=mx.uint32)
-        block_token_ids[0] = staged_first[0] if staged_first.ndim > 0 else staged_first
+        if ngram_decoder is not None:
+            ngram_decoder.add_generated_token(root_token)
 
-        draft_started = time.perf_counter_ns()
-        draft_logits = None
-        if block_len > 1:
-            draft_logits = draft_model(block_token_ids[None], target_hidden, draft_cache)
-            if (
-                draft_model.config.sliding_window_size is None
-                and (trim_n := draft_cache[0].offset - (prompt_len + len(generated_token_ids))) > 0
-            ):
-                trim_prompt_cache(draft_cache, trim_n)
-        phase_timings_us["draft"] += (time.perf_counter_ns() - draft_started) / 1_000.0
+        draft_tokens: list[int] = []
+        if ngram_decoder is not None:
+            if ngram_cooldown_remaining > 0:
+                ngram_disabled_cycles += 1
+                ngram_cooldown_remaining -= 1
+            else:
+                draft_tokens = ngram_decoder.get_draft_tokens()
 
-        build_started = time.perf_counter_ns()
-        if draft_logits is None:
-            tree = build_ddtree_tree_from_topk(
-                np.empty((0, 0), dtype=np.int64),
-                np.empty((0, 0), dtype=np.float32),
-                0,
+        if (
+            draft_tokens
+            and _looks_like_tool_call_draft(
+                tokenizer,
+                getattr(ngram_decoder, "_token_history", []),
+                root_token,
+                draft_tokens,
             )
-        else:
-            tree = _build_tree_from_mlx_logits(
-                draft_logits[0, 1 - block_len:],
-                budget=tree_budget,
-                build_ddtree_tree_from_topk=build_ddtree_tree_from_topk,
-                suppress_mask=suppress_mask,
-            )
-        tree_node_count = _tree_node_count(tree)
-        tree_node_count_history.append(tree_node_count)
-        root_token = int(block_token_ids[0].item())
-        compiled_tree = compile_tree(tree, root_token, prefix_len=prompt_len + len(generated_token_ids))
-        phase_timings_us["tree_build"] += (time.perf_counter_ns() - build_started) / 1_000.0
+        ):
+            ngram_tool_guard_cycles += 1
+            draft_tokens = []
 
-        verify_started = time.perf_counter_ns()
-        tree_cache_state: dict[str, Any] = {}
-        cache_snapshot = None if tree_aware_commit else snapshot_caches(target_cache)
-        verify_logits, verify_hidden_raw = tree_verify_forward(
-            target_model,
-            compiled_tree=compiled_tree,
-            cache=target_cache,
-            capture_layer_ids=capture_layer_ids,
-            tree_aware_linear=True,
-            tree_cache_state=tree_cache_state,
-        )
-        mx.eval(verify_logits)
-        phase_timings_us["tree_verify"] += (time.perf_counter_ns() - verify_started) / 1_000.0
-
-        posterior_tokens = greedy_tokens_with_mask(verify_logits[0], suppress_mask).tolist()
-        accepted_indices, bonus_token = follow_verified_tree(tree.child_maps, posterior_tokens)
-        accepted_token_ids = _tree_token_ids(tree, root_token, accepted_indices)
-        acceptance_len = len(accepted_token_ids)
-        acceptance_lengths.append(acceptance_len)
-        acceptance_ratios.append(acceptance_len / max(block_len, 1))
-        cycles_completed += 1
-
-        commit_started = time.perf_counter_ns()
-        if tree_aware_commit:
-            tree_aware_path_commit(
-                target_cache,
-                prefix_len=prompt_len + len(generated_token_ids),
-                accepted_indices=accepted_indices,
-                tree_cache_state=tree_cache_state,
-            )
-            accepted_idx_array = mx.array(accepted_indices, dtype=mx.int32)
-            target_hidden = _extract_context_feature_for_indices(
-                verify_hidden_raw,
-                list(draft_model.config.target_layer_ids),
-                accepted_idx_array,
-            )
-            mx.eval(target_hidden)
-        else:
-            if cache_snapshot is None:
-                raise RuntimeError("DDTree slow-path commit missing cache snapshot")
-            accepted_ids = mx.array([accepted_token_ids], dtype=mx.uint32)
-            _, committed_hidden_raw = slow_path_commit(
+        if draft_tokens and remaining > 1:
+            used_ngram = True
+            proposed_count = 1 + min(len(draft_tokens), remaining - 1)
+            draft_tokens = draft_tokens[: max(0, proposed_count - 1)]
+            verify_ids = mx.array([[root_token, *draft_tokens]], dtype=mx.uint32)
+            cache_snapshot = snapshot_caches(target_cache)
+            verify_started = time.perf_counter_ns()
+            verify_logits, verify_hidden_raw = target_forward_with_hidden_states(
                 target_model,
-                target_cache,
-                cache_snapshot,
-                accepted_ids,
+                input_ids=verify_ids,
+                cache=target_cache,
                 capture_layer_ids=capture_layer_ids,
             )
-            target_hidden = extract_context_feature_from_dict(
-                committed_hidden_raw,
-                list(draft_model.config.target_layer_ids),
-            )
+            mx.eval(verify_logits)
+            phase_timings_us["ngram_verify"] += (
+                time.perf_counter_ns() - verify_started
+            ) / 1_000.0
+
+            posterior_tokens = greedy_tokens_with_mask(
+                verify_logits[0], suppress_mask
+            ).tolist()
+            ngram_draft_accepted = 0
+            for draft_token, posterior_token in zip(draft_tokens, posterior_tokens):
+                if int(draft_token) != int(posterior_token):
+                    break
+                ngram_draft_accepted += 1
+
+            accepted_token_ids = [root_token, *draft_tokens[:ngram_draft_accepted]]
+            bonus_token = int(posterior_tokens[ngram_draft_accepted])
+            acceptance_len = len(accepted_token_ids)
+            ngram_cycles_completed += 1
+            ngram_proposed_tokens += len(draft_tokens)
+            ngram_accepted_tokens += ngram_draft_accepted
+            ngram_decoder.record_accepted(ngram_draft_accepted)
+            ngram_recent.append((ngram_draft_accepted, len(draft_tokens)))
+            if len(ngram_recent) > ngram_window:
+                ngram_recent.pop(0)
+            if len(ngram_recent) == ngram_window and ngram_cooldown > 0:
+                recent_accepted = sum(item[0] for item in ngram_recent)
+                recent_proposed = sum(item[1] for item in ngram_recent)
+                recent_ratio = (
+                    recent_accepted / recent_proposed
+                    if recent_proposed > 0
+                    else 0.0
+                )
+                if recent_ratio < ngram_threshold:
+                    ngram_cooldown_remaining = ngram_cooldown
+                    ngram_recent.clear()
+
+            commit_started = time.perf_counter_ns()
+            if ngram_draft_accepted == len(draft_tokens):
+                target_hidden = extract_context_feature_from_dict(
+                    verify_hidden_raw,
+                    list(draft_model.config.target_layer_ids),
+                )
+            else:
+                accepted_ids = mx.array([accepted_token_ids], dtype=mx.uint32)
+                _, committed_hidden_raw = slow_path_commit(
+                    target_model,
+                    target_cache,
+                    cache_snapshot,
+                    accepted_ids,
+                    capture_layer_ids=capture_layer_ids,
+                )
+                target_hidden = extract_context_feature_from_dict(
+                    committed_hidden_raw,
+                    list(draft_model.config.target_layer_ids),
+                )
             mx.eval(target_hidden)
-        phase_timings_us["commit"] += (time.perf_counter_ns() - commit_started) / 1_000.0
-        if tree_aware_commit:
-            fast_path_count += 1
+            phase_timings_us["commit"] += (
+                time.perf_counter_ns() - commit_started
+            ) / 1_000.0
+        else:
+            ngram_fallback_cycles += 1 if ngram_decoder is not None else 0
+            proposed_count = block_len
+            block_token_ids = mx.full(
+                (block_len,),
+                int(draft_model.config.mask_token_id),
+                dtype=mx.uint32,
+            )
+            block_token_ids[0] = mx.array(root_token, dtype=mx.uint32)
+
+            draft_started = time.perf_counter_ns()
+            draft_logits = None
+            if block_len > 1:
+                draft_logits = draft_model(block_token_ids[None], target_hidden, draft_cache)
+                if (
+                    draft_model.config.sliding_window_size is None
+                    and (trim_n := draft_cache[0].offset - (prompt_len + len(generated_token_ids))) > 0
+                ):
+                    trim_prompt_cache(draft_cache, trim_n)
+            phase_timings_us["draft"] += (time.perf_counter_ns() - draft_started) / 1_000.0
+
+            build_started = time.perf_counter_ns()
+            if draft_logits is None:
+                tree = build_ddtree_tree_from_topk(
+                    np.empty((0, 0), dtype=np.int64),
+                    np.empty((0, 0), dtype=np.float32),
+                    0,
+                )
+            else:
+                tree = _build_tree_from_mlx_logits(
+                    draft_logits[0, 1 - block_len:],
+                    budget=tree_budget,
+                    build_ddtree_tree_from_topk=build_ddtree_tree_from_topk,
+                    suppress_mask=suppress_mask,
+                )
+            tree_node_count = _tree_node_count(tree)
+            tree_node_count_history.append(tree_node_count)
+            compiled_tree = compile_tree(tree, root_token, prefix_len=prompt_len + len(generated_token_ids))
+            phase_timings_us["tree_build"] += (time.perf_counter_ns() - build_started) / 1_000.0
+
+            verify_started = time.perf_counter_ns()
+            tree_cache_state: dict[str, Any] = {}
+            cache_snapshot = None if tree_aware_commit else snapshot_caches(target_cache)
+            verify_logits, verify_hidden_raw = tree_verify_forward(
+                target_model,
+                compiled_tree=compiled_tree,
+                cache=target_cache,
+                capture_layer_ids=capture_layer_ids,
+                tree_aware_linear=True,
+                tree_cache_state=tree_cache_state,
+            )
+            mx.eval(verify_logits)
+            phase_timings_us["tree_verify"] += (time.perf_counter_ns() - verify_started) / 1_000.0
+
+            posterior_tokens = greedy_tokens_with_mask(verify_logits[0], suppress_mask).tolist()
+            accepted_indices, bonus_token = follow_verified_tree(tree.child_maps, posterior_tokens)
+            accepted_token_ids = _tree_token_ids(tree, root_token, accepted_indices)
+            acceptance_len = len(accepted_token_ids)
+            ddtree_cycles_completed += 1
+
+            commit_started = time.perf_counter_ns()
+            if tree_aware_commit:
+                tree_aware_path_commit(
+                    target_cache,
+                    prefix_len=prompt_len + len(generated_token_ids),
+                    accepted_indices=accepted_indices,
+                    tree_cache_state=tree_cache_state,
+                )
+                accepted_idx_array = mx.array(accepted_indices, dtype=mx.int32)
+                target_hidden = _extract_context_feature_for_indices(
+                    verify_hidden_raw,
+                    list(draft_model.config.target_layer_ids),
+                    accepted_idx_array,
+                )
+                mx.eval(target_hidden)
+            else:
+                if cache_snapshot is None:
+                    raise RuntimeError("DDTree slow-path commit missing cache snapshot")
+                accepted_ids = mx.array([accepted_token_ids], dtype=mx.uint32)
+                _, committed_hidden_raw = slow_path_commit(
+                    target_model,
+                    target_cache,
+                    cache_snapshot,
+                    accepted_ids,
+                    capture_layer_ids=capture_layer_ids,
+                )
+                target_hidden = extract_context_feature_from_dict(
+                    committed_hidden_raw,
+                    list(draft_model.config.target_layer_ids),
+                )
+                mx.eval(target_hidden)
+            phase_timings_us["commit"] += (time.perf_counter_ns() - commit_started) / 1_000.0
+            if tree_aware_commit:
+                fast_path_count += 1
+
+        block_size_history.append(proposed_count)
+        acceptance_lengths.append(acceptance_len)
+        acceptance_ratios.append(acceptance_len / max(proposed_count, 1))
+        cycles_completed += 1
+        if ngram_decoder is not None and len(accepted_token_ids) > 1:
+            for token_id in accepted_token_ids[1:]:
+                ngram_decoder.add_generated_token(token_id)
 
         emitted = accepted_token_ids
         for index, token_id in enumerate(accepted_token_ids):
@@ -408,13 +574,14 @@ def generate_ddtree(
         if stop_hit:
             break
 
-        current_block_size = next_adaptive_block_size(
-            current_block_size,
-            acceptance_len,
-            min(block_len, max(1, tree_node_count)),
-            adaptive_block_size,
-            hysteresis_state=_adaptive_hysteresis,
-        )
+        if not used_ngram:
+            current_block_size = next_adaptive_block_size(
+                current_block_size,
+                acceptance_len,
+                min(block_len, max(1, tree_node_count)),
+                adaptive_block_size,
+                hysteresis_state=_adaptive_hysteresis,
+            )
 
     generated_token_ids = generated_token_ids[:max_new_tokens]
     text = tokenizer.decode(generated_token_ids) if generated_token_ids else ""
@@ -429,6 +596,11 @@ def generate_ddtree(
     elapsed = prefill_seconds + decode_seconds
     proposed_tokens = sum(block_size_history)
     accepted_tokens = sum(acceptance_lengths)
+    ngram_acceptance_ratio = (
+        ngram_accepted_tokens / ngram_proposed_tokens
+        if ngram_proposed_tokens > 0
+        else 0.0
+    )
 
     return {
         "text": text,
@@ -470,13 +642,31 @@ def generate_ddtree(
         "prefill_working_set_bytes": prefill.working_set_bytes,
         "prompt_cache_state_bytes": prefill.prefill_state_bytes,
         "prompt_cache_state": prefill.prefill_state if capture_prefill_state else None,
-        "engine": "ddtree",
+        "engine": "ddtree-ngram" if ngram_decoder is not None else "ddtree",
         "target_turboquant_bits": target_turboquant_bits,
         "ddtree_commit": "tree_aware" if tree_aware_commit else "slow_path",
         "tree_budget": tree_budget,
-        "ddtree_cycles_completed": cycles_completed,
+        "ddtree_cycles_completed": ddtree_cycles_completed,
         "ddtree_fast_path_ratio": (
-            fast_path_count / cycles_completed if cycles_completed > 0 else 0.0
+            fast_path_count / ddtree_cycles_completed
+            if ddtree_cycles_completed > 0
+            else 0.0
         ),
         "ddtree_phase_timings_us": phase_timings_us,
+        "ngram_enabled": ngram_decoder is not None,
+        "ngram_num_draft_tokens": (
+            ngram_decoder.num_draft_tokens if ngram_decoder is not None else 0
+        ),
+        "ngram_size": ngram_decoder.ngram_size if ngram_decoder is not None else 0,
+        "ngram_min_matches": (
+            ngram_decoder.min_matches if ngram_decoder is not None else 0
+        ),
+        "ngram_cycles_completed": ngram_cycles_completed,
+        "ngram_fallback_cycles": ngram_fallback_cycles,
+        "ngram_disabled_cycles": ngram_disabled_cycles,
+        "ngram_tool_guard_cycles": ngram_tool_guard_cycles,
+        "ngram_proposed_tokens": ngram_proposed_tokens,
+        "ngram_accepted_tokens": ngram_accepted_tokens,
+        "ngram_acceptance_ratio": ngram_acceptance_ratio,
+        "ngram_cooldown_remaining": ngram_cooldown_remaining,
     }

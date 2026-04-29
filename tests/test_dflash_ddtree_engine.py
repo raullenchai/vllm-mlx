@@ -98,6 +98,7 @@ async def test_dflash_engine_passes_ngram_first_config(monkeypatch):
             "text": "ok",
             "generated_token_ids": [1],
             "prompt_tokens": 3,
+            "prefill_seconds": 0.25,
             "generated_tokens": 1,
             "finish_reason": "stop",
             "proposed_tokens": 2,
@@ -140,22 +141,27 @@ async def test_dflash_engine_passes_ngram_first_config(monkeypatch):
     engine._tokenizer = object()
     engine._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
+    active_stats = None
     try:
-        outputs = [
-            output
-            async for output in engine.stream_generate(
-                "prompt",
-                max_tokens=8,
-                temperature=0,
-                top_p=1,
-            )
-        ]
+        outputs = []
+        async for output in engine.stream_generate(
+            "prompt",
+            max_tokens=8,
+            temperature=0,
+            top_p=1,
+        ):
+            outputs.append(output)
+            active_stats = engine.get_stats()
     finally:
         await engine.stop()
 
     assert outputs[-1].text == "ok"
 
     stats = engine.get_stats()
+    assert active_stats is not None
+    assert active_stats["requests"][0]["tokens_per_second"] == 99.0
+    assert active_stats["requests"][0]["ttft_s"] == 0.25
+    assert active_stats["requests"][0]["completion_tokens"] == 1
     assert stats["dflash"]["mode"] == "ddtree-ngram"
     assert stats["dflash"]["ngram_first_enabled"] is True
     assert stats["dflash"]["ngram_num_draft_tokens"] == 6

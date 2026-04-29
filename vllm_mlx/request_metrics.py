@@ -148,12 +148,17 @@ class RequestRecorder:
 
             # Engine-reported values (from scheduler) are more accurate
             # than middleware timing — prefer them when available.
-            if engine_gen_tps is not None and engine_gen_tps > 0:
+            has_engine_gen_tps = engine_gen_tps is not None and engine_gen_tps > 0
+            if has_engine_gen_tps:
                 generation_tps = float(engine_gen_tps)
             if engine_ttft is not None and engine_ttft > 0:
                 ttft = float(engine_ttft)
                 if ptoks > 0 and ttft > 0.01:
                     prompt_tps = ptoks / ttft
+                if not has_engine_gen_tps:
+                    generation_window = elapsed - ttft
+                    if generation_window > 0.01 and gtoks > 0:
+                        generation_tps = gtoks / generation_window
 
             record_acceptance = (
                 float(acceptance_ratio) if acceptance_ratio is not None else None

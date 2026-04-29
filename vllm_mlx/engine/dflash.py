@@ -58,7 +58,9 @@ class _ActiveRequest:
     mode: str = "dflash"
     first_token_at: float | None = None
     prompt_tokens: int = 0
+    prefill_seconds: float = 0.0
     generated_tokens: int = 0
+    generation_tps: float = 0.0
     proposed_tokens: int = 0
     accepted_tokens: int = 0
     speculative_steps: int = 0
@@ -355,7 +357,9 @@ class DFlashEngine(BatchedEngine):
             text=result.get("text", ""),
             tokens=list(result.get("generated_token_ids", []) or []),
             prompt_tokens=int(result.get("prompt_tokens") or 0),
+            prefill_seconds=float(result.get("prefill_seconds") or 0.0),
             generation_tokens=int(result.get("generated_tokens") or 0),
+            generation_tps=float(result.get("generation_tps") or 0.0),
             finish_reason=result.get("finish_reason") or "stop",
             proposed_tokens=int(result.get("proposed_tokens") or 0),
             accepted_tokens=int(result.get("accepted_tokens") or 0),
@@ -514,7 +518,9 @@ class DFlashEngine(BatchedEngine):
         if a.first_token_at is None and (new_text or resp.tokens):
             a.first_token_at = time.time()
         a.prompt_tokens = int(resp.prompt_tokens or 0)
+        a.prefill_seconds = float(getattr(resp, "prefill_seconds", 0.0) or 0.0)
         a.generated_tokens = int(resp.generation_tokens or 0)
+        a.generation_tps = float(getattr(resp, "generation_tps", 0.0) or 0.0)
         a.proposed_tokens = int(resp.proposed_tokens or 0)
         a.accepted_tokens = int(resp.accepted_tokens or 0)
         a.speculative_steps = int(resp.speculative_steps or 0)
@@ -559,14 +565,13 @@ class DFlashEngine(BatchedEngine):
         if self._active is not None:
             now = time.time()
             elapsed = now - self._active.started_at
-            ttft = (
-                (self._active.first_token_at - self._active.started_at)
-                if self._active.first_token_at
-                else None
-            )
-            tps = None
+            ttft = self._active.prefill_seconds if self._active.prefill_seconds > 0 else None
+            if ttft is None and self._active.first_token_at:
+                ttft = self._active.first_token_at - self._active.started_at
+            tps = self._active.generation_tps if self._active.generation_tps > 0 else None
             if (
-                self._active.first_token_at
+                tps is None
+                and self._active.first_token_at
                 and self._active.generated_tokens > 0
             ):
                 window = now - self._active.first_token_at

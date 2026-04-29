@@ -16,8 +16,11 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import copy
 import logging
+import os
 import sys
+import threading
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -74,6 +77,113 @@ class _ActiveRequest:
     ngram_cycles: int = 0
     ngram_fallback_cycles: int = 0
     ngram_tool_guard_cycles: int = 0
+    cache_hit_type: str | None = None
+    cached_tokens: int = 0
+
+
+@dataclass
+class _DDTreeCacheStats:
+    hits: int = 0
+    misses: int = 0
+    tokens_saved: int = 0
+    total_queries: int = 0
+    evictions: int = 0
+
+    @property
+    def hit_rate(self) -> float:
+        if self.total_queries == 0:
+            return 0.0
+        return self.hits / self.total_queries
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "hits": self.hits,
+            "misses": self.misses,
+            "hit_rate": self.hit_rate,
+            "tokens_saved": self.tokens_saved,
+            "total_queries": self.total_queries,
+            "evictions": self.evictions,
+        }
+
+
+@dataclass
+class _DDTreePrefixCacheFetch:
+    state: Any | None
+    hit_type: str = "miss"
+    cached_tokens: int = 0
+
+
+class _DDTreePrefixStateCache:
+    """Small LRU cache for DFlash PromptPrefillState objects."""
+
+    def __init__(self, max_entries: int = 8) -> None:
+        self.max_entries = max(0, int(max_entries))
+        self._entries: dict[tuple[int, ...], Any] = {}
+        self._lru: list[tuple[int, ...]] = []
+        self.stats = _DDTreeCacheStats()
+
+    def fetch(self, prompt_tokens: list[int]) -> _DDTreePrefixCacheFetch:
+        self.stats.total_queries += 1
+        if self.max_entries <= 0 or not prompt_tokens:
+            self.stats.misses += 1
+            return _DDTreePrefixCacheFetch(None)
+
+        prompt_tuple = tuple(int(token) for token in prompt_tokens)
+        best_key: tuple[int, ...] | None = None
+        for key in self._entries:
+            if len(key) > len(prompt_tuple):
+                continue
+            if prompt_tuple[: len(key)] == key and (
+                best_key is None or len(key) > len(best_key)
+            ):
+                best_key = key
+
+        if best_key is None:
+            self.stats.misses += 1
+            return _DDTreePrefixCacheFetch(None)
+
+        self.stats.hits += 1
+        self.stats.tokens_saved += len(best_key)
+        self._touch(best_key)
+        hit_type = "exact" if len(best_key) == len(prompt_tuple) else "prefix"
+        return _DDTreePrefixCacheFetch(
+            copy.deepcopy(self._entries[best_key]),
+            hit_type=hit_type,
+            cached_tokens=len(best_key),
+        )
+
+    def store(self, prompt_tokens: list[int], state: Any | None) -> None:
+        if self.max_entries <= 0 or state is None or not prompt_tokens:
+            return
+        key = tuple(int(token) for token in prompt_tokens)
+        self._entries[key] = copy.deepcopy(state)
+        self._touch(key)
+        while len(self._entries) > self.max_entries:
+            evict_key = self._lru.pop(0)
+            if evict_key in self._entries:
+                del self._entries[evict_key]
+                self.stats.evictions += 1
+
+    def _touch(self, key: tuple[int, ...]) -> None:
+        try:
+            self._lru.remove(key)
+        except ValueError:
+            pass
+        self._lru.append(key)
+
+    def get_stats(self) -> dict[str, Any]:
+        data = self.stats.to_dict()
+        data.update(
+            {
+                "entry_count": len(self._entries),
+                "max_entries": self.max_entries,
+                "longest_prefix_tokens": max(
+                    (len(key) for key in self._entries),
+                    default=0,
+                ),
+            }
+        )
+        return data
 
 
 class DFlashEngine(BatchedEngine):
@@ -97,14 +207,16 @@ class DFlashEngine(BatchedEngine):
         ngram_disable_threshold: float | None = None,
         ngram_disable_window: int | None = None,
         ngram_disable_cooldown: int | None = None,
+        scheduler_config: Any | None = None,
+        stream_interval: int = 1,
         trust_remote_code: bool = True,
         gpu_memory_utilization: float = 0.90,
     ) -> None:
         super().__init__(
             model_name=model_name,
             trust_remote_code=trust_remote_code,
-            scheduler_config=None,
-            stream_interval=1,
+            scheduler_config=scheduler_config,
+            stream_interval=stream_interval,
             force_mllm=False,
             gpu_memory_utilization=gpu_memory_utilization,
         )
@@ -150,6 +262,10 @@ class DFlashEngine(BatchedEngine):
         self._lifetime_accepted = 0
         self._lifetime_responses = 0
         self._ddtree_responses = 0
+        cache_entries = getattr(scheduler_config, "prefix_cache_size", 2) or 2
+        cache_entries = int(os.environ.get("DFLASH_DDTREE_PREFIX_CACHE_ENTRIES", cache_entries))
+        self._ddtree_prefix_cache = _DDTreePrefixStateCache(max_entries=cache_entries)
+        self._last_memory_stats = (0.0, 0.0, 0.0)
         self._start_time = time.time()
 
     # ------------------------------------------------------------------
@@ -185,10 +301,16 @@ class DFlashEngine(BatchedEngine):
                 f"Original error: {exc}"
             ) from exc
 
-        from mlx_lm import load as mlx_load
+        from ..utils.tokenizer import load_model_with_fallback
 
         logger.info("[DFlash] Loading target model: %s", self._model_name)
-        self._model, self._tokenizer = mlx_load(self._model_name)
+        tokenizer_config = {"trust_remote_code": self._trust_remote_code}
+        if "qwen3" in self._model_name.lower():
+            tokenizer_config["eos_token"] = "<|im_end|>"
+        self._model, self._tokenizer = load_model_with_fallback(
+            self._model_name,
+            tokenizer_config=tokenizer_config,
+        )
 
         logger.info("[DFlash] Loading drafter: %s", self._drafter_path)
         self._drafter = load_draft(
@@ -293,6 +415,7 @@ class DFlashEngine(BatchedEngine):
         top_p: float,
         stop: list[str] | None,
         tools_requested: bool,
+        prefix_boundary: int = 0,
     ):
         """Run the Rapid-MLX DDTree loop on the DFlash MLX worker thread."""
         from ..speculative.ddtree.engine import generate_ddtree
@@ -307,6 +430,9 @@ class DFlashEngine(BatchedEngine):
         loop = asyncio.get_running_loop()
         executor = self._executor
         assert executor is not None, "DFlashEngine not started"
+        stop_event = threading.Event()
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        sentinel = object()
         ddtree_block_size = (
             self._ddtree_block_size
             if self._ddtree_block_size is not None
@@ -325,77 +451,154 @@ class DFlashEngine(BatchedEngine):
             ddtree_block_size = None
 
         def _run():
-            return generate_ddtree(
+            from ..speculative.ddtree.engine import tokenize_prompt
+
+            prompt_array = tokenize_prompt(self._tokenizer, prompt)
+            prompt_token_ids = prompt_array.tolist()
+            cache_fetch = self._ddtree_prefix_cache.fetch(prompt_token_ids)
+
+            def _on_step(step: dict[str, Any]) -> None:
+                loop.call_soon_threadsafe(queue.put_nowait, step)
+
+            try:
+                result = generate_ddtree(
                 target_model=self._model,
                 draft_model=self._drafter,
                 tokenizer=self._tokenizer,
-                prompt_tokens=prompt,
+                prompt_tokens=prompt_array,
                 max_new_tokens=max_tokens,
                 tree_budget=self._ddtree_budget,
                 block_size=ddtree_block_size,
                 adaptive_block_size=self._adaptive_cfg,
+                prefix_state=cache_fetch.state,
+                capture_prefill_state=True,
                 target_turboquant_bits=self._turboquant_bits,
                 stop_strings=stop,
                 stop_after_strings=(
                     list(_TOOL_STOP_AFTER_STRINGS) if tools_requested else None
                 ),
+                prefix_boundary=prefix_boundary,
                 ngram_num_draft_tokens=(
                     self._ngram_num_draft_tokens
-                    if self._ngram_first_enabled and not tools_requested
+                    if self._ngram_first_enabled
                     else None
                 ),
                 ngram_size=(
                     self._ngram_size
-                    if self._ngram_first_enabled and not tools_requested
+                    if self._ngram_first_enabled
                     else None
                 ),
                 ngram_min_matches=(
                     self._ngram_min_matches
-                    if self._ngram_first_enabled and not tools_requested
+                    if self._ngram_first_enabled
                     else None
                 ),
                 ngram_disable_threshold=(
                     self._ngram_disable_threshold
-                    if self._ngram_first_enabled and not tools_requested
+                    if self._ngram_first_enabled
                     else None
                 ),
                 ngram_disable_window=(
                     self._ngram_disable_window
-                    if self._ngram_first_enabled and not tools_requested
+                    if self._ngram_first_enabled
                     else None
                 ),
                 ngram_disable_cooldown=(
                     self._ngram_disable_cooldown
-                    if self._ngram_first_enabled and not tools_requested
+                    if self._ngram_first_enabled
                     else None
                 ),
+                should_stop=stop_event.is_set,
+                on_step=_on_step,
             )
+                if result.get("prompt_cache_state") is not None:
+                    self._ddtree_prefix_cache.store(
+                        list(result.get("prompt_token_ids") or ()),
+                        result.get("prompt_cache_state"),
+                    )
+                if result.get("extended_prompt_cache_state") is not None:
+                    self._ddtree_prefix_cache.store(
+                        [
+                            *list(result.get("prompt_token_ids") or ()),
+                            *list(result.get("generated_token_ids") or ()),
+                        ],
+                        result.get("extended_prompt_cache_state"),
+                    )
+                if (
+                    prefix_boundary > 0
+                    and prefix_boundary < len(prompt_token_ids)
+                    and result.get("prefix_boundary_state") is not None
+                ):
+                    self._ddtree_prefix_cache.store(
+                        prompt_token_ids[:prefix_boundary],
+                        result.get("prefix_boundary_state"),
+                    )
+                self._ddtree_last = {
+                    key: value
+                    for key, value in result.items()
+                    if key
+                    not in {
+                        "prompt_cache_state",
+                        "prompt_token_ids",
+                        "prefix_boundary_state",
+                        "extended_prompt_cache_state",
+                    }
+                }
+                result["cache_hit_type"] = cache_fetch.hit_type
+                result["cached_tokens"] = cache_fetch.cached_tokens
+                loop.call_soon_threadsafe(queue.put_nowait, result)
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, sentinel)
 
-        result = await loop.run_in_executor(executor, _run)
-        self._ddtree_last = dict(result)
-        yield SimpleNamespace(
-            text=result.get("text", ""),
-            tokens=list(result.get("generated_token_ids", []) or []),
-            prompt_tokens=int(result.get("prompt_tokens") or 0),
-            prefill_seconds=float(result.get("prefill_seconds") or 0.0),
-            generation_tokens=int(result.get("generated_tokens") or 0),
-            generation_tps=float(result.get("generation_tps") or 0.0),
-            finish_reason=result.get("finish_reason") or "stop",
-            proposed_tokens=int(result.get("proposed_tokens") or 0),
-            accepted_tokens=int(result.get("accepted_tokens") or 0),
-            speculative_steps=int(result.get("speculative_steps") or 0),
-            avg_acceptance_ratio=float(result.get("avg_acceptance_ratio") or 0.0),
-            block_size_history=tuple(result.get("block_size_history") or ()),
-            avg_tree_node_count=float(result.get("avg_tree_node_count") or 0.0),
-            ddtree_fast_path_ratio=float(result.get("ddtree_fast_path_ratio") or 0.0),
-            tree_budget=int(result.get("tree_budget") or self._ddtree_budget),
-            ngram_acceptance_ratio=float(
-                result.get("ngram_acceptance_ratio") or 0.0
-            ),
-            ngram_cycles=int(result.get("ngram_cycles_completed") or 0),
-            ngram_fallback_cycles=int(result.get("ngram_fallback_cycles") or 0),
-            ngram_tool_guard_cycles=int(result.get("ngram_tool_guard_cycles") or 0),
-        )
+        future = loop.run_in_executor(executor, _run)
+        saw_step = False
+        try:
+            while True:
+                item = await queue.get()
+                if item is sentinel:
+                    break
+                is_final = "finish_reason" in item
+                item_text = "" if is_final and saw_step else item.get("text", "")
+                saw_step = saw_step or not is_final
+                yield SimpleNamespace(
+                    text=item_text,
+                    tokens=list(item.get("generated_token_ids", []) or []),
+                    prompt_tokens=int(item.get("prompt_tokens") or 0),
+                    prefill_seconds=float(item.get("prefill_seconds") or 0.0),
+                    generation_tokens=int(item.get("generated_tokens") or 0),
+                    generation_tps=float(item.get("generation_tps") or 0.0),
+                    finish_reason=item.get("finish_reason") if is_final else None,
+                    proposed_tokens=int(item.get("proposed_tokens") or 0),
+                    accepted_tokens=int(item.get("accepted_tokens") or 0),
+                    speculative_steps=int(item.get("speculative_steps") or 0),
+                    avg_acceptance_ratio=float(
+                        item.get("avg_acceptance_ratio") or 0.0
+                    ),
+                    block_size_history=tuple(item.get("block_size_history") or ()),
+                    avg_tree_node_count=float(
+                        item.get("avg_tree_node_count") or 0.0
+                    ),
+                    ddtree_fast_path_ratio=float(
+                        item.get("ddtree_fast_path_ratio") or 0.0
+                    ),
+                    tree_budget=int(item.get("tree_budget") or self._ddtree_budget),
+                    ngram_acceptance_ratio=float(
+                        item.get("ngram_acceptance_ratio") or 0.0
+                    ),
+                    ngram_cycles=int(item.get("ngram_cycles_completed") or 0),
+                    ngram_fallback_cycles=int(
+                        item.get("ngram_fallback_cycles") or 0
+                    ),
+                    ngram_tool_guard_cycles=int(
+                        item.get("ngram_tool_guard_cycles") or 0
+                    ),
+                    cache_hit_type=item.get("cache_hit_type"),
+                    cached_tokens=int(item.get("cached_tokens") or 0),
+                )
+            await future
+        except BaseException:
+            stop_event.set()
+            raise
 
     async def generate(
         self,
@@ -450,12 +653,24 @@ class DFlashEngine(BatchedEngine):
         self._inflight += 1
         try:
             async with self._lock:
+                tools_requested = bool(kwargs.pop("tools_requested", False))
+                prefix_boundary = int(kwargs.pop("prefix_boundary", 0) or 0)
+                greedy_request = temperature in (0, 0.0)
+                if self._ddtree_budget > 0 and not greedy_request:
+                    logger.warning(
+                        "[DDTree] falling back to DFlash for non-greedy request: temperature=%s top_p=%s",
+                        temperature,
+                        top_p,
+                    )
                 mode = (
                     "ddtree-ngram"
-                    if self._ngram_first_enabled
-                    else ("ddtree" if self._ddtree_budget > 0 else "dflash")
+                    if self._ngram_first_enabled and greedy_request
+                    else (
+                        "ddtree"
+                        if self._ddtree_budget > 0 and greedy_request
+                        else "dflash"
+                    )
                 )
-                tools_requested = bool(kwargs.pop("tools_requested", False))
                 self._track_request_start(mode)
                 cumulative = ""
                 last_resp = None
@@ -473,6 +688,7 @@ class DFlashEngine(BatchedEngine):
                             top_p,
                             stop,
                             tools_requested,
+                            prefix_boundary,
                         )
                     else:
                         response_stream = stream(prompt, max_tokens, temperature, top_p)
@@ -559,6 +775,8 @@ class DFlashEngine(BatchedEngine):
         a.ngram_tool_guard_cycles = int(
             getattr(resp, "ngram_tool_guard_cycles", 0) or 0
         )
+        a.cache_hit_type = getattr(resp, "cache_hit_type", None)
+        a.cached_tokens = int(getattr(resp, "cached_tokens", 0) or 0)
         history = list(resp.block_size_history or ())
         if history:
             a.block_history = history
@@ -572,14 +790,17 @@ class DFlashEngine(BatchedEngine):
             self._observed_block_max = max(self._observed_block_max, mx_)
 
     def get_stats(self) -> dict[str, Any]:
-        try:
-            import mlx.core as mx
+        active_mem_gb, peak_mem_gb, cache_mem_gb = self._last_memory_stats
+        if self._active is None or _env_bool("DFLASH_STATS_MEMORY_DURING_ACTIVE", False):
+            try:
+                import mlx.core as mx
 
-            active_mem_gb = mx.get_active_memory() / 1e9
-            peak_mem_gb = mx.get_peak_memory() / 1e9
-            cache_mem_gb = mx.get_cache_memory() / 1e9
-        except Exception:
-            active_mem_gb = peak_mem_gb = cache_mem_gb = 0.0
+                active_mem_gb = mx.get_active_memory() / 1e9
+                peak_mem_gb = mx.get_peak_memory() / 1e9
+                cache_mem_gb = mx.get_cache_memory() / 1e9
+                self._last_memory_stats = (active_mem_gb, peak_mem_gb, cache_mem_gb)
+            except Exception:
+                active_mem_gb = peak_mem_gb = cache_mem_gb = 0.0
 
         running_requests: list[dict[str, Any]] = []
         if self._active is not None:
@@ -600,6 +821,7 @@ class DFlashEngine(BatchedEngine):
             running_requests.append(
                 {
                     "request_id": f"{self._active.mode}-active",
+                    "mode": self._active.mode,
                     "status": "running",
                     "phase": (
                         "generation" if self._active.first_token_at else "prefill"
@@ -622,8 +844,8 @@ class DFlashEngine(BatchedEngine):
                     "ngram_cycles": self._active.ngram_cycles,
                     "ngram_fallback_cycles": self._active.ngram_fallback_cycles,
                     "ngram_tool_guard_cycles": self._active.ngram_tool_guard_cycles,
-                    "cache_hit_type": None,
-                    "cached_tokens": 0,
+                    "cache_hit_type": self._active.cache_hit_type,
+                    "cached_tokens": self._active.cached_tokens,
                     "progress": 0.0,
                 }
             )
@@ -699,4 +921,4 @@ class DFlashEngine(BatchedEngine):
         }
 
     def get_cache_stats(self) -> dict[str, Any] | None:
-        return None
+        return self._ddtree_prefix_cache.get_stats()

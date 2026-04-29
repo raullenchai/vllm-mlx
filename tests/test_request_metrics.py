@@ -24,3 +24,5 @@ def test_finish_uses_engine_ttft_for_single_chunk_generation_tps(monkeypatch):
     assert entry is not None
     assert entry["ttft"] == 2.0
     assert entry["generation_tps"] == 12.5
+    assert entry["decode_tps"] == 12.5
+    assert entry["effective_tps"] == 10.0

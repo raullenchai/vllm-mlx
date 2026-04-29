@@ -44,7 +44,7 @@ _TREE_CONV_KERNEL_ENABLED = os.environ.get("DDTREE_TREE_CONV_KERNEL", "1").lower
     "false",
 )
 _EXACT_TREE_ATTENTION = os.environ.get(
-    "DDTREE_EXACT_TREE_ATTENTION", "0"
+    "DDTREE_EXACT_TREE_ATTENTION", "auto"
 ).lower()
 _EXACT_TREE_ATTENTION_MIN_PREFIX = int(
     os.environ.get("DDTREE_EXACT_TREE_ATTENTION_MIN_PREFIX", "8192")

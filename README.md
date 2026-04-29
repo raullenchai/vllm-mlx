@@ -582,7 +582,6 @@ target model and DFlash drafter, but enables DDTree verification with
 ```bash
 uv run rapid-mlx serve /Users/samuelfajreldines/dev/models/Qwen3.6-35B-A3B-UD-Q4_K_XL-mlx \
   --drafter /Users/samuelfajreldines/dev/models/Qwen3.6-35B-A3B-DFlash \
-  --dflash-no-adaptive \
   --dflash-ddtree-budget 4 \
   --dflash-fallback-mode ngram \
   --ngram-num-draft-tokens 4 \
@@ -602,9 +601,16 @@ uv run rapid-mlx serve /Users/samuelfajreldines/dev/models/Qwen3.6-35B-A3B-UD-Q4
 
 For raw throughput benchmarks, add `--no-thinking` so Qwen does not spend extra
 tokens in reasoning. For coding agents such as opencode, keep the reasoning
-parser and tool parser enabled as shown above.
+parser and tool parser enabled as shown above. Always match the target and
+drafter family exactly, for example Qwen3.6 target with Qwen3.6 DFlash drafter;
+mixing a Qwen3.6 target with a Qwen3.5 drafter lowers acceptance and makes
+DDTree look artificially slow. Use the same `DFLASH_DRAFT_SINK` and
+`DFLASH_DRAFT_WINDOW` values across benchmarks when comparing Rapid-MLX,
+standalone DDTree, and DFlash.
 
-DDTree uses the drafter's native block size by default. Avoid forcing block size
+DDTree uses adaptive block sizing by default. Avoid `--dflash-no-adaptive` in
+speed comparisons unless you are explicitly isolating the adaptive controller;
+pinning the block size can hide DDTree's gain. Also avoid forcing block size
 `2`: it prevents DDTree from batching enough candidate tokens to beat the base
 DFlash path. If a DDTree block size override is less than or equal to the tree
 budget, Rapid-MLX ignores it and falls back to the drafter default.
@@ -639,11 +645,21 @@ Mutually exclusive with `--enable-mtp` and `--mllm`.
 
 ### Live TUI Monitor
 
-`--tui` opens a full-screen dashboard alongside the server: status, model, Metal memory, prompt/output token totals, the last completed request (gen tok/s, prefill tok/s, ttft, finish reason), per-request averages, recent requests, message previews, and (when DFlash is enabled) lifetime acceptance ratio + adaptive block-size bounds. Press `q` or Ctrl-C to exit.
+`--tui` opens a full-screen dashboard alongside the server: status, model, Metal memory, prompt/output token totals, the last completed request, per-request averages, recent requests, message previews, and (when DFlash is enabled) lifetime acceptance ratio + adaptive block-size bounds. Press `q` or Ctrl-C to exit.
 
 ```bash
 rapid-mlx serve <model> --tui
 ```
+
+For DFlash/DDTree requests, the request table uses these columns:
+`time`, `surface`, `input`, `output`, `TTFT`, `prefill`, `decode`, `end-to-end`,
+`perf`, `path`, `acc/cyc`, `block`, and `finish`. `TTFT` is time to first token,
+`decode` is `output_tokens / (total_time - TTFT)`, and `end-to-end` is
+`output_tokens / total_time`. `perf` compares the request's `decode` throughput
+against the best observed decode throughput in the current TUI history,
+preferring a no-speculation/zero-acceptance request as the baseline when one is
+available. `path` and `acc/cyc` show which speculative path ran and how many
+tokens it accepted per cycle.
 
 Also: logprobs API, structured JSON output (`response_format`), continuous batching, KV cache quantization (`--kv-cache-quantization`), and [2100+ tests](tests/).
 

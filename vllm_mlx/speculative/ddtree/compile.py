@@ -10,12 +10,16 @@ Takes the tree structure (Python/NumPy) and produces:
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import mlx.core as mx
 import numpy as np
 
 from .tree import DDTree, compute_dfs_order
+
+
+_STRUCTURE_CACHE_MAX = 256
+_structure_cache: dict[tuple[Any, ...], tuple[mx.array, mx.array, mx.array, list[int], list[int]]] = {}
 
 
 class CompiledTree(NamedTuple):
@@ -61,20 +65,33 @@ def compile_tree(
     if tree.node_count > 0:
         positions[1:] = prefix_len + tree.node_depths
     position_ids = mx.array(positions, dtype=mx.int32)
-    depths = [0]
-    if tree.node_count > 0:
-        depths.extend(int(depth) for depth in tree.node_depths.tolist())
+    structure_key = (
+        tree_size,
+        tuple(int(parent) for parent in tree.parents),
+        tree.visibility.tobytes(),
+    )
+    cached = _structure_cache.get(structure_key)
+    if cached is None:
+        depths = [0]
+        if tree.node_count > 0:
+            depths.extend(int(depth) for depth in tree.node_depths.tolist())
 
-    # 3. Attention mask: tree-to-tree visibility only. Prefix attention is
-    # rebuilt in verify from the actual cache offset to avoid prefix-sized
-    # allocations during compile.
-    mask = np.where(tree.visibility, 0.0, -np.inf).astype(np.float32)
-    attention_mask = mx.array(mask)[None, None, :, :]  # (1, 1, T, T)
+        # 3. Attention mask: tree-to-tree visibility only. Prefix attention is
+        # rebuilt in verify from the actual cache offset to avoid prefix-sized
+        # allocations during compile.
+        mask = np.where(tree.visibility, 0.0, -np.inf).astype(np.float32)
+        attention_mask = mx.array(mask)[None, None, :, :]  # (1, 1, T, T)
 
-    # 4. DFS ordering for linear layers
-    dfs, inv_dfs = compute_dfs_order(tree)
-    dfs_order = mx.array(dfs, dtype=mx.int32)
-    inv_dfs_order = mx.array(inv_dfs, dtype=mx.int32)
+        # 4. DFS ordering for linear layers
+        dfs, inv_dfs = compute_dfs_order(tree)
+        dfs_order = mx.array(dfs, dtype=mx.int32)
+        inv_dfs_order = mx.array(inv_dfs, dtype=mx.int32)
+        parents = list(tree.parents)
+        cached = (attention_mask, dfs_order, inv_dfs_order, parents, depths)
+        if len(_structure_cache) >= _STRUCTURE_CACHE_MAX:
+            _structure_cache.pop(next(iter(_structure_cache)))
+        _structure_cache[structure_key] = cached
+    attention_mask, dfs_order, inv_dfs_order, parents, depths = cached
 
     return CompiledTree(
         input_ids=input_ids,
@@ -82,7 +99,7 @@ def compile_tree(
         attention_mask=attention_mask,
         dfs_order=dfs_order,
         inv_dfs_order=inv_dfs_order,
-        parents=list(tree.parents),
+        parents=parents,
         depths=depths,
         tree_size=tree_size,
     )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import copy
 import time
 from typing import Any
 
@@ -10,6 +11,7 @@ from dflash.model_mlx import (
     AdaptiveBlockSizeConfig,
     PromptPrefillState,
     _patch_model,
+    derive_prefill_prefix_state,
     next_adaptive_block_size,
     prefill_prompt,
     tokenize_prompt,
@@ -202,7 +204,7 @@ def _build_tree_from_mlx_logits(
     sort_order = mx.argsort(-top_logits, axis=-1)
     top_token_ids = mx.take_along_axis(top_indices, sort_order, axis=-1)
     top_logits = mx.take_along_axis(top_logits, sort_order, axis=-1)
-    if _env_bool("LOCAL_DFLASH_DDTREE_APPROX_LOGPROBS", False):
+    if _env_bool("LOCAL_DFLASH_DDTREE_APPROX_LOGPROBS", True):
         normalizer = mx.logsumexp(top_logits, axis=-1, keepdims=True)
     else:
         normalizer = mx.logsumexp(logits, axis=-1, keepdims=True)
@@ -247,6 +249,8 @@ def generate_ddtree(
     stop_strings: list[str] | None = None,
     stop_after_strings: list[str] | None = None,
     should_stop: Any = None,
+    prefix_boundary: int = 0,
+    on_step: Any = None,
     ngram_num_draft_tokens: int | None = None,
     ngram_size: int | None = None,
     ngram_min_matches: int | None = None,
@@ -283,6 +287,17 @@ def generate_ddtree(
         capture_prefill_state=capture_prefill_state,
     )
     target_cache = prefill.target_cache
+    prefix_boundary_state = None
+    if capture_prefill_state and prefix_boundary > 0 and prefill.prefill_state is not None:
+        try:
+            boundary = min(int(prefix_boundary), prompt_len)
+            if boundary > 0:
+                prefix_boundary_state = derive_prefill_prefix_state(
+                    prefill.prefill_state,
+                    boundary,
+                )
+        except Exception:
+            prefix_boundary_state = None
     tree_aware_commit = _can_tree_aware_commit(target_cache)
     draft_cache = _make_draft_cache(draft_model)
     lm_holder = getattr(target_model, "language_model", target_model)
@@ -307,6 +322,7 @@ def generate_ddtree(
     staged_first = greedy_tokens_with_mask(prefill_logits[:, -1, :], suppress_mask).reshape(-1)
 
     generated_token_ids: list[int] = []
+    generated_hidden_chunks: list[mx.array] = []
     acceptance_lengths: list[int] = []
     acceptance_ratios: list[float] = []
     block_size_history: list[int] = []
@@ -361,6 +377,11 @@ def generate_ddtree(
     _adaptive_hysteresis: dict[str, int] = {"grow": 0, "shrink": 0}
     eos_token_ids = _tokenizer_eos_token_ids(tokenizer)
     check_text_stops = bool(stop_strings or stop_after_strings)
+    max_stop_chars = (
+        max((len(s) for s in [*(stop_strings or ()), *(stop_after_strings or ())]), default=0)
+        + 32
+    )
+    stop_text_tail = ""
 
     while len(generated_token_ids) < max_new_tokens:
         if stop_requested():
@@ -410,14 +431,13 @@ def generate_ddtree(
                 cache=target_cache,
                 capture_layer_ids=capture_layer_ids,
             )
-            mx.eval(verify_logits)
+            posterior_mx = greedy_tokens_with_mask(verify_logits[0], suppress_mask)
+            mx.eval(posterior_mx)
             phase_timings_us["ngram_verify"] += (
                 time.perf_counter_ns() - verify_started
             ) / 1_000.0
 
-            posterior_tokens = greedy_tokens_with_mask(
-                verify_logits[0], suppress_mask
-            ).tolist()
+            posterior_tokens = posterior_mx.tolist()
             ngram_draft_accepted = 0
             for draft_token, posterior_token in zip(draft_tokens, posterior_tokens):
                 if int(draft_token) != int(posterior_token):
@@ -515,10 +535,11 @@ def generate_ddtree(
                 tree_aware_linear=True,
                 tree_cache_state=tree_cache_state,
             )
-            mx.eval(verify_logits)
+            posterior_mx = greedy_tokens_with_mask(verify_logits[0], suppress_mask)
+            mx.eval(posterior_mx)
             phase_timings_us["tree_verify"] += (time.perf_counter_ns() - verify_started) / 1_000.0
 
-            posterior_tokens = greedy_tokens_with_mask(verify_logits[0], suppress_mask).tolist()
+            posterior_tokens = posterior_mx.tolist()
             accepted_indices, bonus_token = follow_verified_tree(tree.child_maps, posterior_tokens)
             accepted_token_ids = _tree_token_ids(tree, root_token, accepted_indices)
             acceptance_len = len(accepted_token_ids)
@@ -572,16 +593,64 @@ def generate_ddtree(
                 stop_hit = True
                 break
         generated_token_ids.extend(emitted)
+        if emitted:
+            generated_hidden_chunks.append(target_hidden[:, : len(emitted), :])
         staged_first = mx.array([bonus_token], dtype=mx.uint32)
+        delta_text = tokenizer.decode(emitted) if emitted else ""
 
-        if check_text_stops and generated_token_ids:
+        if check_text_stops and delta_text:
+            probe_text = stop_text_tail + delta_text
             _, text_stop_hit = _truncate_for_stop_text(
-                tokenizer.decode(generated_token_ids),
+                probe_text,
                 stop_strings=stop_strings,
                 stop_after_strings=stop_after_strings,
             )
             if text_stop_hit:
                 stop_hit = True
+            stop_text_tail = probe_text[-max_stop_chars:]
+
+        if on_step is not None and emitted:
+            step_text = delta_text
+            if step_text:
+                try:
+                    on_step(
+                        {
+                            "text": step_text,
+                            "generated_token_ids": emitted,
+                            "prompt_tokens": prompt_len,
+                            "prefill_seconds": prefill_seconds,
+                            "generated_tokens": len(generated_token_ids),
+                            "proposed_tokens": sum(block_size_history),
+                            "accepted_tokens": sum(acceptance_lengths),
+                            "speculative_steps": cycles_completed,
+                            "avg_acceptance_ratio": (
+                                sum(acceptance_lengths) / max(sum(block_size_history), 1)
+                            ),
+                            "block_size_history": tuple(block_size_history),
+                            "avg_tree_node_count": (
+                                sum(tree_node_count_history)
+                                / len(tree_node_count_history)
+                                if tree_node_count_history
+                                else 0.0
+                            ),
+                            "ddtree_fast_path_ratio": (
+                                fast_path_count / ddtree_cycles_completed
+                                if ddtree_cycles_completed > 0
+                                else 0.0
+                            ),
+                            "tree_budget": tree_budget,
+                            "ngram_acceptance_ratio": (
+                                ngram_accepted_tokens / ngram_proposed_tokens
+                                if ngram_proposed_tokens > 0
+                                else 0.0
+                            ),
+                            "ngram_cycles_completed": ngram_cycles_completed,
+                            "ngram_fallback_cycles": ngram_fallback_cycles,
+                            "ngram_tool_guard_cycles": ngram_tool_guard_cycles,
+                        }
+                    )
+                except Exception:
+                    pass
 
         if stop_hit:
             break
@@ -594,6 +663,12 @@ def generate_ddtree(
                 adaptive_block_size,
                 hysteresis_state=_adaptive_hysteresis,
             )
+        clear_interval = int(os.environ.get("DDTREE_CLEAR_CACHE_INTERVAL", "64"))
+        if clear_interval > 0 and cycles_completed % clear_interval == 0:
+            try:
+                mx.clear_cache()
+            except Exception:
+                pass
 
     generated_token_ids = generated_token_ids[:max_new_tokens]
     text = tokenizer.decode(generated_token_ids) if generated_token_ids else ""
@@ -613,9 +688,30 @@ def generate_ddtree(
         if ngram_proposed_tokens > 0
         else 0.0
     )
+    extended_prompt_cache_state = None
+    if (
+        capture_prefill_state
+        and prefill.prefill_state is not None
+        and generated_token_ids
+        and not (stop_strings or stop_after_strings)
+    ):
+        try:
+            extended_hidden = mx.concatenate(
+                [prefill.hidden, *generated_hidden_chunks],
+                axis=1,
+            )
+            extended_prompt_cache_state = PromptPrefillState(
+                prompt_tokens=tuple([*prompt_token_ids, *generated_token_ids]),
+                target_cache=copy.deepcopy(target_cache),
+                hidden=extended_hidden,
+                last_logits=None,
+            )
+        except Exception:
+            extended_prompt_cache_state = None
 
     return {
         "text": text,
+        "prompt_token_ids": prompt_token_ids,
         "generated_token_ids": generated_token_ids,
         "finish_reason": "cancelled" if cancelled else ("stop" if stop_hit else "length"),
         "prompt_tokens": prompt_len,
@@ -645,7 +741,7 @@ def generate_ddtree(
         ),
         "max_tree_node_count": max(tree_node_count_history) if tree_node_count_history else 0,
         "adaptive_block_size": bool(adaptive_block_size and adaptive_block_size.enabled),
-        "prefix_cache_source": "none",
+        "prefix_cache_source": "dflash_prefill_state" if prefill.reused_prefix_tokens else "none",
         "peak_memory_gb": mx.get_peak_memory() / 1e9,
         "elapsed": elapsed,
         "prefill_hidden_bytes": prefill.hidden_bytes,
@@ -654,6 +750,8 @@ def generate_ddtree(
         "prefill_working_set_bytes": prefill.working_set_bytes,
         "prompt_cache_state_bytes": prefill.prefill_state_bytes,
         "prompt_cache_state": prefill.prefill_state if capture_prefill_state else None,
+        "extended_prompt_cache_state": extended_prompt_cache_state,
+        "prefix_boundary_state": prefix_boundary_state,
         "engine": "ddtree-ngram" if ngram_decoder is not None else "ddtree",
         "target_turboquant_bits": target_turboquant_bits,
         "ddtree_commit": "tree_aware" if tree_aware_commit else "slow_path",

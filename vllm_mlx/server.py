@@ -527,6 +527,8 @@ def load_model(
             ngram_disable_threshold=dflash_disable_threshold,
             ngram_disable_window=dflash_disable_window,
             ngram_disable_cooldown=dflash_disable_cooldown,
+            scheduler_config=scheduler_config,
+            stream_interval=stream_interval,
             gpu_memory_utilization=gpu_memory_utilization,
         )
     else:

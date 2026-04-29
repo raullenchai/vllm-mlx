@@ -101,6 +101,15 @@ class RequestRecorder:
         engine_ttft: float | None = None,
         acceptance_ratio: float | None = None,
         block_size: int | None = None,
+        spec_mode: str | None = None,
+        ddtree_fast_path_ratio: float | None = None,
+        ngram_acceptance_ratio: float | None = None,
+        ngram_cycles: int | None = None,
+        ngram_fallback_cycles: int | None = None,
+        ngram_tool_guard_cycles: int | None = None,
+        speculative_accepted_tokens: int | None = None,
+        speculative_proposed_tokens: int | None = None,
+        speculative_steps: int | None = None,
     ) -> None:
         now = time.time()
         with self._lock:
@@ -166,6 +175,13 @@ class RequestRecorder:
             record_block_size = (
                 int(block_size) if block_size is not None else None
             )
+            decode_window = (
+                elapsed - ttft
+                if ttft is not None and elapsed > ttft + 0.01
+                else 0.0
+            )
+            decode_tps = (gtoks / decode_window) if decode_window > 0.01 else 0.0
+            end_to_end_tps = (gtoks / elapsed) if elapsed > 0.01 else 0.0
 
             record = {
                 "request_id": entry["request_id"],
@@ -177,6 +193,8 @@ class RequestRecorder:
                 "prompt_tokens": ptoks,
                 "generated_tokens": gtoks,
                 "generation_tps": generation_tps,
+                "decode_tps": decode_tps,
+                "effective_tps": end_to_end_tps,
                 "prompt_tps": prompt_tps,
                 "finish_reason": finish_reason or ("error" if error else "stop"),
                 "message_preview": entry.get("message_preview") or "",
@@ -184,6 +202,15 @@ class RequestRecorder:
                 "error": error,
                 "acceptance_ratio": record_acceptance,
                 "block_size": record_block_size,
+                "spec_mode": spec_mode,
+                "ddtree_fast_path_ratio": ddtree_fast_path_ratio,
+                "ngram_acceptance_ratio": ngram_acceptance_ratio,
+                "ngram_cycles": ngram_cycles,
+                "ngram_fallback_cycles": ngram_fallback_cycles,
+                "ngram_tool_guard_cycles": ngram_tool_guard_cycles,
+                "speculative_accepted_tokens": speculative_accepted_tokens,
+                "speculative_proposed_tokens": speculative_proposed_tokens,
+                "speculative_steps": speculative_steps,
             }
             self._entries.append(record)
 

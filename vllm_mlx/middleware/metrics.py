@@ -96,11 +96,25 @@ class MetricsMiddleware:
         engine_ttft: float | None = None
         engine_acceptance: float | None = None
         engine_block_size: int | None = None
+        engine_spec_mode: str | None = None
+        engine_ddtree_fast_path: float | None = None
+        engine_ngram_acceptance: float | None = None
+        engine_ngram_cycles: int | None = None
+        engine_ngram_fallback_cycles: int | None = None
+        engine_ngram_tool_guard_cycles: int | None = None
+        engine_accepted_tokens: int | None = None
+        engine_proposed_tokens: int | None = None
+        engine_speculative_steps: int | None = None
 
         def poll_engine_stats() -> None:
             """Snapshot engine's per-request tps/ttft/acceptance during the stream."""
             nonlocal engine_gen_tps, engine_ttft
             nonlocal engine_acceptance, engine_block_size
+            nonlocal engine_spec_mode, engine_ddtree_fast_path
+            nonlocal engine_ngram_acceptance, engine_ngram_cycles
+            nonlocal engine_ngram_fallback_cycles, engine_ngram_tool_guard_cycles
+            nonlocal engine_accepted_tokens, engine_proposed_tokens
+            nonlocal engine_speculative_steps
             try:
                 from ..config import get_config
 
@@ -130,6 +144,57 @@ class MetricsMiddleware:
                     if block is not None:
                         try:
                             engine_block_size = int(block)
+                        except Exception:
+                            pass
+                    mode = r.get("mode")
+                    if mode:
+                        engine_spec_mode = str(mode)
+                    fast_path = r.get("ddtree_fast_path_ratio")
+                    if fast_path is not None:
+                        try:
+                            engine_ddtree_fast_path = float(fast_path)
+                        except Exception:
+                            pass
+                    ngram_accept = r.get("ngram_acceptance_ratio")
+                    if ngram_accept is not None:
+                        try:
+                            engine_ngram_acceptance = float(ngram_accept)
+                        except Exception:
+                            pass
+                    value = r.get("ngram_cycles")
+                    if value is not None:
+                        try:
+                            engine_ngram_cycles = int(value)
+                        except Exception:
+                            pass
+                    value = r.get("ngram_fallback_cycles")
+                    if value is not None:
+                        try:
+                            engine_ngram_fallback_cycles = int(value)
+                        except Exception:
+                            pass
+                    value = r.get("ngram_tool_guard_cycles")
+                    if value is not None:
+                        try:
+                            engine_ngram_tool_guard_cycles = int(value)
+                        except Exception:
+                            pass
+                    value = r.get("accepted_tokens")
+                    if value is not None:
+                        try:
+                            engine_accepted_tokens = int(value)
+                        except Exception:
+                            pass
+                    value = r.get("proposed_tokens")
+                    if value is not None:
+                        try:
+                            engine_proposed_tokens = int(value)
+                        except Exception:
+                            pass
+                    value = r.get("speculative_steps")
+                    if value is not None:
+                        try:
+                            engine_speculative_steps = int(value)
                         except Exception:
                             pass
             except Exception:
@@ -227,6 +292,15 @@ class MetricsMiddleware:
                             engine_ttft=engine_ttft,
                             acceptance_ratio=engine_acceptance,
                             block_size=engine_block_size,
+                            spec_mode=engine_spec_mode,
+                            ddtree_fast_path_ratio=engine_ddtree_fast_path,
+                            ngram_acceptance_ratio=engine_ngram_acceptance,
+                            ngram_cycles=engine_ngram_cycles,
+                            ngram_fallback_cycles=engine_ngram_fallback_cycles,
+                            ngram_tool_guard_cycles=engine_ngram_tool_guard_cycles,
+                            speculative_accepted_tokens=engine_accepted_tokens,
+                            speculative_proposed_tokens=engine_proposed_tokens,
+                            speculative_steps=engine_speculative_steps,
                         )
             except Exception as exc:  # never let metrics break the response
                 logger.debug("metrics middleware error: %s", exc)

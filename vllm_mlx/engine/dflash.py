@@ -44,6 +44,13 @@ _TOOL_STOP_AFTER_STRINGS = (
 )
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _init_dflash_step_thread() -> None:
     """Mirror engine_core._init_mlx_step_thread for our private executor."""
     import mlx.core as mx

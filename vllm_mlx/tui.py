@@ -140,8 +140,11 @@ def _entry_prefill_tps(item: dict) -> float:
 
 def _entry_decode_tps(item: dict) -> float:
     explicit = item.get("decode_tps")
-    if explicit is not None:
+    if explicit is not None and _num(explicit) > 0:
         return _num(explicit)
+    generation_tps = item.get("generation_tps")
+    if generation_tps is not None and _num(generation_tps) > 0:
+        return _num(generation_tps)
     elapsed = _entry_elapsed(item)
     ttft = _entry_ttft(item)
     if ttft is None:

@@ -181,6 +181,8 @@ class RequestRecorder:
                 else 0.0
             )
             decode_tps = (gtoks / decode_window) if decode_window > 0.01 else 0.0
+            if has_engine_gen_tps and decode_tps <= 0:
+                decode_tps = generation_tps
             end_to_end_tps = (gtoks / elapsed) if elapsed > 0.01 else 0.0
 
             record = {

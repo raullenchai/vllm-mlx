@@ -307,6 +307,22 @@ class DFlashEngine(BatchedEngine):
         loop = asyncio.get_running_loop()
         executor = self._executor
         assert executor is not None, "DFlashEngine not started"
+        ddtree_block_size = (
+            self._ddtree_block_size
+            if self._ddtree_block_size is not None
+            else self._block_size_override
+        )
+        if (
+            ddtree_block_size is not None
+            and self._ddtree_budget > 0
+            and int(ddtree_block_size) <= self._ddtree_budget
+        ):
+            logger.warning(
+                "[DDTree] Ignoring block_size=%s because it is <= tree_budget=%s; using drafter default.",
+                ddtree_block_size,
+                self._ddtree_budget,
+            )
+            ddtree_block_size = None
 
         def _run():
             return generate_ddtree(
@@ -316,11 +332,7 @@ class DFlashEngine(BatchedEngine):
                 prompt_tokens=prompt,
                 max_new_tokens=max_tokens,
                 tree_budget=self._ddtree_budget,
-                block_size=(
-                    self._ddtree_block_size
-                    if self._ddtree_block_size is not None
-                    else self._block_size_override
-                ),
+                block_size=ddtree_block_size,
                 adaptive_block_size=self._adaptive_cfg,
                 target_turboquant_bits=self._turboquant_bits,
                 stop_strings=stop,
@@ -329,24 +341,32 @@ class DFlashEngine(BatchedEngine):
                 ),
                 ngram_num_draft_tokens=(
                     self._ngram_num_draft_tokens
-                    if self._ngram_first_enabled
+                    if self._ngram_first_enabled and not tools_requested
                     else None
                 ),
-                ngram_size=self._ngram_size if self._ngram_first_enabled else None,
+                ngram_size=(
+                    self._ngram_size
+                    if self._ngram_first_enabled and not tools_requested
+                    else None
+                ),
                 ngram_min_matches=(
-                    self._ngram_min_matches if self._ngram_first_enabled else None
+                    self._ngram_min_matches
+                    if self._ngram_first_enabled and not tools_requested
+                    else None
                 ),
                 ngram_disable_threshold=(
                     self._ngram_disable_threshold
-                    if self._ngram_first_enabled
+                    if self._ngram_first_enabled and not tools_requested
                     else None
                 ),
                 ngram_disable_window=(
-                    self._ngram_disable_window if self._ngram_first_enabled else None
+                    self._ngram_disable_window
+                    if self._ngram_first_enabled and not tools_requested
+                    else None
                 ),
                 ngram_disable_cooldown=(
                     self._ngram_disable_cooldown
-                    if self._ngram_first_enabled
+                    if self._ngram_first_enabled and not tools_requested
                     else None
                 ),
             )

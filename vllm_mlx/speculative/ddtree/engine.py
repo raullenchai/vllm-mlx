@@ -6,25 +6,21 @@ from typing import Any
 
 import mlx.core as mx
 import numpy as np
-from mlx_lm.models.cache import make_prompt_cache, trim_prompt_cache
-
 from dflash.model_mlx import (
     AdaptiveBlockSizeConfig,
     PromptPrefillState,
-    _make_target_cache,
     _patch_model,
     next_adaptive_block_size,
     prefill_prompt,
     tokenize_prompt,
 )
 from dflash_mlx.runtime import (
-    _lm_head_logits,
-    _eval_logits_and_captured,
     build_suppress_token_mask,
     extract_context_feature_from_dict,
     greedy_tokens_with_mask,
     target_forward_with_hidden_states,
 )
+from mlx_lm.models.cache import make_prompt_cache
 
 from ..prompt_lookup import PromptLookupDecoder
 
@@ -111,7 +107,11 @@ def _looks_like_tool_call_draft(
 
 def _import_ddtree_modules() -> tuple[Any, Any, Any, Any, Any, Any, Any]:
     try:
-        from .cache import snapshot_caches, slow_path_commit, tree_aware_path_commit
+        from .cache import (
+            slow_path_commit,
+            snapshot_caches,
+            tree_aware_path_commit,
+        )
         from .compile import compile_tree
         from .tree import build_ddtree_tree_from_topk, follow_verified_tree
         from .verify import tree_verify_forward
@@ -215,6 +215,22 @@ def _build_tree_from_mlx_logits(
     )
 
 
+def _make_draft_cache(draft_model: Any) -> list[Any]:
+    try:
+        from dflash_mlx.model import ContextOnlyDraftKVCache
+    except ImportError:
+        if hasattr(draft_model, "make_cache"):
+            return draft_model.make_cache()
+        return make_prompt_cache(draft_model)
+
+    draft_sink = int(os.environ.get("DFLASH_DRAFT_SINK", "64"))
+    draft_window = int(os.environ.get("DFLASH_DRAFT_WINDOW", "1024"))
+    return [
+        ContextOnlyDraftKVCache(sink_size=draft_sink, window_size=draft_window)
+        for _ in range(len(draft_model.layers))
+    ]
+
+
 def generate_ddtree(
     *,
     target_model: Any,
@@ -268,7 +284,7 @@ def generate_ddtree(
     )
     target_cache = prefill.target_cache
     tree_aware_commit = _can_tree_aware_commit(target_cache)
-    draft_cache = make_prompt_cache(draft_model)
+    draft_cache = _make_draft_cache(draft_model)
     lm_holder = getattr(target_model, "language_model", target_model)
     lm_head = getattr(target_model, "lm_head", None) or getattr(lm_holder, "lm_head", None)
     vocab_size = getattr(getattr(lm_head, "weight", None), "shape", (0,))[0]
@@ -316,6 +332,7 @@ def generate_ddtree(
     ngram_tool_guard_cycles = 0
     ngram_proposed_tokens = 0
     ngram_accepted_tokens = 0
+    ngram_disabled_for_request = False
     if ngram_num_draft_tokens is not None:
         ngram_decoder = PromptLookupDecoder(
             num_draft_tokens=max(1, int(ngram_num_draft_tokens)),
@@ -360,7 +377,9 @@ def generate_ddtree(
 
         draft_tokens: list[int] = []
         if ngram_decoder is not None:
-            if ngram_cooldown_remaining > 0:
+            if ngram_disabled_for_request:
+                ngram_disabled_cycles += 1
+            elif ngram_cooldown_remaining > 0:
                 ngram_disabled_cycles += 1
                 ngram_cooldown_remaining -= 1
             else:
@@ -424,6 +443,7 @@ def generate_ddtree(
                     else 0.0
                 )
                 if recent_ratio < ngram_threshold:
+                    ngram_disabled_for_request = True
                     ngram_cooldown_remaining = ngram_cooldown
                     ngram_recent.clear()
 
@@ -446,7 +466,6 @@ def generate_ddtree(
                     committed_hidden_raw,
                     list(draft_model.config.target_layer_ids),
                 )
-            mx.eval(target_hidden)
             phase_timings_us["commit"] += (
                 time.perf_counter_ns() - commit_started
             ) / 1_000.0
@@ -464,11 +483,6 @@ def generate_ddtree(
             draft_logits = None
             if block_len > 1:
                 draft_logits = draft_model(block_token_ids[None], target_hidden, draft_cache)
-                if (
-                    draft_model.config.sliding_window_size is None
-                    and (trim_n := draft_cache[0].offset - (prompt_len + len(generated_token_ids))) > 0
-                ):
-                    trim_prompt_cache(draft_cache, trim_n)
             phase_timings_us["draft"] += (time.perf_counter_ns() - draft_started) / 1_000.0
 
             build_started = time.perf_counter_ns()
@@ -524,7 +538,6 @@ def generate_ddtree(
                     list(draft_model.config.target_layer_ids),
                     accepted_idx_array,
                 )
-                mx.eval(target_hidden)
             else:
                 if cache_snapshot is None:
                     raise RuntimeError("DDTree slow-path commit missing cache snapshot")
@@ -540,7 +553,6 @@ def generate_ddtree(
                     committed_hidden_raw,
                     list(draft_model.config.target_layer_ids),
                 )
-                mx.eval(target_hidden)
             phase_timings_us["commit"] += (time.perf_counter_ns() - commit_started) / 1_000.0
             if tree_aware_commit:
                 fast_path_count += 1
@@ -669,4 +681,5 @@ def generate_ddtree(
         "ngram_accepted_tokens": ngram_accepted_tokens,
         "ngram_acceptance_ratio": ngram_acceptance_ratio,
         "ngram_cooldown_remaining": ngram_cooldown_remaining,
+        "ngram_disabled_for_request": ngram_disabled_for_request,
     }

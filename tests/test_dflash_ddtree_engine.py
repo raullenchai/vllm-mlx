@@ -17,7 +17,7 @@ async def test_dflash_engine_routes_to_ddtree(monkeypatch):
 
     def fake_generate_ddtree(**kwargs):
         assert kwargs["tree_budget"] == 4
-        assert kwargs["block_size"] == 2
+        assert kwargs["block_size"] is None
         assert kwargs["stop_strings"] == ["STOP"]
         assert "</tool_call>" in kwargs["stop_after_strings"]
         return {

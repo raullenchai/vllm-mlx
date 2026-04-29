@@ -580,25 +580,60 @@ target model and DFlash drafter, but enables DDTree verification with
 `--dflash-ddtree-budget`. For Qwen3.6 A3B models, start with budget `4`.
 
 ```bash
-rapid-mlx serve /Users/samuelfajreldines/dev/models/Qwen3.6-35B-A3B-4bit \
+uv run rapid-mlx serve /Users/samuelfajreldines/dev/models/Qwen3.6-35B-A3B-UD-Q4_K_XL-mlx \
   --drafter /Users/samuelfajreldines/dev/models/Qwen3.6-35B-A3B-DFlash \
-  --dflash-block-size 2 \
   --dflash-no-adaptive \
   --dflash-ddtree-budget 4 \
-  --dflash-ddtree-block-size 2 \
+  --dflash-fallback-mode ngram \
+  --ngram-num-draft-tokens 4 \
+  --ngram-size 3 \
+  --ngram-min-matches 1 \
   --served-model-name qwen3.6-35b-a3b-dflash-local \
   --port 8010 \
   --default-temperature 0 \
   --reasoning-parser qwen3 \
   --tool-call-parser qwen3_coder_xml \
-  --enable-auto-tool-choice
+  --enable-auto-tool-choice \
+  --structured-cot \
+  --structured-cot-tools \
+  --structured-cot-token-budget 256 \
+  --tui
 ```
 
 For raw throughput benchmarks, add `--no-thinking` so Qwen does not spend extra
 tokens in reasoning. For coding agents such as opencode, keep the reasoning
 parser and tool parser enabled as shown above.
 
-The server exposes the same `/v1/chat/completions` API as the regular path. `/v1/status` adds a `dflash` block with the lifetime acceptance ratio, current block size, and observed bounds — also surfaced live in `--tui`.
+DDTree uses the drafter's native block size by default. Avoid forcing block size
+`2`: it prevents DDTree from batching enough candidate tokens to beat the base
+DFlash path. If a DDTree block size override is less than or equal to the tree
+budget, Rapid-MLX ignores it and falls back to the drafter default.
+
+The server exposes the same `/v1/chat/completions` API as the regular path. `/v1/status` adds a `dflash` block with the lifetime acceptance ratio, current block size, observed bounds, and mode (`ddtree-ngram` when n-gram is enabled):
+
+```bash
+curl -s http://127.0.0.1:8010/v1/status | python -m json.tool
+```
+
+`gen tok/s` in `--tui` counts all completion tokens returned to the client,
+including tokens accepted from prompt cache, n-gram, DDTree, or the target model.
+For real tool-calling requests, `current_block_size` and `observed_block_max`
+should be able to reach the drafter default (`16`) instead of staying pinned at
+`2`.
+
+To smoke-test with opencode in an empty folder:
+
+```bash
+rm -rf /tmp/rapid-mlx-snake && mkdir -p /tmp/rapid-mlx-snake
+cd /tmp/rapid-mlx-snake
+opencode run \
+  --model qwen3.6-35b-a3b-dflash-local \
+  --dangerously-skip-permissions \
+  "create the snake game in javascript and html"
+```
+
+As a performance sanity check, this branch completed that opencode snake-game
+smoke test in 35s versus 67s for the old block-2 DFlash baseline (about 1.9x).
 
 Mutually exclusive with `--enable-mtp` and `--mllm`.
 
@@ -664,7 +699,7 @@ Also: logprobs API, structured JSON output (`response_format`), continuous batch
 | `--dflash-block-max` | Adaptive block-size upper bound | `22` |
 | `--dflash-turboquant-bits` | KV-cache TurboQuant bits for the target (requires `mlx-turboquant`) | *(off)* |
 | `--dflash-ddtree-budget` | Enable DDTree verification with the given tree node budget. Use `4` for Qwen3.6 A3B. | `0` |
-| `--dflash-ddtree-block-size` | Override the DDTree draft block size. Defaults to `--dflash-block-size` or the drafter config. | *(from DFlash settings)* |
+| `--dflash-ddtree-block-size` | Override the DDTree draft block size. Values less than or equal to `--dflash-ddtree-budget` are ignored because they degenerate the tree verifier. | *(drafter config)* |
 
 ### Monitor TUI
 

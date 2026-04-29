@@ -608,12 +608,12 @@ DDTree look artificially slow. Use the same `DFLASH_DRAFT_SINK` and
 `DFLASH_DRAFT_WINDOW` values across benchmarks when comparing Rapid-MLX,
 standalone DDTree, and DFlash.
 
-DDTree uses adaptive block sizing by default. Avoid `--dflash-no-adaptive` in
-speed comparisons unless you are explicitly isolating the adaptive controller;
-pinning the block size can hide DDTree's gain. Also avoid forcing block size
-`2`: it prevents DDTree from batching enough candidate tokens to beat the base
-DFlash path. If a DDTree block size override is less than or equal to the tree
-budget, Rapid-MLX ignores it and falls back to the drafter default.
+DDTree uses adaptive block sizing by default, but raw throughput can improve
+with `--dflash-no-adaptive` on some dense checkpoints. Benchmark both modes for
+the target model and prompt mix. Avoid forcing block size `2`: it prevents
+DDTree from batching enough candidate tokens to beat the base DFlash path. If a
+DDTree block size override is less than or equal to the tree budget, Rapid-MLX
+ignores it and falls back to the drafter default.
 
 The server exposes the same `/v1/chat/completions` API as the regular path. `/v1/status` adds a `dflash` block with the lifetime acceptance ratio, current block size, observed bounds, and mode (`ddtree-ngram` when n-gram is enabled):
 
@@ -655,9 +655,10 @@ For DFlash/DDTree requests, the request table uses these columns:
 `time`, `surface`, `input`, `output`, `TTFT`, `prefill`, `tokens/s`, `path`,
 `acc/cyc`, `block`, and `finish`. `TTFT` is time to first token, `prefill` is
 prompt tokens per second, and `tokens/s` is total generated tokens divided by
-request elapsed time, regardless of whether those tokens came from cache,
-DDTree, n-gram, or target-model decoding. `path` and `acc/cyc` show which
-speculative path ran and how many tokens it accepted per cycle.
+generation time (`elapsed - TTFT` when valid, otherwise elapsed time),
+regardless of whether those tokens came from cache, DDTree, n-gram, or
+target-model decoding. `path` and `acc/cyc` show which speculative path ran and
+how many tokens it accepted per cycle.
 
 Also: logprobs API, structured JSON output (`response_format`), continuous batching, KV cache quantization (`--kv-cache-quantization`), and [2100+ tests](tests/).
 

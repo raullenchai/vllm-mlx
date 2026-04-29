@@ -272,6 +272,7 @@ class DFlashEngine(BatchedEngine):
         cache_entries = getattr(scheduler_config, "prefix_cache_size", 2) or 2
         cache_entries = int(os.environ.get("DFLASH_DDTREE_PREFIX_CACHE_ENTRIES", cache_entries))
         self._ddtree_prefix_cache = _DDTreePrefixStateCache(max_entries=cache_entries)
+        self._ddtree_capture_cache = _env_bool("DFLASH_DDTREE_CAPTURE_CACHE", False)
         self._last_memory_stats = (0.0, 0.0, 0.0)
         self._start_time = time.time()
 
@@ -414,32 +415,7 @@ class DFlashEngine(BatchedEngine):
                 return
             yield resp
 
-    async def _stream_ddtree(
-        self,
-        prompt: str,
-        max_tokens: int,
-        temperature: float,
-        top_p: float,
-        stop: list[str] | None,
-        tools_requested: bool,
-        prefix_boundary: int = 0,
-    ):
-        """Run the Rapid-MLX DDTree loop on the DFlash MLX worker thread."""
-        from ..speculative.ddtree.engine import generate_ddtree
-
-        if temperature not in (0, 0.0) or top_p not in (0, 0.0, 1, 1.0):
-            logger.debug(
-                "[DDTree] greedy DDTree path ignores sampler settings: temperature=%s top_p=%s",
-                temperature,
-                top_p,
-            )
-
-        loop = asyncio.get_running_loop()
-        executor = self._executor
-        assert executor is not None, "DFlashEngine not started"
-        stop_event = threading.Event()
-        queue: asyncio.Queue[Any] = asyncio.Queue()
-        sentinel = object()
+    def _effective_ddtree_block_size(self) -> int | None:
         ddtree_block_size = (
             self._ddtree_block_size
             if self._ddtree_block_size is not None
@@ -455,104 +431,154 @@ class DFlashEngine(BatchedEngine):
                 ddtree_block_size,
                 self._ddtree_budget,
             )
-            ddtree_block_size = None
+            return None
+        return ddtree_block_size
+
+    def _store_ddtree_cache_result(
+        self,
+        result: dict[str, Any],
+        prompt_token_ids: list[int],
+        prefix_boundary: int,
+    ) -> None:
+        if not self._ddtree_capture_cache:
+            return
+        if result.get("prompt_cache_state") is not None:
+            self._ddtree_prefix_cache.store(
+                list(result.get("prompt_token_ids") or ()),
+                result.get("prompt_cache_state"),
+            )
+        if result.get("extended_prompt_cache_state") is not None:
+            self._ddtree_prefix_cache.store(
+                [
+                    *list(result.get("prompt_token_ids") or ()),
+                    *list(result.get("generated_token_ids") or ()),
+                ],
+                result.get("extended_prompt_cache_state"),
+            )
+        if (
+            prefix_boundary > 0
+            and prefix_boundary < len(prompt_token_ids)
+            and result.get("prefix_boundary_state") is not None
+        ):
+            self._ddtree_prefix_cache.store(
+                prompt_token_ids[:prefix_boundary],
+                result.get("prefix_boundary_state"),
+            )
+
+    def _run_ddtree_sync(
+        self,
+        prompt: str,
+        max_tokens: int,
+        stop: list[str] | None,
+        tools_requested: bool,
+        prefix_boundary: int = 0,
+        on_step: Any = None,
+        should_stop: Any = None,
+        emit_step_text: bool = False,
+    ) -> dict[str, Any]:
+        from ..speculative.ddtree.engine import generate_ddtree, tokenize_prompt
+
+        prompt_array = tokenize_prompt(self._tokenizer, prompt)
+        prompt_token_ids = prompt_array.tolist()
+        cache_fetch = (
+            self._ddtree_prefix_cache.fetch(prompt_token_ids)
+            if self._ddtree_capture_cache
+            else SimpleNamespace(state=None, hit_type=None, cached_tokens=0)
+        )
+
+        result = generate_ddtree(
+            target_model=self._model,
+            draft_model=self._drafter,
+            tokenizer=self._tokenizer,
+            prompt_tokens=prompt_array,
+            max_new_tokens=max_tokens,
+            tree_budget=self._ddtree_budget,
+            block_size=self._effective_ddtree_block_size(),
+            adaptive_block_size=self._adaptive_cfg,
+            prefix_state=cache_fetch.state,
+            capture_prefill_state=self._ddtree_capture_cache,
+            target_turboquant_bits=self._turboquant_bits,
+            stop_strings=stop,
+            stop_after_strings=(
+                list(_TOOL_STOP_AFTER_STRINGS) if tools_requested else None
+            ),
+            prefix_boundary=prefix_boundary,
+            ngram_num_draft_tokens=(
+                self._ngram_num_draft_tokens if self._ngram_first_enabled else None
+            ),
+            ngram_size=self._ngram_size if self._ngram_first_enabled else None,
+            ngram_min_matches=(
+                self._ngram_min_matches if self._ngram_first_enabled else None
+            ),
+            ngram_disable_threshold=(
+                self._ngram_disable_threshold if self._ngram_first_enabled else None
+            ),
+            ngram_disable_window=(
+                self._ngram_disable_window if self._ngram_first_enabled else None
+            ),
+            ngram_disable_cooldown=(
+                self._ngram_disable_cooldown if self._ngram_first_enabled else None
+            ),
+            should_stop=should_stop,
+            on_step=on_step,
+            emit_step_text=emit_step_text,
+        )
+        self._store_ddtree_cache_result(result, prompt_token_ids, prefix_boundary)
+        self._ddtree_last = {
+            key: value
+            for key, value in result.items()
+            if key
+            not in {
+                "prompt_cache_state",
+                "prompt_token_ids",
+                "prefix_boundary_state",
+                "extended_prompt_cache_state",
+            }
+        }
+        result["cache_hit_type"] = cache_fetch.hit_type
+        result["cached_tokens"] = cache_fetch.cached_tokens
+        return result
+
+    async def _stream_ddtree(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        stop: list[str] | None,
+        tools_requested: bool,
+        prefix_boundary: int = 0,
+    ):
+        """Run the Rapid-MLX DDTree loop on the DFlash MLX worker thread."""
+        if temperature not in (0, 0.0) or top_p not in (0, 0.0, 1, 1.0):
+            logger.debug(
+                "[DDTree] greedy DDTree path ignores sampler settings: temperature=%s top_p=%s",
+                temperature,
+                top_p,
+            )
+
+        loop = asyncio.get_running_loop()
+        executor = self._executor
+        assert executor is not None, "DFlashEngine not started"
+        stop_event = threading.Event()
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        sentinel = object()
 
         def _run():
-            from ..speculative.ddtree.engine import tokenize_prompt
-
-            prompt_array = tokenize_prompt(self._tokenizer, prompt)
-            prompt_token_ids = prompt_array.tolist()
-            cache_fetch = self._ddtree_prefix_cache.fetch(prompt_token_ids)
-
             def _on_step(step: dict[str, Any]) -> None:
                 loop.call_soon_threadsafe(queue.put_nowait, step)
 
             try:
-                result = generate_ddtree(
-                target_model=self._model,
-                draft_model=self._drafter,
-                tokenizer=self._tokenizer,
-                prompt_tokens=prompt_array,
-                max_new_tokens=max_tokens,
-                tree_budget=self._ddtree_budget,
-                block_size=ddtree_block_size,
-                adaptive_block_size=self._adaptive_cfg,
-                prefix_state=cache_fetch.state,
-                capture_prefill_state=True,
-                target_turboquant_bits=self._turboquant_bits,
-                stop_strings=stop,
-                stop_after_strings=(
-                    list(_TOOL_STOP_AFTER_STRINGS) if tools_requested else None
-                ),
-                prefix_boundary=prefix_boundary,
-                ngram_num_draft_tokens=(
-                    self._ngram_num_draft_tokens
-                    if self._ngram_first_enabled
-                    else None
-                ),
-                ngram_size=(
-                    self._ngram_size
-                    if self._ngram_first_enabled
-                    else None
-                ),
-                ngram_min_matches=(
-                    self._ngram_min_matches
-                    if self._ngram_first_enabled
-                    else None
-                ),
-                ngram_disable_threshold=(
-                    self._ngram_disable_threshold
-                    if self._ngram_first_enabled
-                    else None
-                ),
-                ngram_disable_window=(
-                    self._ngram_disable_window
-                    if self._ngram_first_enabled
-                    else None
-                ),
-                ngram_disable_cooldown=(
-                    self._ngram_disable_cooldown
-                    if self._ngram_first_enabled
-                    else None
-                ),
-                should_stop=stop_event.is_set,
-                on_step=_on_step,
-            )
-                if result.get("prompt_cache_state") is not None:
-                    self._ddtree_prefix_cache.store(
-                        list(result.get("prompt_token_ids") or ()),
-                        result.get("prompt_cache_state"),
-                    )
-                if result.get("extended_prompt_cache_state") is not None:
-                    self._ddtree_prefix_cache.store(
-                        [
-                            *list(result.get("prompt_token_ids") or ()),
-                            *list(result.get("generated_token_ids") or ()),
-                        ],
-                        result.get("extended_prompt_cache_state"),
-                    )
-                if (
-                    prefix_boundary > 0
-                    and prefix_boundary < len(prompt_token_ids)
-                    and result.get("prefix_boundary_state") is not None
-                ):
-                    self._ddtree_prefix_cache.store(
-                        prompt_token_ids[:prefix_boundary],
-                        result.get("prefix_boundary_state"),
-                    )
-                self._ddtree_last = {
-                    key: value
-                    for key, value in result.items()
-                    if key
-                    not in {
-                        "prompt_cache_state",
-                        "prompt_token_ids",
-                        "prefix_boundary_state",
-                        "extended_prompt_cache_state",
-                    }
-                }
-                result["cache_hit_type"] = cache_fetch.hit_type
-                result["cached_tokens"] = cache_fetch.cached_tokens
+                result = self._run_ddtree_sync(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    stop=stop,
+                    tools_requested=tools_requested,
+                    prefix_boundary=prefix_boundary,
+                    on_step=_on_step,
+                    should_stop=stop_event.is_set,
+                    emit_step_text=True,
+                )
                 loop.call_soon_threadsafe(queue.put_nowait, result)
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, sentinel)
@@ -618,6 +644,85 @@ class DFlashEngine(BatchedEngine):
         videos: list[str] | None = None,
         **kwargs,
     ) -> GenerationOutput:
+        if not self._loaded:
+            await self.start()
+        if images or videos:
+            raise ValueError("DFlash mode does not support images or videos.")
+
+        greedy_request = temperature in (0, 0.0)
+        if self._ddtree_budget > 0 and greedy_request:
+            self._inflight += 1
+            try:
+                async with self._lock:
+                    tools_requested = bool(kwargs.pop("tools_requested", False))
+                    prefix_boundary = int(kwargs.pop("prefix_boundary", 0) or 0)
+                    mode = (
+                        "ddtree-ngram"
+                        if self._ngram_first_enabled
+                        else "ddtree"
+                    )
+                    self._track_request_start(mode)
+                    try:
+                        loop = asyncio.get_running_loop()
+                        executor = self._executor
+                        assert executor is not None, "DFlashEngine not started"
+                        result = await loop.run_in_executor(
+                            executor,
+                            lambda: self._run_ddtree_sync(
+                                prompt=prompt,
+                                max_tokens=max_tokens,
+                                stop=stop,
+                                tools_requested=tools_requested,
+                                prefix_boundary=prefix_boundary,
+                                emit_step_text=False,
+                            ),
+                        )
+                        resp = SimpleNamespace(
+                            tokens=list(result.get("generated_token_ids", []) or []),
+                            prompt_tokens=int(result.get("prompt_tokens") or 0),
+                            prefill_seconds=float(result.get("prefill_seconds") or 0.0),
+                            generation_tokens=int(result.get("generated_tokens") or 0),
+                            generation_tps=float(result.get("generation_tps") or 0.0),
+                            finish_reason=result.get("finish_reason") or "stop",
+                            proposed_tokens=int(result.get("proposed_tokens") or 0),
+                            accepted_tokens=int(result.get("accepted_tokens") or 0),
+                            speculative_steps=int(result.get("speculative_steps") or 0),
+                            avg_acceptance_ratio=float(
+                                result.get("avg_acceptance_ratio") or 0.0
+                            ),
+                            block_size_history=tuple(result.get("block_size_history") or ()),
+                            avg_tree_node_count=float(
+                                result.get("avg_tree_node_count") or 0.0
+                            ),
+                            ddtree_fast_path_ratio=float(
+                                result.get("ddtree_fast_path_ratio") or 0.0
+                            ),
+                            ngram_acceptance_ratio=float(
+                                result.get("ngram_acceptance_ratio") or 0.0
+                            ),
+                            ngram_cycles=int(result.get("ngram_cycles_completed") or 0),
+                            ngram_fallback_cycles=int(
+                                result.get("ngram_fallback_cycles") or 0
+                            ),
+                            ngram_tool_guard_cycles=int(
+                                result.get("ngram_tool_guard_cycles") or 0
+                            ),
+                            cache_hit_type=result.get("cache_hit_type"),
+                            cached_tokens=int(result.get("cached_tokens") or 0),
+                        )
+                        self._update_active(resp, new_text=result.get("text", ""))
+                        return GenerationOutput(
+                            text=clean_output_text(result.get("text", "")),
+                            prompt_tokens=resp.prompt_tokens,
+                            completion_tokens=resp.generation_tokens,
+                            finished=True,
+                            finish_reason=resp.finish_reason,
+                        )
+                    finally:
+                        self._track_request_end()
+            finally:
+                self._inflight -= 1
+
         last = None
         text_parts: list[str] = []
         async for output in self.stream_generate(

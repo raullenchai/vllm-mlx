@@ -139,14 +139,30 @@ def _entry_prefill_tps(item: dict) -> float:
 
 
 def _entry_tokens_per_second(item: dict) -> float:
+    explicit = _num(item.get("generation_tps", 0.0))
+    if explicit > 0:
+        return explicit
     elapsed = _entry_elapsed(item)
-    return (_entry_generated_tokens(item) / elapsed) if elapsed > 0.01 else 0.0
+    ttft = _entry_ttft(item)
+    generated = _entry_generated_tokens(item)
+    if ttft is not None and elapsed > ttft + 0.01:
+        return generated / (elapsed - ttft)
+    return (generated / elapsed) if elapsed > 0.01 else 0.0
 
 
 def _entries_tokens_per_second(entries: list[dict]) -> float:
-    elapsed = sum(_entry_elapsed(item) for item in entries)
     generated = sum(_entry_generated_tokens(item) for item in entries)
-    return (generated / elapsed) if elapsed > 0.01 else 0.0
+    generation_time = 0.0
+    fallback_time = 0.0
+    for item in entries:
+        elapsed = _entry_elapsed(item)
+        fallback_time += elapsed
+        ttft = _entry_ttft(item)
+        if ttft is not None and elapsed > ttft + 0.01:
+            generation_time += elapsed - ttft
+    if generation_time > 0.01:
+        return generated / generation_time
+    return (generated / fallback_time) if fallback_time > 0.01 else 0.0
 
 
 def _avg_accept_tokens(item: dict) -> float:

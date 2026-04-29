@@ -257,6 +257,7 @@ def generate_ddtree(
     ngram_disable_threshold: float | None = None,
     ngram_disable_window: int | None = None,
     ngram_disable_cooldown: int | None = None,
+    emit_step_text: bool = True,
 ) -> dict[str, Any]:
     (
         build_ddtree_tree_from_topk,
@@ -522,6 +523,12 @@ def generate_ddtree(
             tree_node_count = _tree_node_count(tree)
             tree_node_count_history.append(tree_node_count)
             compiled_tree = compile_tree(tree, root_token, prefix_len=prompt_len + len(generated_token_ids))
+            dfs_order_list = list(getattr(compiled_tree, "dfs_order", ()))
+            if hasattr(compiled_tree, "dfs_order"):
+                try:
+                    dfs_order_list = compiled_tree.dfs_order.tolist()
+                except Exception:
+                    dfs_order_list = []
             phase_timings_us["tree_build"] += (time.perf_counter_ns() - build_started) / 1_000.0
 
             verify_started = time.perf_counter_ns()
@@ -544,6 +551,7 @@ def generate_ddtree(
             accepted_token_ids = _tree_token_ids(tree, root_token, accepted_indices)
             acceptance_len = len(accepted_token_ids)
             ddtree_cycles_completed += 1
+            use_fast_path = accepted_indices == dfs_order_list[: len(accepted_indices)]
 
             commit_started = time.perf_counter_ns()
             if tree_aware_commit:
@@ -575,7 +583,7 @@ def generate_ddtree(
                     list(draft_model.config.target_layer_ids),
                 )
             phase_timings_us["commit"] += (time.perf_counter_ns() - commit_started) / 1_000.0
-            if tree_aware_commit:
+            if use_fast_path:
                 fast_path_count += 1
 
         block_size_history.append(proposed_count)
@@ -596,7 +604,11 @@ def generate_ddtree(
         if emitted:
             generated_hidden_chunks.append(target_hidden[:, : len(emitted), :])
         staged_first = mx.array([bonus_token], dtype=mx.uint32)
-        delta_text = tokenizer.decode(emitted) if emitted else ""
+        delta_text = (
+            tokenizer.decode(emitted)
+            if emitted and (emit_step_text or check_text_stops)
+            else ""
+        )
 
         if check_text_stops and delta_text:
             probe_text = stop_text_tail + delta_text

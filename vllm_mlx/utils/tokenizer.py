@@ -28,6 +28,56 @@ def _needs_tokenizer_fallback(model_name: str) -> bool:
     return any(pattern.lower() in model_lower for pattern in FALLBACK_MODELS)
 
 
+def _register_vendored_archs() -> None:
+    """Make vendored model architectures visible to mlx-lm's importlib lookup.
+
+    mlx-lm resolves model_type → module via `importlib.import_module(
+    f"mlx_lm.models.{model_type}")`. Pre-registering our vendored modules in
+    sys.modules under that path lets it find them transparently. Idempotent.
+    """
+    import sys
+
+    if "mlx_lm.models.deepseek_v4" not in sys.modules:
+        try:
+            from ..models import deepseek_v4 as _ds_v4
+
+            # setdefault is atomic under the GIL; harmless if a concurrent
+            # caller raced ahead (we'd cache the same module either way).
+            sys.modules.setdefault("mlx_lm.models.deepseek_v4", _ds_v4)
+        except Exception as e:
+            logger.debug(f"deepseek_v4 vendored module unavailable: {e}")
+
+
+# model_types served by vllm_mlx.models.* shims. transformers' AutoConfig /
+# PreTrainedConfig won't recognize these, and mlx-lm's load() internally
+# uses AutoTokenizer (which routes through AutoConfig). We must skip that
+# path entirely for these models and use the lower-level load_model() +
+# direct tokenizer.json load instead.
+_VENDORED_MODEL_TYPES = {"deepseek_v4"}
+
+
+def _is_vendored_arch_model(model_name: str) -> bool:
+    """Return True if model's config.json declares a model_type we vendor."""
+    try:
+        local = Path(model_name)
+        if local.is_dir():
+            config_path = local / "config.json"
+        else:
+            from huggingface_hub import hf_hub_download
+
+            config_path = Path(
+                hf_hub_download(repo_id=model_name, filename="config.json")
+            )
+        if not config_path.exists():
+            return False
+        with open(config_path) as f:
+            cfg = json.load(f)
+        return cfg.get("model_type") in _VENDORED_MODEL_TYPES
+    except Exception as e:
+        logger.debug(f"_is_vendored_arch_model({model_name}) failed: {e}")
+        return False
+
+
 def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
     """
     Load model and tokenizer with fallback for non-standard tokenizers.
@@ -41,12 +91,24 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
     """
     from mlx_lm import load
 
+    _register_vendored_archs()
     tokenizer_config = tokenizer_config or {}
 
     # Check if model needs fallback (e.g., Nemotron)
     if _needs_tokenizer_fallback(model_name):
         logger.info(
             f"Model {model_name} requires tokenizer fallback, loading directly..."
+        )
+        return _load_with_tokenizer_fallback(model_name)
+
+    # Vendored architectures (e.g. deepseek_v4) — transformers' AutoConfig
+    # doesn't know about them, so mlx-lm's high-level load() blows up
+    # before we get a chance to handle the error. Route directly to the
+    # lower-level load_model() + raw tokenizer.json fallback.
+    if _is_vendored_arch_model(model_name):
+        logger.info(
+            f"Model {model_name} uses a vendored architecture, "
+            "skipping AutoConfig path and loading directly..."
         )
         return _load_with_tokenizer_fallback(model_name)
 
@@ -80,8 +142,15 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
         _try_inject_mtp_post_load(model, model_name)
         return model, tokenizer
     except ValueError as e:
-        # Fallback for models with non-standard tokenizers
-        if "TokenizersBackend" in str(e) or "Tokenizer class" in str(e):
+        # Fallback for models with non-standard tokenizers, OR newer model_types
+        # transformers' AutoConfig hasn't learned about yet (e.g. deepseek_v4
+        # before transformers PR #45643 lands). The vendored arch can still load
+        # the weights — we just need to bypass AutoTokenizer.
+        if (
+            "TokenizersBackend" in str(e)
+            or "Tokenizer class" in str(e)
+            or "does not recognize this architecture" in str(e)
+        ):
             logger.warning(f"Standard tokenizer loading failed, using fallback: {e}")
             return _load_with_tokenizer_fallback(model_name)
         # Fallback for models with extra/missing weights (e.g., vision tower, MTP layers).
@@ -233,6 +302,16 @@ def _load_with_tokenizer_fallback(model_name: str):
                 eos_token = config.get("eos_token", eos_token)
                 unk_token = config.get("unk_token", unk_token)
                 chat_template = config.get("chat_template")
+
+        # HF convention (transformers >=4.43): chat_template.jinja sits
+        # alongside tokenizer_config.json. DeepSeek V4 ships it that way.
+        # utf-8-sig strips a UTF-8 BOM if the file was saved with one —
+        # jinja2 would otherwise treat \ufeff as part of the template.
+        if chat_template is None:
+            chat_template_jinja = model_path / "chat_template.jinja"
+            if chat_template_jinja.exists():
+                chat_template = chat_template_jinja.read_text(encoding="utf-8-sig")
+                logger.info("Chat template loaded from chat_template.jinja")
 
         tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=base_tokenizer,

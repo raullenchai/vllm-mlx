@@ -222,8 +222,14 @@ def _build_screen(
     width = max(80, width)
     height = max(24, height)
 
-    model = status.get("model") or health.get("model_name") or "n/a"
-    engine_type = health.get("engine_type") or status.get("engine_type") or "n/a"
+    model = (
+        status.get("model")
+        or status.get("model_name")
+        or health.get("model")
+        or health.get("model_name")
+        or "n/a"
+    )
+    engine_type = status.get("engine_type") or health.get("engine_type") or "n/a"
 
     state = str(status.get("status") or "unknown")
     loaded = bool(health.get("model_loaded"))
@@ -245,7 +251,7 @@ def _build_screen(
     cache_info = status.get("cache") or {}
     cache_hits = _integer(cache_info.get("hits", 0))
     cache_misses = _integer(cache_info.get("misses", 0))
-    cache_entries = _integer(cache_info.get("entries", 0))
+    cache_entries = _integer(cache_info.get("entries", cache_info.get("entry_count", 0)))
 
     dflash_info = status.get("dflash") or {}
 
@@ -253,6 +259,8 @@ def _build_screen(
     entries = list((requests_data or {}).get("entries") or [])
     reference_decode_tps = _reference_decode_tps(entries)
     active_request = (requests_data or {}).get("active") or {}
+    if active_request and running <= 0:
+        running = 1
 
     # Active ticket age
     age = 0.0
@@ -270,7 +278,7 @@ def _build_screen(
     else:
         status_text = "LOADING"
         status_color = "yellow"
-    if errors:
+    if errors and not (status or health or requests_data):
         status_text = "DEGRADED"
         status_color = "red"
 
@@ -718,10 +726,25 @@ def run_monitor(base_url: str, interval: float = 1.0, pid: int | str = "?") -> i
         if tty_on:
             sys.stdout.write("\033[?1049h\033[?25l")
             sys.stdout.flush()
+        last_health: dict = {}
+        last_status: dict = {}
+        last_requests_data: dict = {}
         while True:
             health, herr = _fetch_json(health_url)
             status, serr = _fetch_json(status_url)
             requests_data, rerr = _fetch_json(requests_url)
+            if health:
+                last_health = health
+            elif last_health:
+                health = last_health
+            if status:
+                last_status = status
+            elif last_status:
+                status = last_status
+            if requests_data:
+                last_requests_data = requests_data
+            elif last_requests_data:
+                requests_data = last_requests_data
             errors = [e for e in (herr, serr, rerr) if e]
             screen = _build_screen(
                 base_url,

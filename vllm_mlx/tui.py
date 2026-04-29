@@ -143,6 +143,12 @@ def _entry_tokens_per_second(item: dict) -> float:
     return (_entry_generated_tokens(item) / elapsed) if elapsed > 0.01 else 0.0
 
 
+def _entries_tokens_per_second(entries: list[dict]) -> float:
+    elapsed = sum(_entry_elapsed(item) for item in entries)
+    generated = sum(_entry_generated_tokens(item) for item in entries)
+    return (generated / elapsed) if elapsed > 0.01 else 0.0
+
+
 def _avg_accept_tokens(item: dict) -> float:
     accepted = _integer(item.get("speculative_accepted_tokens", item.get("accepted_tokens", 0)))
     steps = _integer(item.get("speculative_steps", 0))
@@ -432,7 +438,7 @@ def _build_screen(
             [value for value in (_entry_ttft(item) for item in entries) if value is not None]
         )
         avg_prefill_tps = _mean([_entry_prefill_tps(item) for item in entries])
-        avg_tokens_per_second = _mean([_entry_tokens_per_second(item) for item in entries])
+        avg_tokens_per_second = _entries_tokens_per_second(entries)
         avg_accept_tokens = _mean(
             [value for value in (_avg_accept_tokens(item) for item in entries) if value > 0]
         )

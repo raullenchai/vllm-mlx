@@ -151,18 +151,7 @@ def _entry_tokens_per_second(item: dict) -> float:
 
 
 def _entries_tokens_per_second(entries: list[dict]) -> float:
-    generated = sum(_entry_generated_tokens(item) for item in entries)
-    generation_time = 0.0
-    fallback_time = 0.0
-    for item in entries:
-        elapsed = _entry_elapsed(item)
-        fallback_time += elapsed
-        ttft = _entry_ttft(item)
-        if ttft is not None and elapsed > ttft + 0.01:
-            generation_time += elapsed - ttft
-    if generation_time > 0.01:
-        return generated / generation_time
-    return (generated / fallback_time) if fallback_time > 0.01 else 0.0
+    return _mean([_entry_tokens_per_second(item) for item in entries])
 
 
 def _avg_accept_tokens(item: dict) -> float:
@@ -456,7 +445,7 @@ def _build_screen(
         avg_prefill_tps = _mean([_entry_prefill_tps(item) for item in entries])
         avg_tokens_per_second = _entries_tokens_per_second(entries)
         avg_accept_tokens = _mean(
-            [value for value in (_avg_accept_tokens(item) for item in entries) if value > 0]
+            [_avg_accept_tokens(item) for item in entries]
         )
         accept_values = [
             _num(item.get("acceptance_ratio"))

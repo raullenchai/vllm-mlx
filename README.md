@@ -616,6 +616,81 @@ DDTree from batching enough candidate tokens to beat the base DFlash path. If a
 DDTree block size override is less than or equal to the tree budget, Rapid-MLX
 ignores it and falls back to the drafter default.
 
+#### DDTree and n-gram benchmark notes
+
+The DDTree experiments on this branch used non-streaming
+`/v1/chat/completions`, `temperature=0`, `max_tokens=6400`, the 27B dense
+Qwen3.6 checkpoint, and the matching Qwen3.6 DFlash drafter. The best pure
+DDTree setting for raw throughput was budget `4` with adaptive block sizing
+disabled:
+
+```bash
+uv run rapid-mlx serve /Users/samuelfajreldines/dev/models/Qwen3.6-27B-UD-Q4_K_XL-mlx \
+  --drafter /Users/samuelfajreldines/dev/models/Qwen3.6-27B-DFlash \
+  --dflash-ddtree-budget 4 \
+  --dflash-no-adaptive \
+  --served-model-name qwen3.6-27b-ddtree \
+  --port 8010 \
+  --no-thinking \
+  --default-temperature 0
+```
+
+On a short explanatory prompt (`Explain the key differences between TCP and UDP
+protocols, including when you would use each one.`), pure DDTree averaged about
+`23.8 tok/s`. Adding n-gram first did not help: `ngram-size=3` with 4 draft
+tokens averaged about `22.6 tok/s`, `ngram-size=3` with 8 draft tokens averaged
+about `21.3 tok/s`, and adaptive n-gram/DDTree averaged about `21.4 tok/s`.
+That prompt has little repeated structure, so n-gram only found a few usable
+cycles, then fell back to DDTree for nearly the whole request. In that case the
+n-gram verification overhead is pure cost.
+
+On a repetitive coding prompt (`Create a complete CRUD REST API in Python
+FastAPI for users, projects, tasks, comments, and tags... Use consistent style
+and repeat the full pattern for each resource.`), pure DDTree averaged about
+`29.8 tok/s`. The best n-gram-first fallback configuration was:
+
+```bash
+uv run rapid-mlx serve /Users/samuelfajreldines/dev/models/Qwen3.6-27B-UD-Q4_K_XL-mlx \
+  --drafter /Users/samuelfajreldines/dev/models/Qwen3.6-27B-DFlash \
+  --dflash-ddtree-budget 4 \
+  --dflash-no-adaptive \
+  --dflash-fallback-mode ngram \
+  --ngram-num-draft-tokens 4 \
+  --ngram-size 2 \
+  --ngram-min-matches 1 \
+  --served-model-name qwen3.6-27b-crud-ngram \
+  --port 8010 \
+  --no-thinking \
+  --default-temperature 0
+```
+
+That setting averaged about `35.2 tok/s`, roughly 18% faster than pure DDTree on
+the CRUD prompt. Other n-gram settings were worse: `ngram-size=3` with 4 draft
+tokens averaged about `27.1 tok/s`, `ngram-size=2` with 8 draft tokens reached
+about `34.3 tok/s`, and `ngram-size=1` with 4 draft tokens reached about
+`34.0 tok/s`.
+
+The reason is workload shape. n-gram is useful when the output repeats local
+patterns, as in boilerplate code, CRUD endpoints, repeated tests, JSON, XML, or
+templated markdown. It tries to draft from previously seen token sequences
+before paying DDTree cost. If its draft matches, the target validation can
+commit several tokens cheaply; if it does not match, Rapid-MLX falls back to
+DDTree. DDTree is the safer default for open-ended prose, mixed reasoning,
+tool-call planning, and prompts with little repetition because it proposes from
+the DFlash drafter rather than relying on exact repeated token history.
+
+Use this rule of thumb:
+
+- Use pure DDTree (`--dflash-ddtree-budget 4 --dflash-no-adaptive`) for general
+  prose, explanations, and unknown prompt mixes.
+- Use n-gram first with DDTree fallback (`--dflash-fallback-mode ngram
+  --ngram-size 2 --ngram-num-draft-tokens 4`) for repetitive coding, boilerplate
+  generation, tests, structured data, and CRUD-style scaffolding.
+- Keep the target and drafter families matched. Mismatched checkpoints lower
+  acceptance and can make both DDTree and n-gram fallback look slower than base.
+- Keep `temperature=0` for DDTree/n-gram benchmarking. Non-greedy decoding is
+  intentionally routed away from DDTree.
+
 The server exposes the same `/v1/chat/completions` API as the regular path. `/v1/status` adds a `dflash` block with the lifetime acceptance ratio, current block size, observed bounds, and mode (`ddtree-ngram` when n-gram is enabled):
 
 ```bash

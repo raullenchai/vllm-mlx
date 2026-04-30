@@ -122,6 +122,47 @@ class MetricsMiddleware:
                 if cfg.engine is None:
                     return
                 stats = cfg.engine.get_stats()
+                dflash_stats = stats.get("dflash") or {}
+                if dflash_stats:
+                    tps = dflash_stats.get("ddtree_last_generation_tps")
+                    if tps is not None:
+                        try:
+                            engine_gen_tps = max(engine_gen_tps, float(tps))
+                        except Exception:
+                            pass
+                    mode = dflash_stats.get("mode")
+                    if mode:
+                        engine_spec_mode = str(mode)
+                    fast_path = dflash_stats.get("ddtree_last_fast_path_ratio")
+                    if fast_path is not None:
+                        try:
+                            engine_ddtree_fast_path = float(fast_path)
+                        except Exception:
+                            pass
+                    ngram_accept = dflash_stats.get("ngram_last_acceptance_ratio")
+                    if ngram_accept is not None:
+                        try:
+                            engine_ngram_acceptance = float(ngram_accept)
+                        except Exception:
+                            pass
+                    value = dflash_stats.get("ngram_last_cycles")
+                    if value is not None:
+                        try:
+                            engine_ngram_cycles = int(value)
+                        except Exception:
+                            pass
+                    value = dflash_stats.get("ngram_last_fallback_cycles")
+                    if value is not None:
+                        try:
+                            engine_ngram_fallback_cycles = int(value)
+                        except Exception:
+                            pass
+                    value = dflash_stats.get("ngram_last_tool_guard_cycles")
+                    if value is not None:
+                        try:
+                            engine_ngram_tool_guard_cycles = int(value)
+                        except Exception:
+                            pass
                 for r in stats.get("requests") or []:
                     tps = r.get("tokens_per_second")
                     if tps is not None:

@@ -604,9 +604,10 @@ tokens in reasoning. For coding agents such as opencode, keep the reasoning
 parser and tool parser enabled as shown above. Always match the target and
 drafter family exactly, for example Qwen3.6 target with Qwen3.6 DFlash drafter;
 mixing a Qwen3.6 target with a Qwen3.5 drafter lowers acceptance and makes
-DDTree look artificially slow. Use the same `DFLASH_DRAFT_SINK` and
-`DFLASH_DRAFT_WINDOW` values across benchmarks when comparing Rapid-MLX,
-standalone DDTree, and DFlash.
+DDTree look artificially slow. Rapid-MLX defaults the DFlash drafter cache to
+`DFLASH_DRAFT_SINK=64` and `DFLASH_DRAFT_WINDOW=1024`; only set those env vars
+when intentionally overriding the defaults. Use the same values across
+benchmarks when comparing Rapid-MLX, standalone DDTree, and DFlash.
 
 DDTree uses adaptive block sizing by default, but raw throughput can improve
 with `--dflash-no-adaptive` on some dense checkpoints. Benchmark both modes for

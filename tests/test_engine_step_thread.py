@@ -155,5 +155,98 @@ class TestStepThread:
             await engine_core.stop()
 
 
+class TestBatchedEngineWarmup:
+    """#170 regression: BatchedEngine.generate_warmup() must run on the
+    mlx-step worker so cache arrays it touches carry the worker's stream.
+
+    Without this, models with eager cache materialization (Gemma 4
+    RotatingKVCache, sliding-window) fail every request with
+    "There is no Stream(gpu, 1) in current thread" the moment
+    BatchGenerator.prompt() evals the prompt cache state on the worker.
+    """
+
+    def test_warmup_runs_on_mlx_step_thread(self, monkeypatch):
+        """generate_warmup() routes the model forward through _run_on_step_thread."""
+        from vllm_mlx.engine.batched import BatchedEngine
+
+        captured: dict = {}
+
+        # Stub mx.array / mx.eval so we don't touch real Metal.
+        import mlx.core as mx
+
+        monkeypatch.setattr(mx, "array", lambda x: MagicMock())
+        monkeypatch.setattr(mx, "eval", lambda *_a, **_k: None)
+
+        engine = BatchedEngine.__new__(BatchedEngine)
+        engine._loaded = True
+        engine._is_mllm = False
+        engine._tokenizer = MagicMock()
+        engine._tokenizer.encode = MagicMock(return_value=[1, 2])
+
+        def model_call(input_ids):
+            captured["model_thread"] = threading.current_thread().name
+            return MagicMock()
+
+        engine._model = MagicMock(side_effect=model_call)
+
+        # Build a tiny EngineCore-like wrapper exposing _run_on_step_thread
+        # via a real single-thread executor named mlx-step-test.
+        import concurrent.futures
+
+        executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="mlx-step-test"
+        )
+        try:
+            inner = MagicMock()
+            inner._mlx_executor = executor
+
+            def _run_on_step_thread(func, *args, **kwargs):
+                return executor.submit(func, *args, **kwargs).result()
+
+            inner._run_on_step_thread = _run_on_step_thread
+
+            wrapper = MagicMock()
+            wrapper.engine = inner
+            engine._engine = wrapper
+
+            engine.generate_warmup()
+
+            assert captured.get("model_thread", "").startswith("mlx-step-test"), (
+                f"generate_warmup ran model on {captured.get('model_thread')!r}, "
+                f"expected mlx-step-test thread"
+            )
+        finally:
+            executor.shutdown(wait=True)
+
+    def test_warmup_falls_back_when_executor_missing(self, monkeypatch):
+        """Without a step-thread executor, warmup runs inline (legacy path)."""
+        from vllm_mlx.engine.batched import BatchedEngine
+
+        captured: dict = {}
+
+        import mlx.core as mx
+
+        monkeypatch.setattr(mx, "array", lambda x: MagicMock())
+        monkeypatch.setattr(mx, "eval", lambda *_a, **_k: None)
+
+        engine = BatchedEngine.__new__(BatchedEngine)
+        engine._loaded = True
+        engine._is_mllm = False
+        engine._tokenizer = MagicMock()
+        engine._tokenizer.encode = MagicMock(return_value=[1, 2])
+
+        def model_call(input_ids):
+            captured["model_thread"] = threading.current_thread().name
+            return MagicMock()
+
+        engine._model = MagicMock(side_effect=model_call)
+        engine._engine = None  # no AsyncEngineCore yet
+
+        engine.generate_warmup()
+
+        # Should have run on caller thread.
+        assert captured.get("model_thread") == threading.current_thread().name
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -196,7 +196,16 @@ class BatchedEngine(BaseEngine):
         return self._tokenizer
 
     def generate_warmup(self) -> None:
-        """Run a minimal forward pass to compile Metal shaders."""
+        """Run a minimal forward pass to compile Metal shaders.
+
+        Routes through the MLX step thread so cache arrays touched during
+        warmup carry the step thread's generation_stream. Otherwise models
+        with eagerly-materialized caches (Gemma 4 RotatingKVCache,
+        sliding-window) raise "There is no Stream(gpu, 1) in current thread"
+        on the first request because BatchGenerator.prompt() runs on the
+        step thread but evals state tagged with the main thread's stream
+        (#170, follow-on to #161 / #167).
+        """
         if not self._loaded or self._model is None or self._is_mllm:
             return
         try:
@@ -204,8 +213,21 @@ class BatchedEngine(BaseEngine):
 
             tokens = self._tokenizer.encode("Hi")
             input_ids = mx.array([tokens])
-            self._model(input_ids)
-            mx.eval(mx.zeros(1))
+
+            def _warmup_forward() -> None:
+                out = self._model(input_ids)
+                mx.eval(out)
+
+            engine_core = (
+                getattr(self._engine, "engine", None) if self._engine else None
+            )
+            if (
+                engine_core is not None
+                and getattr(engine_core, "_mlx_executor", None) is not None
+            ):
+                engine_core._run_on_step_thread(_warmup_forward)
+            else:
+                _warmup_forward()
         except Exception:
             pass  # Non-fatal
 

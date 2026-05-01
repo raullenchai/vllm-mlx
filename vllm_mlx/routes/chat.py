@@ -634,7 +634,14 @@ async def stream_chat_completion(
             logger.info(f"[SSE-ROLE] {_first_sse.strip()[:200]}")
         yield _first_sse
 
-        # Initialize post-processor
+        # Initialize post-processor.
+        # request_dict carries `tools` so streaming parsers (qwen3_coder etc.)
+        # can do schema-driven type conversion (#171).
+        request_dict = (
+            request.model_dump(exclude_none=True)
+            if hasattr(request, "model_dump")
+            else None
+        )
         processor = StreamingPostProcessor(
             cfg,
             tools_requested=bool(request.tools),
@@ -642,6 +649,7 @@ async def stream_chat_completion(
                 request.response_format
                 and getattr(request.response_format, "type", "text") != "text"
             ),
+            request=request_dict,
         )
         processor.set_thinking_model(request.model)
         processor.reset()

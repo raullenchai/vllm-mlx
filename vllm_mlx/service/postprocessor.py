@@ -74,10 +74,15 @@ class StreamingPostProcessor:
         tools_requested: bool = False,
         enable_thinking: bool | None = None,
         json_mode: bool = False,
+        request: dict | None = None,
     ):
         self.cfg = cfg
         self.tools_requested = tools_requested
         self.json_mode = json_mode
+        # Forwarded to streaming tool parsers — qwen3_coder needs request.tools
+        # for schema-driven type conversion (#171). Without it, raw XML leaks
+        # into delta.content instead of structured tool_calls deltas.
+        self.request = request
 
         # Per-request parser instances — each streaming request gets its
         # own parser to avoid state corruption under concurrent
@@ -469,7 +474,9 @@ class StreamingPostProcessor:
             and not self.tool_calls_detected
             and self.tool_parser.has_pending_tool_call(_fallback_text)
         ):
-            result = self.tool_parser.extract_tool_calls(_fallback_text)
+            result = self.tool_parser.extract_tool_calls(
+                _fallback_text, request=self.request
+            )
             if result.tools_called:
                 tc_list = [
                     {
@@ -512,7 +519,10 @@ class StreamingPostProcessor:
         tool_previous = self.tool_accumulated_text
         self.tool_accumulated_text += content
         tool_result = self.tool_parser.extract_tool_calls_streaming(
-            tool_previous, self.tool_accumulated_text, content
+            tool_previous,
+            self.tool_accumulated_text,
+            content,
+            request=self.request,
         )
 
         if tool_result is None:

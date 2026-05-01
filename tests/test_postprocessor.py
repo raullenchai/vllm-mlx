@@ -1212,3 +1212,139 @@ class TestJsonModePreambleStripping:
         content_events = [e for e in events3 if e.type == "content"]
         assert len(content_events) == 1
         assert '{"answer": 42}' in content_events[0].content
+
+
+class TestRequestForwardedToToolParser:
+    """#171 regression: streaming parsers (qwen3_coder) need request.tools
+    for schema-driven type conversion. Without it, raw XML leaks to delta.content."""
+
+    def test_request_forwarded_to_streaming_parser(self):
+        """request kwarg is passed to extract_tool_calls_streaming."""
+        tool_parser = MagicMock()
+        tool_parser.extract_tool_calls_streaming.return_value = {"content": ""}
+
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_parser_instance=tool_parser,
+        )
+        request_dict = {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "read", "parameters": {}},
+                }
+            ]
+        }
+        pp = StreamingPostProcessor(cfg, request=request_dict)
+        pp.reset()
+
+        pp.process_chunk(_make_output("<tool_call>"))
+        kwargs = tool_parser.extract_tool_calls_streaming.call_args.kwargs
+        assert kwargs.get("request") is request_dict
+
+    def test_request_forwarded_to_finalize_fallback(self):
+        """finalize() fallback also forwards request to extract_tool_calls."""
+        tool_parser = MagicMock()
+        tool_parser.extract_tool_calls_streaming.return_value = {"content": ""}
+        tool_parser.has_pending_tool_call.return_value = True
+        tool_parser.extract_tool_calls.return_value = MagicMock(tools_called=False)
+
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_parser_instance=tool_parser,
+        )
+        request_dict = {"tools": [{"type": "function", "function": {"name": "x"}}]}
+        pp = StreamingPostProcessor(cfg, request=request_dict)
+        pp.reset()
+
+        pp.process_chunk(_make_output("<tool_call>incomplete"))
+        pp.finalize()
+
+        kwargs = tool_parser.extract_tool_calls.call_args.kwargs
+        assert kwargs.get("request") is request_dict
+
+    def test_request_defaults_to_none(self):
+        """No request → None is forwarded (preserves prior behavior)."""
+        tool_parser = MagicMock()
+        tool_parser.extract_tool_calls_streaming.return_value = {"content": ""}
+
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_parser_instance=tool_parser,
+        )
+        pp = StreamingPostProcessor(cfg)
+        pp.reset()
+
+        pp.process_chunk(_make_output("<tool_call>"))
+        kwargs = tool_parser.extract_tool_calls_streaming.call_args.kwargs
+        assert kwargs.get("request") is None
+
+    def test_qwen3_coder_streaming_with_request_extracts_tool_call(self):
+        """End-to-end: real qwen3_coder parser + request → structured tool_calls,
+        not raw XML in content. Reproduces #171."""
+        from vllm_mlx.tool_parsers.qwen3coder_tool_parser import (
+            Qwen3CoderToolParser,
+        )
+
+        parser = Qwen3CoderToolParser(tokenizer=None)
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_parser_instance=parser,
+        )
+        request_dict = {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"path": {"type": "string"}},
+                        },
+                    },
+                }
+            ]
+        }
+        pp = StreamingPostProcessor(cfg, tools_requested=True, request=request_dict)
+        pp.reset()
+
+        # Feed the canonical Qwen3-Coder XML in tokens-ish chunks.
+        full_xml = (
+            "<tool_call>\n"
+            "<function=read>\n"
+            "<parameter=path>\n"
+            "HEARTBEAT.md\n"
+            "</parameter>\n"
+            "</function>\n"
+            "</tool_call>"
+        )
+        all_events = []
+        for piece in [
+            "<tool_call>\n",
+            "<function=read>\n",
+            "<parameter=path>\n",
+            "HEARTBEAT.md\n",
+            "</parameter>\n",
+            "</function>\n",
+            "</tool_call>",
+        ]:
+            all_events.extend(pp.process_chunk(_make_output(piece)))
+        all_events.extend(pp.finalize())
+
+        # Must produce at least one tool_call event with the function name.
+        tool_events = [e for e in all_events if e.type == "tool_call"]
+        assert tool_events, (
+            f"#171 regression: no tool_call events for {full_xml!r}; "
+            f"events={[(e.type, getattr(e, 'content', None)) for e in all_events]}"
+        )
+        # Tool name should appear in at least one event.
+        names_seen = []
+        for e in tool_events:
+            for tc in e.tool_calls or []:
+                fn = tc.get("function", {}).get("name")
+                if fn:
+                    names_seen.append(fn)
+        assert "read" in names_seen, (
+            f"#171: tool_call emitted but function name 'read' missing; "
+            f"names_seen={names_seen}"
+        )

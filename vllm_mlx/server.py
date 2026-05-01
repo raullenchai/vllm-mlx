@@ -227,8 +227,6 @@ async def lifespan(app: FastAPI):
         logger.info("Warming up (compiling Metal shaders)...")
         _warmup_start = _time.monotonic()
         try:
-            import mlx.core as mx
-
             # Skip warmup for hybrid models (GatedDeltaNet) to avoid
             # contaminating compiled kernel state that interferes with
             # batched inference.  Check multiple engine wrappers:
@@ -259,7 +257,13 @@ async def lifespan(app: FastAPI):
                         pass
             if not _is_hybrid:
                 _engine.generate_warmup()
-                mx.eval(mx.zeros(1))  # Force sync
+                # NOTE: do NOT call `mx.eval(mx.zeros(1))` here — that
+                # allocates on the main (asyncio loop) thread which lazily
+                # creates Stream(gpu, 1), and any subsequent eval of arrays
+                # whose graph touches that stream from the mlx-step worker
+                # raises "There is no Stream(gpu, 1) in current thread"
+                # (#170). `generate_warmup()` already routes its own forward
+                # + eval through the step thread, which is what we want.
             else:
                 # Hybrid models need a full request warmup to compile
                 # Metal shaders and prime the BatchGenerator, preventing

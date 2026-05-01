@@ -1231,7 +1231,15 @@ class Scheduler:
         if sampling_params.stop_token_ids:
             stop_tokens.update(sampling_params.stop_token_ids)
 
-        bg = BatchGenerator(
+        # mlx-lm 0.31.3+: BatchGenerator captures generation_stream at __init__
+        # via a thread-local Stream; without an explicit stream= the captured
+        # stream is whatever the import-thread had — which on the asyncio loop
+        # thread is unreachable from the mlx-step worker that runs .next(),
+        # so every request fails with "There is no Stream(gpu, 1) in current
+        # thread" (#170 hot path; complements the warmup fix in PR #173).
+        # _create_batch_generator runs on the mlx-step thread so default_stream
+        # here is the worker's stream (our `_init_mlx_step_thread` sets it).
+        bg_kwargs = dict(
             model=self.model,
             max_tokens=sampling_params.max_tokens,
             stop_tokens=stop_tokens,
@@ -1240,6 +1248,15 @@ class Scheduler:
             completion_batch_size=self.config.completion_batch_size,
             prefill_step_size=self.config.prefill_step_size,
         )
+        try:
+            import mlx.core as _mx
+
+            bg = BatchGenerator(
+                **bg_kwargs, stream=_mx.default_stream(_mx.default_device())
+            )
+        except TypeError:
+            # mlx-lm < 0.31.3 — no `stream` kwarg; fall back to legacy path.
+            bg = BatchGenerator(**bg_kwargs)
 
         # Install chunked prefill when explicitly configured OR when
         # memory-aware cache is active (needed for prefix_boundary saves

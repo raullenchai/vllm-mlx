@@ -32,14 +32,54 @@ logger = logging.getLogger(__name__)
 
 
 def _init_mlx_step_thread() -> None:
-    """Create mlx-lm's generation stream inside the MLX worker thread."""
-    stream = mx.new_stream(mx.default_device())
+    """Create the MLX worker thread's generation stream + default stream.
 
-    gen_mod = sys.modules.get("mlx_lm.generate")
-    if gen_mod is not None:
-        gen_mod.generation_stream = stream
+    Runs once when the executor spawns its single worker. Steps:
 
-    logger.info("MLX step thread initialized: generation_stream=%s", stream)
+    1. Create a new stream on this thread. mlx-lm / mlx-vlm both hold a
+       module-level ``generation_stream`` that was created on the import
+       thread (the asyncio loop / main thread); operations queued onto
+       that stream cannot be ``mx.eval``-ed from this worker thread —
+       you get ``RuntimeError: There is no Stream(gpu, N) in current
+       thread.`` (#170, follow-on to #161 / #167).
+    2. Reassign the module-level ``generation_stream`` in BOTH
+       ``mlx_lm.generate`` and ``mlx_vlm.generate`` (Gemma 4 etc. lives
+       in the latter, and their ``with mx.stream(generation_stream)``
+       blocks otherwise capture the import-thread stream).
+    3. ``mx.set_default_stream(stream)`` — anything that allocates an
+       ``mx.array`` without an explicit stream context (e.g.
+       ``BatchRotatingKVCache.__init__`` doing ``mx.array(left_padding)``
+       inside ``BatchGenerator._next()``'s prompt cache merge) also
+       lands on a thread-local stream we can eval. ``set_default_stream``
+       is process-wide, but the main thread no longer issues MLX work
+       after warmup is routed here too (PR #173).
+    """
+    # mlx-lm 0.31.3+: generation_stream is `mx.new_thread_local_stream` bound
+    # to the THREAD that created it. BatchGenerator captures
+    # `self._stream = stream or generation_stream` at __init__, and any
+    # captured ThreadLocalStream from the import thread fails to eval from
+    # this worker (#170: "There is no Stream(gpu, 1) in current thread.").
+    #
+    # Adopt the worker thread's auto-default stream rather than creating a
+    # NEW stream. MLX lazily creates a default stream per-thread on first
+    # access — using that stream guarantees ad-hoc `mx.array(...)` calls
+    # (which use the default stream when no `with mx.stream(...)` context
+    # is active) and our `with mx.stream(stream)` overrides converge on the
+    # same stream. Creating a new ThreadLocalStream and reassigning it can
+    # leave the worker's TRUE default at a different index, so any path that
+    # falls back to the default mid-flight ends up tagging arrays with one
+    # stream while BatchGenerator evals against the other.
+    stream = mx.default_stream(mx.default_device())
+
+    for mod_name in ("mlx_lm.generate", "mlx_vlm.generate"):
+        gen_mod = sys.modules.get(mod_name)
+        if gen_mod is not None:
+            gen_mod.generation_stream = stream
+
+    logger.info(
+        "MLX step thread initialized: stream=%s (worker default = generation_stream)",
+        stream,
+    )
 
 
 @dataclass
@@ -146,16 +186,31 @@ class EngineCore:
 
         logger.debug(f"Engine {self._engine_id} initialized")
 
-    async def start(self) -> None:
-        """Start the engine loop."""
+    async def start(
+        self, executor: concurrent.futures.ThreadPoolExecutor | None = None
+    ) -> None:
+        """Start the engine loop.
+
+        Args:
+            executor: Optional pre-existing single-thread executor (whose
+                worker is the mlx-step thread that already loaded the model).
+                Reusing the same worker keeps every MLX op — model weights,
+                forward passes, cache state — bound to one thread, which is
+                the only configuration that survives mlx-lm 0.31.3+
+                ThreadLocalStream tagging (#170). When None, a fresh
+                executor is created.
+        """
         if self._running:
             return
 
-        self._mlx_executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix="mlx-step",
-            initializer=_init_mlx_step_thread,
-        )
+        if executor is not None:
+            self._mlx_executor = executor
+        else:
+            self._mlx_executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="mlx-step",
+                initializer=_init_mlx_step_thread,
+            )
         self._running = True
         self._start_time = time.time()
         self._task = asyncio.create_task(self._engine_loop())

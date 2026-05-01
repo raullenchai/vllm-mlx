@@ -174,6 +174,7 @@ class BatchedEngine(BaseEngine):
         self._tokenizer = None  # For LLM
         self._engine = None  # AsyncEngineCore for LLM
         self._mllm_scheduler = None  # MLLMScheduler for MLLM
+        self._model_load_executor = None  # mlx-step worker (#170)
         self._mllm_instance = None  # MLXMultimodalLM instance
         self._loaded = False
         self._engine_started = False  # Track if engine loop is running
@@ -212,9 +213,14 @@ class BatchedEngine(BaseEngine):
             import mlx.core as mx
 
             tokens = self._tokenizer.encode("Hi")
-            input_ids = mx.array([tokens])
 
             def _warmup_forward() -> None:
+                # Allocate input on the step thread so the array is bound to
+                # the worker's generation_stream — main-thread allocation
+                # poisons every downstream op with a stream the worker can't
+                # eval (#170 hot path on mlx-lm 0.31.3+ where streams are
+                # ThreadLocalStream).
+                input_ids = mx.array([tokens])
                 out = self._model(input_ids)
                 mx.eval(out)
 
@@ -295,7 +301,9 @@ class BatchedEngine(BaseEngine):
 
     async def _start_llm(self) -> None:
         """Start the LLM engine with AsyncEngineCore."""
-        from ..engine_core import AsyncEngineCore, EngineConfig
+        import concurrent.futures
+
+        from ..engine_core import AsyncEngineCore, EngineConfig, _init_mlx_step_thread
         from ..scheduler import SchedulerConfig
         from ..utils.tokenizer import load_model_with_fallback
 
@@ -306,10 +314,25 @@ class BatchedEngine(BaseEngine):
         if "qwen3" in self._model_name.lower() or "Qwen3" in self._model_name:
             tokenizer_config["eos_token"] = "<|im_end|>"
 
-        self._model, self._tokenizer = load_model_with_fallback(
+        # Load model on the future MLX step worker thread (#170).
+        # mlx-lm 0.31.3+ binds module-level `generation_stream` and any
+        # auto-default stream to the thread that triggers them. If the model
+        # weights, quantization tables, or `mx.compile`-cached graphs are
+        # touched on the asyncio loop thread first, every later eval on the
+        # step worker hits "There is no Stream(gpu, 1) in current thread."
+        # Spinning the step worker BEFORE model load — and reusing the same
+        # worker for AsyncEngineCore via the model_load_executor handoff —
+        # keeps every MLX op on a single owning thread.
+        self._model_load_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="mlx-step",
+            initializer=_init_mlx_step_thread,
+        )
+        self._model, self._tokenizer = self._model_load_executor.submit(
+            load_model_with_fallback,
             self._model_name,
             tokenizer_config=tokenizer_config,
-        )
+        ).result()
 
         # Validate MTP support if enabled
         if self._scheduler_config and self._scheduler_config.enable_mtp:
@@ -323,28 +346,34 @@ class BatchedEngine(BaseEngine):
                     "See warnings above for details."
                 )
 
-        # Set Metal memory limits to make allocation failures graceful
-        # instead of fatal Metal command buffer errors (SIGABRT)
-        try:
+        # Set Metal memory limits on the SAME mlx-step worker that loaded
+        # the model. Calling these from the asyncio loop thread would touch
+        # MLX from a thread that doesn't own the worker stream and create
+        # a stray Stream(gpu, 1) reference (#170).
+        def _set_metal_limits() -> None:
             import mlx.core as mx
 
-            if mx.metal.is_available():
-                device_info = mx.device_info()
-                max_recommended = device_info.get(
-                    "max_recommended_working_set_size",
-                    device_info.get("memory_size", 0),
+            if not mx.metal.is_available():
+                return
+            device_info = mx.device_info()
+            max_recommended = device_info.get(
+                "max_recommended_working_set_size",
+                device_info.get("memory_size", 0),
+            )
+            if max_recommended > 0:
+                soft_limit = int(max_recommended * self._gpu_memory_utilization)
+                mx.set_memory_limit(soft_limit)
+                mx.set_cache_limit(32 * 1024 * 1024 * 1024)  # 32GB
+                pct = self._gpu_memory_utilization * 100
+                logger.info(
+                    f"Metal memory limits set: "
+                    f"allocation_limit={soft_limit / 1e9:.1f}GB "
+                    f"({pct:.0f}% of {max_recommended / 1e9:.1f}GB), "
+                    f"cache_limit=32GB"
                 )
-                if max_recommended > 0:
-                    soft_limit = int(max_recommended * self._gpu_memory_utilization)
-                    mx.set_memory_limit(soft_limit)
-                    mx.set_cache_limit(32 * 1024 * 1024 * 1024)  # 32GB
-                    pct = self._gpu_memory_utilization * 100
-                    logger.info(
-                        f"Metal memory limits set: "
-                        f"allocation_limit={soft_limit / 1e9:.1f}GB "
-                        f"({pct:.0f}% of {max_recommended / 1e9:.1f}GB), "
-                        f"cache_limit=32GB"
-                    )
+
+        try:
+            self._model_load_executor.submit(_set_metal_limits).result()
         except Exception as e:
             logger.warning(f"Failed to set Metal memory limits: {e}")
 
@@ -358,14 +387,16 @@ class BatchedEngine(BaseEngine):
             tool_logits_processor_factory=self._tool_logits_processor_factory,
         )
 
-        # Create async engine
+        # Create async engine and hand it the EXISTING model-load executor
+        # so all subsequent MLX work (forward passes, cache materialization,
+        # eval) runs on the same worker thread that owns the model weights.
         self._engine = AsyncEngineCore(
             model=self._model,
             tokenizer=self._tokenizer,
             config=engine_config,
         )
 
-        await self._engine.engine.start()
+        await self._engine.engine.start(executor=self._model_load_executor)
         self._engine_started = True
 
     async def stop(self) -> None:
@@ -378,6 +409,11 @@ class BatchedEngine(BaseEngine):
             await self._engine.stop()
             self._engine.engine.close()
             self._engine = None
+
+        # _engine.stop() already shutdown the shared mlx-step executor
+        # (handed off in start()). Drop our reference so __del__ doesn't
+        # double-shutdown.
+        self._model_load_executor = None
 
         self._model = None
         self._tokenizer = None

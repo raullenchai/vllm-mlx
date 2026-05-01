@@ -441,19 +441,26 @@ class TestEngineThreading:
     """Threading tests for EngineCore."""
 
     def test_mlx_step_thread_initializer_rebinds_generation_stream(self, monkeypatch):
-        """The executor thread must own mlx-lm's generation stream."""
+        """The executor thread must own mlx-lm's generation stream.
+
+        Updated for #170: the worker now ADOPTS its thread's auto-default
+        stream (via `mx.default_stream`) rather than creating a fresh one,
+        so any ad-hoc `mx.array(...)` allocation that falls back to the
+        default and the captured `with mx.stream(...)` context converge on
+        the same stream object.
+        """
         from vllm_mlx import engine_core
 
         fake_generate = types.SimpleNamespace(generation_stream="old-stream")
         monkeypatch.setitem(sys.modules, "mlx_lm.generate", fake_generate)
         monkeypatch.setattr(engine_core.mx, "default_device", lambda: "gpu")
         monkeypatch.setattr(
-            engine_core.mx, "new_stream", lambda device: f"stream:{device}"
+            engine_core.mx, "default_stream", lambda device: f"default-stream:{device}"
         )
 
         engine_core._init_mlx_step_thread()
 
-        assert fake_generate.generation_stream == "stream:gpu"
+        assert fake_generate.generation_stream == "default-stream:gpu"
 
 
 @pytest.mark.asyncio

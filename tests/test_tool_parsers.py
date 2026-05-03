@@ -862,6 +862,111 @@ class TestQwen3CoderParser:
         assert result.tool_calls[1]["name"] == "list_files"
 
 
+class TestQwen3XmlAlias:
+    """Regression: qwen3_xml must resolve to QwenToolParser, not the Coder parser.
+
+    Issue #175: qwen3_xml was aliased to Qwen3CoderToolParser, which expects
+    <function=NAME> tags. Qwen3 reasoning models emit <tool_call>{json}</tool_call>
+    instead, so the Coder parser silently returned tools_called=False, causing
+    streaming chat completions to fail with finish_reason: error.
+    """
+
+    def test_qwen3_xml_resolves_to_qwen_parser(self):
+        parser_cls = ToolParserManager.get_tool_parser("qwen3_xml")
+        assert parser_cls is QwenToolParser, (
+            f"qwen3_xml must resolve to QwenToolParser (handles JSON-in-<tool_call>), "
+            f"got {parser_cls.__name__}"
+        )
+
+    def test_qwen3_xml_parses_reasoning_model_format(self):
+        parser = ToolParserManager.get_tool_parser("qwen3_xml")(tokenizer=None)
+        text = (
+            '<tool_call>{"name": "read", "arguments": {"filePath": "/etc/hostname"}}'
+            "</tool_call>"
+        )
+        result = parser.extract_tool_calls(text, request=None)
+        assert result.tools_called, (
+            "qwen3_xml must parse <tool_call>{json}</tool_call> "
+            "(Qwen3 reasoning model output)"
+        )
+        assert result.tool_calls[0]["name"] == "read"
+        args = json.loads(result.tool_calls[0]["arguments"])
+        assert args["filePath"] == "/etc/hostname"
+
+    def test_qwen3_coder_xml_still_resolves_to_coder_parser(self):
+        from vllm_mlx.tool_parsers.qwen3coder_tool_parser import Qwen3CoderToolParser
+
+        parser_cls = ToolParserManager.get_tool_parser("qwen3_coder_xml")
+        assert parser_cls is Qwen3CoderToolParser, (
+            "qwen3_coder_xml must remain bound to the Coder parser"
+        )
+
+    def test_qwen3_xml_streaming_emits_tool_call(self):
+        """Streaming path: feed reasoning-model output token-by-token through qwen3_xml.
+
+        This is the path that was crashing in the user's bug report (raw token IDs
+        leaking into 'Internal error during streaming'). The bug surfaced because
+        the Coder parser's streaming logic doesn't recognize JSON-in-<tool_call>
+        and either raised or silently dropped emissions. With qwen3_xml routed to
+        QwenToolParser, the streaming path must successfully emit a tool_call
+        delta when the closing </tool_call> token arrives.
+        """
+        parser = ToolParserManager.get_tool_parser("qwen3_xml")(tokenizer=None)
+        # Mimic real tokenizer chunks (Qwen tokenizes <tool_call> and </tool_call>
+        # as single tokens, JSON content as several tokens).
+        chunks = [
+            "<tool_call>",
+            '{"name": ',
+            '"read", ',
+            '"arguments": ',
+            '{"filePath": ',
+            '"/etc/hostname"}}',
+            "</tool_call>",
+        ]
+        emitted_tool_calls = []
+        prev = ""
+        for chunk in chunks:
+            current = prev + chunk
+            result = parser.extract_tool_calls_streaming(
+                previous_text=prev,
+                current_text=current,
+                delta_text=chunk,
+                request={"tools": [{"type": "function", "function": {"name": "read"}}]},
+            )
+            if result and "tool_calls" in result:
+                emitted_tool_calls.extend(result["tool_calls"])
+            prev = current
+        assert len(emitted_tool_calls) >= 1, (
+            "streaming qwen3_xml must emit at least one tool_call delta"
+        )
+        assert emitted_tool_calls[-1]["function"]["name"] == "read"
+        args = json.loads(emitted_tool_calls[-1]["function"]["arguments"])
+        assert args["filePath"] == "/etc/hostname"
+
+
+class TestGemma4StreamingSignature:
+    """Regression: Gemma4ToolParser.extract_tool_calls_streaming must accept request=.
+
+    Issue #175 (aside): postprocessor passes request=self.request as a kwarg, but
+    Gemma4's override was missing the parameter, raising TypeError on every Gemma 4
+    streaming tool call.
+    """
+
+    def test_gemma4_streaming_accepts_request_kwarg(self):
+        from vllm_mlx.tool_parsers.gemma4_tool_parser import Gemma4ToolParser
+
+        parser = Gemma4ToolParser(tokenizer=None)
+        # Must not raise TypeError
+        result = parser.extract_tool_calls_streaming(
+            previous_text="",
+            current_text="hello",
+            delta_text="hello",
+            request={"tools": []},
+        )
+        # Plain text passes through as content
+        assert result == {"content": "hello"}
+
+
 class TestHermesStreamingFixes:
     """Test streaming fixes for Hermes parser (Issue #47)."""
 

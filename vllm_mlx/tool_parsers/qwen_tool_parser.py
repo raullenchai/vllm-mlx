@@ -25,7 +25,7 @@ def generate_tool_id() -> str:
     return f"call_{uuid.uuid4().hex[:8]}"
 
 
-@ToolParserManager.register_module(["qwen", "qwen3"])
+@ToolParserManager.register_module(["qwen", "qwen3", "qwen3_xml"])
 class QwenToolParser(ToolParser):
     """
     Tool call parser for Qwen models.

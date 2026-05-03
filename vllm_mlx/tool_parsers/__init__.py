@@ -21,7 +21,8 @@ Available parsers:
 - harmony/gpt-oss: GPT-OSS models (Harmony format with channels)
 - seed_oss/seed/gpt_oss: Seed-OSS / GPT-OSS models (XML format)
 - deepseek_v31/deepseek_r1_0528: DeepSeek V3.1 / R1-0528 models
-- qwen3_coder_xml/qwen3_xml: Qwen3-Coder models (XML format)
+- qwen/qwen3/qwen3_xml: Qwen models (<tool_call>JSON</tool_call> and [Calling tool:] formats)
+- qwen3_coder_xml: Qwen3-Coder models (<function=NAME> XML format)
 
 Usage:
     from vllm_mlx.tool_parsers import ToolParserManager

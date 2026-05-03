@@ -423,5 +423,3 @@ class TestCloudRouterStreamCompletion:
 
         # Should only have [DONE] since all chunks have empty choices
         assert result_chunks == ["data: [DONE]\n\n"]
-
-

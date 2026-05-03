@@ -1,70 +1,101 @@
 name: Bug Report
-description: Report a bug or unexpected behavior
+description: Report a crash, wrong output, broken tool calls, or other unexpected behavior
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
-      value: Thanks for reporting! Please fill in the details below.
+      value: |
+        Thanks for reporting! Please fill in every required field — issues missing a serve command or repro steps usually can't be acted on.
+
+        For **slowdowns / low throughput**, use the **Performance Issue** template instead.
   - type: input
     id: version
     attributes:
       label: Rapid-MLX version
-      placeholder: "e.g., 0.3.12 (run: rapid-mlx --version)"
+      placeholder: "e.g. 0.6.6 (run: rapid-mlx --version)"
     validations:
       required: true
+  - type: input
+    id: prior_version
+    attributes:
+      label: Last version where it worked (if regression)
+      description: Leave blank if first install or unknown.
+      placeholder: "e.g. 0.6.4"
   - type: input
     id: hardware
     attributes:
       label: Hardware
-      placeholder: "e.g., MacBook Pro M3 Max, 64GB"
+      placeholder: "e.g. MacBook Pro M3 Max, 64 GB"
     validations:
       required: true
   - type: input
     id: macos
     attributes:
       label: macOS version
-      placeholder: "e.g., Sequoia 15.3 (Apple menu → About This Mac)"
+      placeholder: "e.g. Sequoia 15.3 (Apple menu → About This Mac)"
     validations:
       required: true
   - type: input
     id: python
     attributes:
       label: Python version
-      placeholder: "e.g., 3.12.4 (run: python3 --version)"
+      placeholder: "e.g. 3.12.4 (run: python3 --version)"
   - type: input
     id: model
     attributes:
       label: Model
-      placeholder: "e.g., qwen3.5-4b or mlx-community/Qwen3.5-4B-MLX-4bit"
+      placeholder: "e.g. qwen3.5-4b or mlx-community/Qwen3.5-4B-MLX-4bit"
     validations:
       required: true
   - type: input
     id: serve_command
     attributes:
       label: Full serve command
-      placeholder: "e.g., rapid-mlx serve qwen3.5-4b --port 8000 --no-thinking"
+      description: Every flag matters — `--tool-call-parser`, `--reasoning-parser`, `--enable-prefix-cache`, etc.
+      placeholder: "rapid-mlx serve qwen3.5-4b --enable-auto-tool-choice --tool-call-parser qwen3 ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: streaming
+    attributes:
+      label: Streaming or non-streaming?
+      options:
+        - "Streaming (`stream: true`)"
+        - "Non-streaming"
+        - "Both"
+        - "N/A — not a chat completion bug"
     validations:
       required: true
   - type: textarea
     id: description
     attributes:
-      label: What happened?
-      placeholder: Describe the bug and what you expected to happen.
+      label: What happened? What did you expect?
+      placeholder: |
+        Actual: <describe the symptom>
+        Expected: <describe what should have happened>
     validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
-      label: Steps to reproduce
+      label: Minimal reproduction
+      description: A `curl` command + the model output / error is ideal. We need to be able to reproduce locally.
       placeholder: |
         1. Start server: `rapid-mlx serve ...`
-        2. Send request: `curl ...`
-        3. See error
+        2. Send request:
+           ```
+           curl -X POST http://127.0.0.1:1234/v1/chat/completions \
+             -H 'Content-Type: application/json' \
+             -d '{...}'
+           ```
+        3. Observe: <error or wrong output>
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: Error logs / output
+      label: Server logs / error output
+      description: Paste the relevant section from server stdout. Redact secrets if needed.
       render: shell
-      placeholder: Paste relevant logs or error messages here.
+    validations:
+      required: true

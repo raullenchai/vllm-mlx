@@ -1,0 +1,116 @@
+name: Performance Issue
+description: Report a slowdown, regression, or unexpectedly low throughput
+labels: ["performance"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for issues like "slow after upgrade", "low tok/s on model X", or "TTFT too high".
+
+        **We need a baseline to act on perf reports.** Without "before" numbers we can't tell a regression from expected hardware behavior. Please complete every required field — issues missing baseline data are usually closed.
+
+        For non-perf bugs (crashes, wrong output, broken tool calls), use **Bug Report** instead.
+
+  - type: input
+    id: current_version
+    attributes:
+      label: Current Rapid-MLX version (slow)
+      placeholder: "0.6.6 (run: rapid-mlx --version)"
+    validations:
+      required: true
+
+  - type: input
+    id: prior_version
+    attributes:
+      label: Prior version where speed was acceptable
+      description: If this is your first install, write "first install" — but then we have no regression to investigate.
+      placeholder: "e.g. 0.6.4, or 'first install'"
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      placeholder: "e.g. MacBook Pro M3 Max, 64 GB"
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: "e.g. mlx-community/Qwen3.5-4B-MLX-4bit"
+    validations:
+      required: true
+
+  - type: input
+    id: serve_command
+    attributes:
+      label: Full serve command
+      description: Include every flag — KV quantization, prefix cache, pin-system-prompt, etc. all change perf.
+      placeholder: "rapid-mlx serve <model> --enable-prefix-cache --kv-cache-quantization ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: measurement_short
+    attributes:
+      label: Short prompt measurement (~500–2000 tokens)
+      description: |
+        Run the same short prompt and report numbers. This isolates compute-bound vs bandwidth-bound issues.
+      placeholder: |
+        Prompt tokens: 1500
+        TTFT: 0.8s
+        Decode: 45 tok/s
+        Output tokens: 200
+    validations:
+      required: true
+
+  - type: textarea
+    id: measurement_long
+    attributes:
+      label: Long prompt measurement (your actual workload)
+      description: The slow case you're reporting.
+      placeholder: |
+        Prompt tokens: 60000
+        TTFT: 121s
+        Decode: 5.9 tok/s
+        Output tokens: 800
+    validations:
+      required: true
+
+  - type: textarea
+    id: prior_measurement
+    attributes:
+      label: Same measurement on prior version
+      description: |
+        Run the same long-prompt request on the prior version (downgrade with `brew install rapid-mlx@0.6.5` or pin via pip), report tok/s and TTFT.
+        If you can't downgrade, say why — but without a "before" number we can't confirm a regression.
+      placeholder: |
+        On 0.6.4 with same model + same 60K prompt:
+        TTFT: 95s
+        Decode: 18 tok/s
+    validations:
+      required: true
+
+  - type: textarea
+    id: server_logs
+    attributes:
+      label: Server logs around the slow request
+      description: Include `[schedule]`, `[Metal memory]`, `[cache_fetch/store]`, and the final `Chat completion` lines.
+      render: shell
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: Tested with a fresh server restart (no warm-up state)
+          required: true
+        - label: Confirmed model file is the same on both versions (not re-downloaded)
+          required: true
+        - label: Other macOS apps not competing for memory bandwidth (e.g. video calls, large builds)
+          required: true

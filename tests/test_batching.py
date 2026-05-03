@@ -463,6 +463,58 @@ class TestEngineThreading:
         assert fake_generate.generation_stream == "default-stream:gpu"
 
 
+class TestMetalCacheLimit:
+    """Verify _compute_metal_cache_limit scales by device working-set size.
+
+    Hardcoded 32 GB worked on M3 Ultra (15% of soft limit) but consumed ~50%
+    on M2 Max 96GB, contributing to memory pressure for 35B models with long
+    sessions. New formula: 25% of soft limit, capped at 32GB, floored at 2GB.
+    """
+
+    def test_caps_at_32gb_on_big_machines(self):
+        from vllm_mlx.engine.batched import _compute_metal_cache_limit
+
+        # M3 Ultra 256GB: max_rec=239GB, soft=215GB → 25% would be 54GB → cap 32GB
+        soft = 215 * 1024**3
+        assert _compute_metal_cache_limit(soft) == 32 * 1024**3
+
+    def test_scales_down_on_m2_max_96gb(self):
+        from vllm_mlx.engine.batched import _compute_metal_cache_limit
+
+        # M2 Max 96GB: max_rec=72GB, soft=65GB → 25% = 16.25GB (was 32GB hardcoded)
+        soft = 65 * 1024**3
+        cache = _compute_metal_cache_limit(soft)
+        # Allow integer-division rounding
+        assert 16 * 1024**3 <= cache <= 17 * 1024**3
+        # Critically: must be less than the old 32GB
+        assert cache < 32 * 1024**3
+
+    def test_scales_down_on_m3_max_64gb(self):
+        from vllm_mlx.engine.batched import _compute_metal_cache_limit
+
+        # M3 Max 64GB: max_rec=48GB, soft=43GB → 25% = 10.75GB
+        soft = 43 * 1024**3
+        cache = _compute_metal_cache_limit(soft)
+        assert 10 * 1024**3 <= cache <= 11 * 1024**3
+
+    def test_floors_at_2gb_on_tiny_machines(self):
+        from vllm_mlx.engine.batched import _compute_metal_cache_limit
+
+        # Hypothetical 4GB machine: 25% = 1GB, floor 2GB
+        soft = 4 * 1024**3
+        assert _compute_metal_cache_limit(soft) == 2 * 1024**3
+
+    def test_clamps_to_soft_limit_on_pathological_tiny_devices(self):
+        """Even with the 2 GiB floor, never exceed soft_limit (MLX implicit
+        invariant: cache_limit defaults to memory_limit, suggesting cache ≤ memory).
+        """
+        from vllm_mlx.engine.batched import _compute_metal_cache_limit
+
+        # 1 GiB soft limit (no real Apple Silicon device — paranoid edge case)
+        soft = 1 * 1024**3
+        assert _compute_metal_cache_limit(soft) == soft
+
+
 @pytest.mark.asyncio
 class TestEngineAsync:
     """Async tests for the engine."""

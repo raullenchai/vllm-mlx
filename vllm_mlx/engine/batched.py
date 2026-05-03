@@ -22,6 +22,33 @@ from .base import BaseEngine, GenerationOutput
 
 logger = logging.getLogger(__name__)
 
+
+def _compute_metal_cache_limit(soft_limit_bytes: int) -> int:
+    """Pick a Metal free-cache size that scales with the device's working set.
+
+    The free cache holds memory that was freed by Python objects but not yet
+    returned to the GPU. A larger cache speeds up subsequent allocations
+    (KV cache churn, prefix cache moves) but caps the budget that inference
+    can grow into under load.
+
+    Old behavior (hardcoded 32 GB) was sized for big machines: comfortable on
+    M3 Ultra 256GB (15% of soft limit), but allowed cache to grow to ~50% of
+    the soft limit on M2 Max 96GB, leaving insufficient room for a 35B model
+    + accumulated prefix cache + transient prefill allocations. Small machines
+    hit memory pressure → macOS paging → catastrophic slowdown.
+
+    Scale to 25% of the soft allocation limit, capped at 32 GiB (no change for
+    big machines), floored at 2 GiB (avoid degenerate cache on small machines).
+    Clamp to soft_limit to preserve MLX's implicit cache ≤ memory invariant on
+    pathologically tiny devices.
+    """
+    cache = max(
+        2 * 1024 * 1024 * 1024,
+        min(32 * 1024 * 1024 * 1024, soft_limit_bytes // 4),
+    )
+    return min(cache, soft_limit_bytes) if soft_limit_bytes > 0 else cache
+
+
 # Check for guided generation availability
 try:
     from ..api.guided import GuidedGenerator, is_guided_available
@@ -363,13 +390,14 @@ class BatchedEngine(BaseEngine):
             if max_recommended > 0:
                 soft_limit = int(max_recommended * self._gpu_memory_utilization)
                 mx.set_memory_limit(soft_limit)
-                mx.set_cache_limit(32 * 1024 * 1024 * 1024)  # 32GB
+                cache_limit = _compute_metal_cache_limit(soft_limit)
+                mx.set_cache_limit(cache_limit)
                 pct = self._gpu_memory_utilization * 100
                 logger.info(
                     f"Metal memory limits set: "
                     f"allocation_limit={soft_limit / 1e9:.1f}GB "
                     f"({pct:.0f}% of {max_recommended / 1e9:.1f}GB), "
-                    f"cache_limit=32GB"
+                    f"cache_limit={cache_limit / 1e9:.1f}GB"
                 )
 
         try:

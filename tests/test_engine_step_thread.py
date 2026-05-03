@@ -442,6 +442,7 @@ class TestMLLMSchedulerStepThread:
         scheduler = MLLMScheduler.__new__(MLLMScheduler)
         scheduler._running = True
         scheduler._step_executor = None
+        scheduler._injected_step_executor = None  # _process_loop creates its own
 
         threads: list[str] = []
         waiting_seen: list[bool] = []
@@ -477,6 +478,55 @@ class TestMLLMSchedulerStepThread:
                 "streams and the next batch_generator.next() crashes with "
                 "'There is no Stream(gpu, N) in current thread'."
             )
+
+    @pytest.mark.asyncio
+    async def test_step_uses_injected_executor_not_a_fresh_one(self):
+        """When BatchedEngine hands in the model-load executor, MLLMScheduler
+        MUST step on that same thread — the model arrays are tagged with its
+        stream. Creating a fresh mllm-step worker would be a new stream and
+        every batch_generator.next() would crash with Stream(gpu, N).
+        """
+        import concurrent.futures
+
+        from vllm_mlx.mllm_scheduler import MLLMScheduler
+
+        injected = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="mllm-step-injected"
+        )
+        try:
+            scheduler = MLLMScheduler.__new__(MLLMScheduler)
+            scheduler._running = True
+            scheduler._step_executor = None
+            scheduler._injected_step_executor = injected
+            scheduler._owns_step_executor = (
+                False  # set by _process_loop, but be explicit
+            )
+
+            captured: dict = {}
+            call_count = {"n": 0}
+
+            def fake_step():
+                captured["thread"] = threading.current_thread().name
+                call_count["n"] += 1
+                if call_count["n"] >= 1:
+                    scheduler._running = False
+                return None
+
+            scheduler._step_no_queue = fake_step
+            scheduler.has_requests = lambda: True
+            scheduler.waiting = [object()]
+            scheduler._distribute_outputs = lambda _o: None
+
+            await scheduler._process_loop()
+
+            assert captured["thread"].startswith("mllm-step-injected"), (
+                f"step ran on {captured['thread']!r}; expected the injected "
+                "executor's thread. A fresh executor would crash with "
+                "Stream(gpu, N) because the model arrays are tagged with the "
+                "injected executor's stream."
+            )
+        finally:
+            injected.shutdown(wait=True)
 
 
 if __name__ == "__main__":

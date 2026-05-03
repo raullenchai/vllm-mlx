@@ -280,15 +280,35 @@ class BatchedEngine(BaseEngine):
 
     async def _start_mllm(self) -> None:
         """Start the MLLM engine with MLLMScheduler (continuous batching)."""
+        import concurrent.futures
+
+        from ..engine_core import _init_mlx_step_thread
         from ..mllm_scheduler import MLLMScheduler, MLLMSchedulerConfig
         from ..models.mllm import MLXMultimodalLM
 
-        # Load the MLLM model
-        self._mllm_instance = MLXMultimodalLM(
-            self._model_name,
-            trust_remote_code=self._trust_remote_code,
+        # Load the MLLM model on a dedicated worker thread (#170 / #174 fix
+        # extended to MLLM). mlx-lm 0.31.3+ tags every mx.array with the
+        # calling thread's default stream, and MLLMScheduler.batch_generator
+        # later evals against these weights. Loading on the asyncio loop
+        # thread and stepping on a separate mllm-step worker would crash with
+        # "There is no Stream(gpu, N) in current thread" on the first request.
+        # The same executor is then handed to MLLMScheduler so step calls
+        # land on the model-owning thread.
+        self._model_load_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="mllm-step",
+            initializer=_init_mlx_step_thread,
         )
-        self._mllm_instance.load()
+
+        def _load_mllm() -> MLXMultimodalLM:
+            instance = MLXMultimodalLM(
+                self._model_name,
+                trust_remote_code=self._trust_remote_code,
+            )
+            instance.load()
+            return instance
+
+        self._mllm_instance = self._model_load_executor.submit(_load_mllm).result()
 
         self._model = self._mllm_instance.model
         self._processor = self._mllm_instance.processor
@@ -313,11 +333,13 @@ class BatchedEngine(BaseEngine):
             vision_cache_size=100,
         )
 
-        # Create and start MLLM scheduler
+        # Create and start MLLM scheduler — pass the model-owning executor so
+        # _step_no_queue runs on the same thread as model load.
         self._mllm_scheduler = MLLMScheduler(
             model=self._model,
             processor=self._processor,
             config=mllm_config,
+            step_executor=self._model_load_executor,
         )
         await self._mllm_scheduler.start()
 
@@ -433,6 +455,11 @@ class BatchedEngine(BaseEngine):
         if self._mllm_scheduler:
             await self._mllm_scheduler.stop()
             self._mllm_scheduler = None
+            # MLLMScheduler doesn't own the injected executor, so shut it
+            # down here on the MLLM path. (For LLM, _engine.stop() already
+            # tore it down via the executor handoff.)
+            if self._is_mllm and self._model_load_executor is not None:
+                self._model_load_executor.shutdown(wait=False)
 
         if self._engine:
             await self._engine.stop()

@@ -156,6 +156,7 @@ class MLLMScheduler:
         model: Any,
         processor: Any,
         config: MLLMSchedulerConfig | None = None,
+        step_executor: Any | None = None,
     ):
         """
         Initialize MLLM scheduler.
@@ -164,10 +165,18 @@ class MLLMScheduler:
             model: The VLM model
             processor: The VLM processor
             config: Scheduler configuration
+            step_executor: Optional pre-created single-thread ThreadPoolExecutor
+                that owns the ``mllm-step`` worker. The model MUST have been
+                loaded on this executor — under mlx-lm 0.31.3+, every later
+                ``mx.eval`` against the model weights has to come from the
+                same thread that created them. If ``None``, a fresh executor
+                is created in ``_process_loop`` (the caller-loaded model will
+                then crash with ``Stream(gpu, N) in current thread``).
         """
         self.model = model
         self.processor = processor
         self.config = config or MLLMSchedulerConfig()
+        self._injected_step_executor = step_executor
 
         # Get model config
         self.model_config = getattr(model, "config", None)
@@ -765,9 +774,11 @@ class MLLMScheduler:
             self.batch_generator.close()
             self.batch_generator = None
 
-        # Shut down the step executor to avoid leaking worker threads
+        # Shut down the step executor to avoid leaking worker threads.
+        # Only shut down if we own it — caller-supplied executors stay alive.
         if self._step_executor is not None:
-            self._step_executor.shutdown(wait=False)
+            if getattr(self, "_owns_step_executor", True):
+                self._step_executor.shutdown(wait=False)
             self._step_executor = None
 
         logger.info("MLLM Scheduler stopped")
@@ -797,9 +808,20 @@ class MLLMScheduler:
         """
         import concurrent.futures
 
-        self._step_executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="mllm-step"
-        )
+        # Reuse the executor that loaded the model (so step calls hit the
+        # same thread the model arrays are tagged with). Only fall back to
+        # a fresh executor when no caller-supplied executor exists — that
+        # path will hit Stream(gpu, N) on the first batch_generator.next()
+        # under mlx-lm 0.31.3+, but it preserves the legacy behavior for
+        # any sync test/CLI code path that constructs MLLMScheduler directly.
+        if self._injected_step_executor is not None:
+            self._step_executor = self._injected_step_executor
+            self._owns_step_executor = False
+        else:
+            self._step_executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="mllm-step"
+            )
+            self._owns_step_executor = True
         loop = asyncio.get_running_loop()
 
         try:
@@ -828,7 +850,8 @@ class MLLMScheduler:
                     await asyncio.sleep(0.1)
         finally:
             if self._step_executor is not None:
-                self._step_executor.shutdown(wait=False)
+                if getattr(self, "_owns_step_executor", True):
+                    self._step_executor.shutdown(wait=False)
                 self._step_executor = None
 
     async def add_request_async(

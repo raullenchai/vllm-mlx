@@ -154,6 +154,68 @@ class TestStepThread:
         finally:
             await engine_core.stop()
 
+    @pytest.mark.asyncio
+    async def test_add_request_routes_to_worker(self, engine_core, monkeypatch):
+        """add_request() MUST run scheduler.add_request on the mlx-step worker.
+
+        scheduler.add_request walks the prefix cache (memory_aware_cache.fetch
+        does copy.deepcopy of cached KV state, paged_cache.reconstruct_cache
+        materializes block tensors). Those allocations get tagged with the
+        calling thread's default stream. If add_request runs on the asyncio
+        loop thread, the cached KV ends up on a stream the mlx-step worker
+        cannot mx.eval against, and the next batch_generator.next() raises
+        "There is no Stream(gpu, N) in current thread" inside
+        `mx.eval([c.state for c in self.prompt_cache])`.
+
+        This is the third leg of the #170 fix (after #173 warmup and #174
+        model load). Without it, every text-only model with a populated
+        prefix cache (e.g. --pin-system-prompt loaded entries from disk,
+        or a prior request's system prompt) breaks on the next request.
+        """
+        from vllm_mlx import engine_core as ec
+
+        monkeypatch.setattr(ec, "_init_mlx_step_thread", lambda: None)
+
+        captured = {}
+
+        def fake_add_request(request):
+            captured["thread"] = threading.current_thread().name
+            captured["request_id"] = request.request_id
+
+        engine_core.scheduler.add_request.side_effect = fake_add_request
+
+        await engine_core.start()
+        try:
+            request_id = await engine_core.add_request("hello")
+            assert captured["request_id"] == request_id
+            assert captured["thread"].startswith("mlx-step"), (
+                f"add_request ran on {captured['thread']!r}, expected mlx-step worker. "
+                "If add_request runs on the asyncio loop thread, prefix-cache "
+                "KV deep-copies are tagged with the wrong stream and the next "
+                "step() crashes with 'There is no Stream(gpu, N) in current thread'."
+            )
+        finally:
+            await engine_core.stop()
+
+    @pytest.mark.asyncio
+    async def test_add_request_falls_back_when_executor_missing(self, engine_core):
+        """Without start(), add_request runs scheduler.add_request inline.
+
+        Sync test/CLI paths that build an EngineCore without calling start()
+        must still work — the caller will see whatever stream error MLX would
+        have raised, but no spurious AttributeError on `_mlx_executor`."""
+        captured = {}
+
+        def fake_add_request(request):
+            captured["thread"] = threading.current_thread().name
+
+        engine_core.scheduler.add_request.side_effect = fake_add_request
+
+        # Engine never started → _mlx_executor is None.
+        assert engine_core._mlx_executor is None
+        await engine_core.add_request("hello")
+        assert captured["thread"] == threading.current_thread().name
+
 
 class TestBatchedEngineWarmup:
     """#170 regression: BatchedEngine.generate_warmup() must run on the

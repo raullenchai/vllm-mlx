@@ -437,8 +437,21 @@ class EngineCore:
         )
         self._finished_events[request_id] = asyncio.Event()
 
-        # Add to scheduler
-        self.scheduler.add_request(request)
+        # Dispatch to the mlx-step worker so any MLX arrays allocated during
+        # prefix cache lookup (memory_aware_cache.fetch deep-copies cached KV
+        # state, paged_cache.reconstruct_cache materializes block tensors,
+        # etc.) are tagged with the worker's default stream. Otherwise those
+        # arrays carry the asyncio loop thread's stream and the next
+        # batch_generator.next() raises "There is no Stream(gpu, N) in
+        # current thread" inside `mx.eval([c.state for c in self.prompt_cache])`.
+        # Complements the warmup/model-load fix in PR #173 / #174.
+        if self._mlx_executor is not None:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                self._mlx_executor, self.scheduler.add_request, request
+            )
+        else:
+            self.scheduler.add_request(request)
 
         return request_id
 

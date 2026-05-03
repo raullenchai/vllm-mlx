@@ -1260,7 +1260,9 @@ Examples:
         ],
         help=(
             "Select the tool call parser for the model. Options: "
-            "auto (auto-detect), mistral, qwen, qwen3_coder, qwen3_coder_xml/qwen3_xml, llama, hermes, "
+            "auto (auto-detect), mistral, qwen/qwen3/qwen3_xml (reasoning models, "
+            "<tool_call>JSON</tool_call> format), qwen3_coder/qwen3_coder_xml "
+            "(Coder model, <function=NAME> XML format), llama, hermes, "
             "deepseek, kimi, granite, nemotron, xlam, functionary, glm47, minimax, "
             "harmony/gpt-oss, gemma4. "
             "Required for --enable-auto-tool-choice."

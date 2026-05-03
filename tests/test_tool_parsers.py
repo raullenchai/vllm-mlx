@@ -901,6 +901,48 @@ class TestQwen3XmlAlias:
             "qwen3_coder_xml must remain bound to the Coder parser"
         )
 
+    def test_qwen3_xml_streaming_emits_tool_call(self):
+        """Streaming path: feed reasoning-model output token-by-token through qwen3_xml.
+
+        This is the path that was crashing in the user's bug report (raw token IDs
+        leaking into 'Internal error during streaming'). The bug surfaced because
+        the Coder parser's streaming logic doesn't recognize JSON-in-<tool_call>
+        and either raised or silently dropped emissions. With qwen3_xml routed to
+        QwenToolParser, the streaming path must successfully emit a tool_call
+        delta when the closing </tool_call> token arrives.
+        """
+        parser = ToolParserManager.get_tool_parser("qwen3_xml")(tokenizer=None)
+        # Mimic real tokenizer chunks (Qwen tokenizes <tool_call> and </tool_call>
+        # as single tokens, JSON content as several tokens).
+        chunks = [
+            "<tool_call>",
+            '{"name": ',
+            '"read", ',
+            '"arguments": ',
+            '{"filePath": ',
+            '"/etc/hostname"}}',
+            "</tool_call>",
+        ]
+        emitted_tool_calls = []
+        prev = ""
+        for chunk in chunks:
+            current = prev + chunk
+            result = parser.extract_tool_calls_streaming(
+                previous_text=prev,
+                current_text=current,
+                delta_text=chunk,
+                request={"tools": [{"type": "function", "function": {"name": "read"}}]},
+            )
+            if result and "tool_calls" in result:
+                emitted_tool_calls.extend(result["tool_calls"])
+            prev = current
+        assert len(emitted_tool_calls) >= 1, (
+            "streaming qwen3_xml must emit at least one tool_call delta"
+        )
+        assert emitted_tool_calls[-1]["function"]["name"] == "read"
+        args = json.loads(emitted_tool_calls[-1]["function"]["arguments"])
+        assert args["filePath"] == "/etc/hostname"
+
 
 class TestGemma4StreamingSignature:
     """Regression: Gemma4ToolParser.extract_tool_calls_streaming must accept request=.

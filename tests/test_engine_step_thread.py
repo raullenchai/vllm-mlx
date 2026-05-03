@@ -430,44 +430,52 @@ class TestMLLMSchedulerStepThread:
 
     @pytest.mark.asyncio
     async def test_step_runs_on_mllm_step_thread_with_and_without_waiting(self):
-        """_step_no_queue must execute on mllm-step in BOTH branches."""
+        """_step_no_queue must execute on mllm-step in BOTH branches.
+
+        Drives _process_loop for two iterations and toggles ``waiting``
+        between non-empty (prefill) and empty (decode-only). Pre-fix the
+        decode-only iteration ran inline on the loop thread; post-fix
+        every iteration must land on mllm-step.
+        """
         from vllm_mlx.mllm_scheduler import MLLMScheduler
 
         scheduler = MLLMScheduler.__new__(MLLMScheduler)
         scheduler._running = True
         scheduler._step_executor = None
 
-        # Simulate "has_requests=True" twice — first iteration with a
-        # waiting request, second iteration without (decode-only).
         threads: list[str] = []
+        waiting_seen: list[bool] = []
         call_count = {"n": 0}
 
         def fake_step():
             threads.append(threading.current_thread().name)
+            waiting_seen.append(bool(scheduler.waiting))
             call_count["n"] += 1
-            # After 2 invocations, drain the loop.
-            if call_count["n"] >= 2:
+            if call_count["n"] == 1:
+                # Prepare iter 2 to be decode-only (empty waiting).
+                scheduler.waiting = []
+            elif call_count["n"] >= 2:
                 scheduler._running = False
             return None  # nothing to distribute
 
         scheduler._step_no_queue = fake_step
         scheduler.has_requests = lambda: True
-        # Toggle waiting between True (iter 1) and False (iter 2). The new
-        # process loop ignores this entirely; capture both anyway to prove
-        # the code path is exercised.
-        scheduler.waiting = [object()]  # iter 1: non-empty
+        scheduler.waiting = [object()]  # iter 1: prefill
         scheduler._distribute_outputs = lambda _o: None
 
         await scheduler._process_loop()
 
         assert len(threads) == 2, f"Expected 2 step calls, got {len(threads)}"
+        assert waiting_seen == [True, False], (
+            f"Expected iter 1 with waiting + iter 2 without, got {waiting_seen}"
+        )
         for i, name in enumerate(threads):
             assert name.startswith("mllm-step"), (
-                f"step #{i + 1} ran on {name!r}, expected mllm-step worker. "
-                "Splitting steps between mllm-step and loop thread tags "
-                "BatchGenerator KV arrays with mismatched streams and the "
-                "next batch_generator.next() crashes with 'There is no "
-                "Stream(gpu, N) in current thread'."
+                f"step #{i + 1} (waiting={waiting_seen[i]}) ran on {name!r}, "
+                "expected mllm-step worker. Splitting steps between mllm-step "
+                "and loop thread tags BatchGenerator KV arrays with mismatched "
+                "streams and the next batch_generator.next() crashes with "
+                "'There is no Stream(gpu, N) in current thread'."
             )
 
 

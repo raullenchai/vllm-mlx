@@ -986,13 +986,16 @@ class BatchedEngine(BaseEngine):
         # model. Silent in production because _run_guided_generation catches
         # the exception and falls back to non-guided generation, so guided
         # decoding has been quietly broken since #174.
+        #
+        # Note: we deliberately do NOT fall back to self._engine.engine._mlx_executor
+        # when _model_load_executor is None. That executor is created fresh by
+        # AsyncEngineCore.start() if no executor is handed in (e.g. the unused
+        # _inject_shared_model path), and its worker thread did NOT load the
+        # model — using it would just trade one Stream(gpu, N) crash for another.
         loop = asyncio.get_running_loop()
-        executor = self._model_load_executor or (
-            self._engine.engine._mlx_executor if self._engine else None
-        )
-        if executor is not None:
+        if self._model_load_executor is not None:
             result = await loop.run_in_executor(
-                executor,
+                self._model_load_executor,
                 functools.partial(
                     self._run_guided_generation,
                     prompt=prompt,
@@ -1002,6 +1005,8 @@ class BatchedEngine(BaseEngine):
                 ),
             )
         else:
+            # Best-effort fallback for sync/test paths. Will hit Stream(gpu, N)
+            # if the model lives on a real worker thread.
             result = await asyncio.to_thread(
                 self._run_guided_generation,
                 prompt=prompt,
@@ -1061,6 +1066,15 @@ class BatchedEngine(BaseEngine):
         Inject a pre-loaded shared model instead of loading a new one.
 
         This is used to inject a pre-loaded model instance.
+
+        Caveat (#170 stream binding): this path leaves
+        ``_model_load_executor`` unset, so ``generate_with_schema`` will
+        fall back to ``asyncio.to_thread`` and hit
+        ``RuntimeError: There is no Stream(gpu, N) in current thread``
+        the first time outlines materializes against the model. If you
+        wire this method up to a production code path, hand the model's
+        owning ThreadPoolExecutor in via a new arg and assign it to
+        ``self._model_load_executor``.
 
         Args:
             model: Pre-loaded MLX model

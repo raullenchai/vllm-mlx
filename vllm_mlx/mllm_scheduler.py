@@ -775,9 +775,13 @@ class MLLMScheduler:
     async def _process_loop(self) -> None:
         """Main async processing loop.
 
-        Uses a thread executor for steps that involve vision encoding
-        (prefill) to prevent blocking the asyncio event loop.  Pure
-        generation steps (~1-3ms) run inline for lower latency.
+        Every step (prefill *and* generation) runs on the dedicated
+        ``mllm-step`` worker. mlx-lm 0.31.3+ tags every ``mx.array`` with
+        the calling thread's default stream, and ``BatchGenerator`` keeps
+        KV state across calls — splitting prefill (worker) and decode
+        (loop thread) means the next ``batch_generator.next()`` from the
+        loop thread crashes with "There is no Stream(gpu, N) in current
+        thread". Same bug class as #170 / PR #173 / #174 / #182.
 
         Queue distribution always happens on the event loop thread to
         avoid thread-safety issues with asyncio.Queue.
@@ -802,16 +806,9 @@ class MLLMScheduler:
             while self._running:
                 try:
                     if self.has_requests():
-                        # Use executor when waiting requests need vision encoding
-                        # (prefill can block for seconds). Pure generation steps
-                        # are fast and can run inline.
-                        has_waiting = len(self.waiting) > 0
-                        if has_waiting:
-                            output = await loop.run_in_executor(
-                                self._step_executor, self._step_no_queue
-                            )
-                        else:
-                            output = self._step_no_queue()
+                        output = await loop.run_in_executor(
+                            self._step_executor, self._step_no_queue
+                        )
 
                         # Distribute outputs to queues ON the event loop thread
                         # (asyncio.Queue is not thread-safe).

@@ -11,6 +11,7 @@ MLLMBatchGenerator. MLLM models only initialise the MLLM scheduler (not the
 LLM engine), so text-only requests must also be routed through it.
 """
 
+import functools
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
@@ -976,14 +977,38 @@ class BatchedEngine(BaseEngine):
             prompt = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
             prompt += "\nassistant:"
 
-        # Run guided generation in thread pool (outlines is synchronous)
-        result = await asyncio.to_thread(
-            self._run_guided_generation,
-            prompt=prompt,
-            json_schema=json_schema,
-            max_tokens=max_tokens,
-            temperature=temperature,
+        # Run guided generation on the mlx-step worker. The model was
+        # loaded on _model_load_executor (#170 fix) and every later mx.eval
+        # on its weights must come from that same thread — see the third-leg
+        # fix in PR #182. asyncio.to_thread() would dispatch to the default
+        # executor and crash with "There is no Stream(gpu, N) in current
+        # thread" the first time outlines materializes anything against the
+        # model. Silent in production because _run_guided_generation catches
+        # the exception and falls back to non-guided generation, so guided
+        # decoding has been quietly broken since #174.
+        loop = asyncio.get_running_loop()
+        executor = self._model_load_executor or (
+            self._engine.engine._mlx_executor if self._engine else None
         )
+        if executor is not None:
+            result = await loop.run_in_executor(
+                executor,
+                functools.partial(
+                    self._run_guided_generation,
+                    prompt=prompt,
+                    json_schema=json_schema,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                ),
+            )
+        else:
+            result = await asyncio.to_thread(
+                self._run_guided_generation,
+                prompt=prompt,
+                json_schema=json_schema,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
 
         if result is None:
             # Fallback to standard generation

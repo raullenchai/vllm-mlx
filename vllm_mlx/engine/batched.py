@@ -28,21 +28,25 @@ def _compute_metal_cache_limit(soft_limit_bytes: int) -> int:
 
     The free cache holds memory that was freed by Python objects but not yet
     returned to the GPU. A larger cache speeds up subsequent allocations
-    (KV cache churn, prefix cache moves) but reserves memory that inference
-    cannot use.
+    (KV cache churn, prefix cache moves) but caps the budget that inference
+    can grow into under load.
 
     Old behavior (hardcoded 32 GB) was sized for big machines: comfortable on
-    M3 Ultra 256GB (15% of soft limit), but consumed ~50% of the soft limit
-    on M2 Max 96GB, leaving insufficient room for a 35B model + accumulated
-    prefix cache. Small machines hit memory pressure → catastrophic slowdown.
+    M3 Ultra 256GB (15% of soft limit), but allowed cache to grow to ~50% of
+    the soft limit on M2 Max 96GB, leaving insufficient room for a 35B model
+    + accumulated prefix cache + transient prefill allocations. Small machines
+    hit memory pressure → macOS paging → catastrophic slowdown.
 
-    Scale to 25% of the soft allocation limit, capped at 32 GB (no change for
-    big machines), floored at 2 GB (avoid degenerate cache on tiny machines).
+    Scale to 25% of the soft allocation limit, capped at 32 GiB (no change for
+    big machines), floored at 2 GiB (avoid degenerate cache on small machines).
+    Clamp to soft_limit to preserve MLX's implicit cache ≤ memory invariant on
+    pathologically tiny devices.
     """
-    return max(
+    cache = max(
         2 * 1024 * 1024 * 1024,
         min(32 * 1024 * 1024 * 1024, soft_limit_bytes // 4),
     )
+    return min(cache, soft_limit_bytes) if soft_limit_bytes > 0 else cache
 
 
 # Check for guided generation availability

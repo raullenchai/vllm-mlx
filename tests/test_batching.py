@@ -504,6 +504,16 @@ class TestMetalCacheLimit:
         soft = 4 * 1024**3
         assert _compute_metal_cache_limit(soft) == 2 * 1024**3
 
+    def test_clamps_to_soft_limit_on_pathological_tiny_devices(self):
+        """Even with the 2 GiB floor, never exceed soft_limit (MLX implicit
+        invariant: cache_limit defaults to memory_limit, suggesting cache ≤ memory).
+        """
+        from vllm_mlx.engine.batched import _compute_metal_cache_limit
+
+        # 1 GiB soft limit (no real Apple Silicon device — paranoid edge case)
+        soft = 1 * 1024**3
+        assert _compute_metal_cache_limit(soft) == soft
+
 
 @pytest.mark.asyncio
 class TestEngineAsync:

@@ -97,7 +97,7 @@ def _convert_param_value(
             return param_value
 
 
-@ToolParserManager.register_module(["qwen3_coder_xml", "qwen3_xml"])
+@ToolParserManager.register_module(["qwen3_coder_xml"])
 class Qwen3CoderToolParser(ToolParser):
     """
     Tool call parser for Qwen3-Coder models using XML format.

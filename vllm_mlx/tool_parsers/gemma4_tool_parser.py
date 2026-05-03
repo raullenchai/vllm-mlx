@@ -134,6 +134,7 @@ class Gemma4ToolParser(ToolParser):
         previous_token_ids: Sequence = (),
         current_token_ids: Sequence = (),
         delta_token_ids: Sequence = (),
+        request: dict[str, Any] | None = None,
     ) -> dict | None:
         # Check if we're inside a tool call
         if "<|tool_call>" in current_text:

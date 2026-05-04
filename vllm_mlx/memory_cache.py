@@ -59,13 +59,12 @@ def _safetensors_is_complete(path: str) -> bool:
 
     Returns False on any structural problem (caller should drop the entry).
     """
-    header = _read_safetensors_header(path)
-    if header is None:
+    parsed = _read_safetensors_header(path)
+    if parsed is None:
         return False
+    header, header_len = parsed
     try:
         size = os.path.getsize(path)
-        with open(path, "rb") as f:
-            header_len = struct.unpack("<Q", f.read(8))[0]
         max_end = 0
         for name, meta in header.items():
             if name == "__metadata__":
@@ -86,12 +85,14 @@ def _safetensors_is_complete(path: str) -> bool:
         return False
 
 
-def _read_safetensors_header(path: str) -> dict | None:
+def _read_safetensors_header(path: str) -> tuple[dict, int] | None:
     """Parse a safetensors header without loading any tensor data.
 
-    Returns the parsed header dict (incl. ``__metadata__``) on success,
-    or ``None`` if the file is structurally invalid. Used by
-    :func:`_safetensors_is_complete` and :func:`_safetensors_cache_classes`.
+    Returns ``(header_dict, header_len_bytes)`` on success, or ``None`` if
+    the file is structurally invalid. Both values are needed by
+    :func:`_safetensors_is_complete` to compute the absolute end-of-data
+    offset; :func:`_safetensors_cache_classes` ignores ``header_len``.
+    Returning both from one read avoids opening the file twice.
     """
     try:
         size = os.path.getsize(path)
@@ -108,7 +109,9 @@ def _read_safetensors_header(path: str) -> dict | None:
             if len(header_bytes) != header_len:
                 return None
         header = json.loads(header_bytes)
-        return header if isinstance(header, dict) else None
+        if not isinstance(header, dict):
+            return None
+        return header, header_len
     except (OSError, ValueError, struct.error, AttributeError, TypeError):
         return None
 
@@ -122,13 +125,20 @@ def _safetensors_cache_classes(path: str) -> list[str]:
     loading on cache-type compatibility (see Bug B in #198).
 
     Returns ``[]`` if the file is unreadable, has no metadata, or has no
-    ``2.*`` keys (in which case the caller should fall back to assuming
-    a plain ``KVCache`` for backward compat with files saved before this
-    field existed).
+    ``2.*`` keys. The caller treats ``[]`` as "permissive — assume
+    ``KVCache``" for backward compat with files saved before the
+    in-index ``cache_types`` field existed; that's safe today because
+    every mlx-lm version we depend on writes the ``2.*`` metadata, so
+    an actually-quantized file always yields a non-empty list. If a
+    future mlx-lm changes the metadata key layout this will silently
+    misclassify quantized files as KVCache and re-expose Bug A — emit
+    a one-time WARNING when the metadata block exists but yields no
+    ``2.*`` keys, so format drift is at least visible in logs.
     """
-    header = _read_safetensors_header(path)
-    if header is None:
+    parsed = _read_safetensors_header(path)
+    if parsed is None:
         return []
+    header, _ = parsed
     meta = header.get("__metadata__")
     if not isinstance(meta, dict):
         return []
@@ -142,6 +152,17 @@ def _safetensors_cache_classes(path: str) -> list[str]:
             continue
         if isinstance(v, str) and v:
             layer_classes[idx] = v
+    if not layer_classes and meta:
+        # Header has metadata but no recognizable per-layer class keys —
+        # likely a future mlx-lm format change. Surface it so the cause
+        # is diagnosable without parsing the safetensors by hand.
+        logger.warning(
+            f"[cache_persist] {path}: safetensors __metadata__ present "
+            f"but no '2.*' cache-class keys found "
+            f"(meta_keys={sorted(meta)[:8]}...) — assuming plain KVCache; "
+            f"if this file was actually quantized, the entry may crash "
+            f"the scheduler at fetch (#198 BUG A)"
+        )
     return [layer_classes[i] for i in sorted(layer_classes)]
 
 

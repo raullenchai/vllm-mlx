@@ -744,6 +744,50 @@ def test_plain_entry_loadable_under_turboquant(tmp_path):
     assert loaded == 1
 
 
+def test_hybrid_entry_with_one_quantized_layer_rejected_under_plain_config(
+    tmp_path,
+):
+    """A hybrid model could mix layer types (e.g. global attention layers
+    quantized for memory, sliding-window layers kept plain). The compat
+    check must reject the WHOLE entry if ANY layer requires a config the
+    current run doesn't have — otherwise the partial dequantize at fetch
+    leaves the quantized layer's tuple-form keys for the scheduler.
+
+    Constructs an entry with [KVCache, QuantizedKVCache, KVCache] and
+    asserts rejection under plain config.
+    """
+    QuantizedKVCache = pytest.importorskip("mlx_lm.models.cache").QuantizedKVCache
+    plain = make_kvcache(num_tokens=11, n_layers=1)[0]
+    quant_layer = QuantizedKVCache(group_size=64, bits=8)
+    qk = mx.full((1, 4, 11, 64), 0.5, dtype=mx.float16)
+    qv = mx.full((1, 4, 11, 64), -0.5, dtype=mx.float16)
+    quant_layer.update_and_fetch(qk, qv)
+    plain2 = make_kvcache(num_tokens=11, n_layers=1)[0]
+    mixed = [plain, quant_layer, plain2]
+
+    tokens = list(range(11))
+    _save_one_entry(tmp_path, tokens, mixed)
+    # Sanity: the recorded list reflects the hybrid layout.
+    with open(tmp_path / "index.json") as f:
+        idx = json.load(f)
+    assert idx["entries"][0]["cache_types"] == [
+        "KVCache",
+        "QuantizedKVCache",
+        "KVCache",
+    ]
+
+    cache = MemoryAwarePrefixCache(
+        model=object(),
+        config=MemoryCacheConfig(max_memory_mb=64, max_entries=100, kv_quantize=False),
+    )
+    loaded = cache.load_from_disk(str(tmp_path))
+    assert loaded == 0, (
+        "hybrid entry with even one QuantizedKVCache layer must be "
+        "rejected under plain config — partial dequantize would leave "
+        "tuple-form keys for the scheduler"
+    )
+
+
 def test_legacy_index_without_cache_types_falls_back_to_safetensors_metadata(
     tmp_path,
 ):

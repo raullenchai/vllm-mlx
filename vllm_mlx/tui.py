@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Small live monitor for `rapid-mlx serve --tui`.
 
-The monitor intentionally depends only on existing server endpoints:
-`/health` and `/v1/status`. It does not require request metrics middleware.
+Polls `/health`, `/v1/status`, and `/v1/requests`.
 """
 
 from __future__ import annotations
@@ -115,6 +114,55 @@ def _request_tokens(request: dict[str, Any]) -> tuple[int, int]:
     return prompt, completion
 
 
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def _entry_elapsed(item: dict[str, Any]) -> float:
+    return _num(item.get("elapsed", item.get("elapsed_s", 0.0)))
+
+
+def _entry_ttft(item: dict[str, Any]) -> float | None:
+    value = item.get("ttft", item.get("ttft_s"))
+    if value is None:
+        return None
+    ttft = _num(value)
+    return ttft if ttft > 0 else None
+
+
+def _entry_generated_tokens(item: dict[str, Any]) -> int:
+    return _integer(item.get("generated_tokens", item.get("completion_tokens", 0)))
+
+
+def _entry_prefill_tps(item: dict[str, Any]) -> float:
+    explicit = item.get("prompt_tps")
+    if explicit is not None:
+        return _num(explicit)
+    ttft = _entry_ttft(item)
+    prompt_tokens = _integer(item.get("prompt_tokens", 0))
+    return (prompt_tokens / ttft) if ttft is not None and ttft > 0.01 else 0.0
+
+
+def _entry_tokens_per_second(item: dict[str, Any]) -> float:
+    for key in ("decode_tps", "tokens_per_second", "generation_tps"):
+        explicit = _num(item.get(key, 0.0))
+        if explicit > 0:
+            return explicit
+    explicit = _num(item.get("effective_tps", 0.0))
+    if explicit > 0:
+        return explicit
+    elapsed = _entry_elapsed(item)
+    ttft = _entry_ttft(item)
+    generated = _entry_generated_tokens(item)
+    if ttft is not None and elapsed > ttft + 0.01:
+        return generated / (elapsed - ttft)
+    return (generated / elapsed) if elapsed > 0.01 else 0.0
+
+
+def _entries_tokens_per_second(entries: list[dict[str, Any]]) -> float:
+    return _mean([_entry_tokens_per_second(item) for item in entries])
+
+
 def _render_requests(status: dict[str, Any], width: int, tty_on: bool) -> list[str]:
     requests = status.get("requests")
     if not isinstance(requests, list) or not requests:
@@ -142,6 +190,7 @@ def _build_screen(
     interval: float,
     health: dict[str, Any],
     status: dict[str, Any],
+    requests_data: dict[str, Any],
     errors: list[str],
     tty_on: bool,
 ) -> str:
@@ -190,6 +239,15 @@ def _build_screen(
         )
     )
 
+    entries = requests_data.get("entries") if isinstance(requests_data, dict) else []
+    if not isinstance(entries, list):
+        entries = []
+    active_request = (
+        requests_data.get("active") if isinstance(requests_data, dict) else None
+    )
+    if not isinstance(active_request, dict):
+        active_request = {}
+
     metal = status.get("metal") if isinstance(status.get("metal"), dict) else {}
     lines.append("")
     lines.append(_c(tty_on, "bold", "Metal"))
@@ -234,7 +292,109 @@ def _build_screen(
         )
 
     lines.append("")
+    lines.append(_c(tty_on, "bold", "Last Request"))
+    last = entries[-1] if entries and isinstance(entries[-1], dict) else {}
+    if not last:
+        lines.append(_c(tty_on, "dim", "No completed request metrics yet."))
+    else:
+        ttft = _entry_ttft(last)
+        lines.append(
+            _row(
+                "tokens",
+                f"prompt={_integer(last.get('prompt_tokens', 0))} output={_entry_generated_tokens(last)}",
+                width,
+                "white",
+                tty_on,
+            )
+        )
+        lines.append(
+            _row(
+                "speed",
+                (f"ttft={ttft:.2f}s" if ttft is not None else "ttft=n/a")
+                + f" prefill={_entry_prefill_tps(last):.1f} tok/s"
+                + f" decode={_entry_tokens_per_second(last):.1f} tok/s"
+                + f" elapsed={_fmt_seconds(_entry_elapsed(last))}",
+                width,
+                "green",
+                tty_on,
+            )
+        )
+        lines.append(
+            _row(
+                "finish",
+                f"{last.get('finish_reason', 'n/a')} via {last.get('surface', 'n/a')}",
+                width,
+                "cyan",
+                tty_on,
+            )
+        )
+
+    lines.append("")
+    lines.append(_c(tty_on, "bold", f"Averages ({len(entries)} requests)"))
+    if not entries:
+        lines.append(_c(tty_on, "dim", "No completed request metrics yet."))
+    else:
+        avg_prompt = _mean([_num(item.get("prompt_tokens", 0)) for item in entries])
+        avg_output = _mean([_num(item.get("generated_tokens", 0)) for item in entries])
+        avg_ttft = _mean(
+            [
+                value
+                for value in (_entry_ttft(item) for item in entries)
+                if value is not None
+            ]
+        )
+        lines.append(
+            _row(
+                "average",
+                f"input={avg_prompt:.1f} output={avg_output:.1f} ttft={avg_ttft:.2f}s prefill={_mean([_entry_prefill_tps(item) for item in entries]):.1f} tok/s decode={_entries_tokens_per_second(entries):.1f} tok/s",
+                width,
+                "green",
+                tty_on,
+            )
+        )
+
+    lines.append("")
+    lines.append(_c(tty_on, "bold", "Recent Requests"))
+    recent_entries = [item for item in entries[-5:] if isinstance(item, dict)]
+    if not recent_entries:
+        lines.append(_c(tty_on, "dim", "No completed request metrics yet."))
+    else:
+        header = "time      surface              input output  TTFT   prefill tokens/s finish"
+        lines.append(_c(tty_on, "dim", _clamp(header, width)))
+        for item in reversed(recent_entries):
+            ts = item.get("finished_at") or 0
+            try:
+                when = time.strftime("%H:%M:%S", time.localtime(float(ts)))
+            except Exception:
+                when = "--:--:--"
+            ttft = _entry_ttft(item)
+            ttft_s = "  -  " if ttft is None else f"{ttft:>5.2f}"
+            row = (
+                f"{when}  "
+                f"{str(item.get('surface', 'n/a'))[-18:].ljust(18)} "
+                f"{_integer(item.get('prompt_tokens', 0)):>7} "
+                f"{_entry_generated_tokens(item):>6} "
+                f"{ttft_s} "
+                f"{_entry_prefill_tps(item):>9.1f} "
+                f"{_entry_tokens_per_second(item):>8.1f} "
+                f"{str(item.get('finish_reason', 'n/a'))[:12]}"
+            )
+            lines.append(_clamp(row, width))
+
+    lines.append("")
     lines.append(_c(tty_on, "bold", "Active Requests"))
+    if active_request:
+        started = _num(active_request.get("started_at", 0.0))
+        age = max(0.0, time.time() - started) if started else 0.0
+        lines.append(
+            _row(
+                "active",
+                f"{active_request.get('surface', 'n/a')} phase={active_request.get('phase', 'n/a')} age={_fmt_seconds(age)} output={_integer(active_request.get('generated_tokens', 0))}",
+                width,
+                "yellow",
+                tty_on,
+            )
+        )
     lines.extend(_render_requests(status, width, tty_on))
 
     if errors:
@@ -264,6 +424,7 @@ def run_monitor(base_url: str, interval: float = 1.0, pid: int | str = "?") -> i
     """Run the full-screen monitor loop until q or Ctrl-C."""
     health_url = base_url.rstrip("/") + "/health"
     status_url = base_url.rstrip("/") + "/v1/status"
+    requests_url = base_url.rstrip("/") + "/v1/requests?limit=50"
     interval = max(0.1, float(interval))
     tty_on = sys.stdout.isatty()
 
@@ -282,9 +443,11 @@ def run_monitor(base_url: str, interval: float = 1.0, pid: int | str = "?") -> i
 
         last_health: dict[str, Any] = {}
         last_status: dict[str, Any] = {}
+        last_requests: dict[str, Any] = {}
         while True:
             health, health_error = _fetch_json(health_url)
             status, status_error = _fetch_json(status_url)
+            requests_data, requests_error = _fetch_json(requests_url)
             if health:
                 last_health = health
             else:
@@ -293,10 +456,21 @@ def run_monitor(base_url: str, interval: float = 1.0, pid: int | str = "?") -> i
                 last_status = status
             else:
                 status = last_status
+            if requests_data:
+                last_requests = requests_data
+            else:
+                requests_data = last_requests
 
-            errors = [e for e in (health_error, status_error) if e]
+            errors = [e for e in (health_error, status_error, requests_error) if e]
             screen = _build_screen(
-                base_url, pid, interval, health, status, errors, tty_on
+                base_url,
+                pid,
+                interval,
+                health,
+                status,
+                requests_data,
+                errors,
+                tty_on,
             )
             if tty_on:
                 sys.stdout.write("\033[H\033[2J")

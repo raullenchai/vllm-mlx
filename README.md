@@ -242,6 +242,19 @@ models:
 aider --openai-api-base http://localhost:8000/v1 --openai-api-key not-needed
 ```
 
+**Swival** (`~/.swival/config.toml`):
+```toml
+[profiles.rapidmlx]
+provider = "generic"
+base_url = "http://127.0.0.1:8000"
+model = "default"
+```
+
+Run with:
+```bash
+swival --profile rapidmlx "summarize this repo"
+```
+
 **Open WebUI** (Docker one-liner):
 ```bash
 docker run -d -p 3000:8080 \

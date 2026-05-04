@@ -156,6 +156,7 @@ class MLLMScheduler:
         model: Any,
         processor: Any,
         config: MLLMSchedulerConfig | None = None,
+        step_executor: Any | None = None,
     ):
         """
         Initialize MLLM scheduler.
@@ -164,10 +165,18 @@ class MLLMScheduler:
             model: The VLM model
             processor: The VLM processor
             config: Scheduler configuration
+            step_executor: Optional pre-created single-thread ThreadPoolExecutor
+                that owns the ``mllm-step`` worker. The model MUST have been
+                loaded on this executor — under mlx-lm 0.31.3+, every later
+                ``mx.eval`` against the model weights has to come from the
+                same thread that created them. If ``None``, a fresh executor
+                is created in ``_process_loop`` (the caller-loaded model will
+                then crash with ``Stream(gpu, N) in current thread``).
         """
         self.model = model
         self.processor = processor
         self.config = config or MLLMSchedulerConfig()
+        self._injected_step_executor = step_executor
 
         # Get model config
         self.model_config = getattr(model, "config", None)
@@ -765,9 +774,11 @@ class MLLMScheduler:
             self.batch_generator.close()
             self.batch_generator = None
 
-        # Shut down the step executor to avoid leaking worker threads
+        # Shut down the step executor to avoid leaking worker threads.
+        # Only shut down if we own it — caller-supplied executors stay alive.
         if self._step_executor is not None:
-            self._step_executor.shutdown(wait=False)
+            if getattr(self, "_owns_step_executor", True):
+                self._step_executor.shutdown(wait=False)
             self._step_executor = None
 
         logger.info("MLLM Scheduler stopped")
@@ -775,9 +786,13 @@ class MLLMScheduler:
     async def _process_loop(self) -> None:
         """Main async processing loop.
 
-        Uses a thread executor for steps that involve vision encoding
-        (prefill) to prevent blocking the asyncio event loop.  Pure
-        generation steps (~1-3ms) run inline for lower latency.
+        Every step (prefill *and* generation) runs on the dedicated
+        ``mllm-step`` worker. mlx-lm 0.31.3+ tags every ``mx.array`` with
+        the calling thread's default stream, and ``BatchGenerator`` keeps
+        KV state across calls — splitting prefill (worker) and decode
+        (loop thread) means the next ``batch_generator.next()`` from the
+        loop thread crashes with "There is no Stream(gpu, N) in current
+        thread". Same bug class as #170 / PR #173 / #174 / #182.
 
         Queue distribution always happens on the event loop thread to
         avoid thread-safety issues with asyncio.Queue.
@@ -793,25 +808,29 @@ class MLLMScheduler:
         """
         import concurrent.futures
 
-        self._step_executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="mllm-step"
-        )
+        # Reuse the executor that loaded the model (so step calls hit the
+        # same thread the model arrays are tagged with). Only fall back to
+        # a fresh executor when no caller-supplied executor exists — that
+        # path will hit Stream(gpu, N) on the first batch_generator.next()
+        # under mlx-lm 0.31.3+, but it preserves the legacy behavior for
+        # any sync test/CLI code path that constructs MLLMScheduler directly.
+        if self._injected_step_executor is not None:
+            self._step_executor = self._injected_step_executor
+            self._owns_step_executor = False
+        else:
+            self._step_executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="mllm-step"
+            )
+            self._owns_step_executor = True
         loop = asyncio.get_running_loop()
 
         try:
             while self._running:
                 try:
                     if self.has_requests():
-                        # Use executor when waiting requests need vision encoding
-                        # (prefill can block for seconds). Pure generation steps
-                        # are fast and can run inline.
-                        has_waiting = len(self.waiting) > 0
-                        if has_waiting:
-                            output = await loop.run_in_executor(
-                                self._step_executor, self._step_no_queue
-                            )
-                        else:
-                            output = self._step_no_queue()
+                        output = await loop.run_in_executor(
+                            self._step_executor, self._step_no_queue
+                        )
 
                         # Distribute outputs to queues ON the event loop thread
                         # (asyncio.Queue is not thread-safe).
@@ -831,7 +850,8 @@ class MLLMScheduler:
                     await asyncio.sleep(0.1)
         finally:
             if self._step_executor is not None:
-                self._step_executor.shutdown(wait=False)
+                if getattr(self, "_owns_step_executor", True):
+                    self._step_executor.shutdown(wait=False)
                 self._step_executor = None
 
     async def add_request_async(

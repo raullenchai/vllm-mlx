@@ -310,5 +310,224 @@ class TestBatchedEngineWarmup:
         assert captured.get("model_thread") == threading.current_thread().name
 
 
+class TestGuidedGenerationStepThread:
+    """#170 regression: BatchedEngine.generate_with_schema must run
+    _run_guided_generation on the mlx-step worker (the same thread that
+    loaded the model), not asyncio's default executor.
+
+    outlines materializes mx.array against the model weights. mlx-lm 0.31.3+
+    tags every array with the calling thread's default stream. If guided
+    generation runs on a different thread than the model load thread, the
+    first eval crashes with "There is no Stream(gpu, N) in current thread".
+
+    The bug was silent in production because _run_guided_generation catches
+    the exception and falls back to non-guided generation — guided decoding
+    has been quietly broken since #174 swapped model loading onto
+    _model_load_executor.
+    """
+
+    @pytest.mark.asyncio
+    async def test_guided_generation_routes_to_step_thread(self, monkeypatch):
+        """generate_with_schema must dispatch via _model_load_executor."""
+        import concurrent.futures
+
+        from vllm_mlx.engine.batched import BatchedEngine
+
+        executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="mlx-step-test"
+        )
+        try:
+            engine = BatchedEngine.__new__(BatchedEngine)
+            engine._loaded = True
+            engine._is_mllm = False
+            engine._model = MagicMock()
+            engine._tokenizer = MagicMock()
+            engine._tokenizer.apply_chat_template = MagicMock(return_value="prompt")
+            engine._tokenizer.encode = MagicMock(return_value=[1, 2])
+            engine._model_load_executor = executor
+            engine._engine = None
+
+            # Force HAS_GUIDED True so supports_guided_generation passes.
+            from vllm_mlx.engine import batched as batched_mod
+
+            monkeypatch.setattr(batched_mod, "HAS_GUIDED", True)
+
+            captured: dict = {}
+
+            def fake_run_guided(prompt, json_schema, max_tokens, temperature):
+                captured["thread"] = threading.current_thread().name
+                return '{"ok": true}'
+
+            engine._run_guided_generation = fake_run_guided
+
+            result = await engine.generate_with_schema(
+                messages=[{"role": "user", "content": "hi"}],
+                json_schema={"type": "object"},
+                max_tokens=8,
+                temperature=0.0,
+            )
+
+            assert result.text == '{"ok": true}'
+            assert captured["thread"].startswith("mlx-step-test"), (
+                f"_run_guided_generation ran on {captured['thread']!r}, "
+                "expected mlx-step worker. asyncio.to_thread() would dispatch "
+                "to the default executor and crash with 'There is no Stream(gpu, N)' "
+                "the first time outlines materializes against the model."
+            )
+        finally:
+            executor.shutdown(wait=True)
+
+    @pytest.mark.asyncio
+    async def test_guided_generation_falls_back_without_executor(self, monkeypatch):
+        """No executor available → fall back to asyncio.to_thread (best-effort)."""
+        from vllm_mlx.engine.batched import BatchedEngine
+
+        engine = BatchedEngine.__new__(BatchedEngine)
+        engine._loaded = True
+        engine._is_mllm = False
+        engine._model = MagicMock()
+        engine._tokenizer = MagicMock()
+        engine._tokenizer.apply_chat_template = MagicMock(return_value="prompt")
+        engine._tokenizer.encode = MagicMock(return_value=[1])
+        engine._model_load_executor = None
+        engine._engine = None
+
+        from vllm_mlx.engine import batched as batched_mod
+
+        monkeypatch.setattr(batched_mod, "HAS_GUIDED", True)
+
+        called = {"n": 0}
+
+        def fake_run_guided(prompt, json_schema, max_tokens, temperature):
+            called["n"] += 1
+            return '{"ok": true}'
+
+        engine._run_guided_generation = fake_run_guided
+
+        result = await engine.generate_with_schema(
+            messages=[{"role": "user", "content": "hi"}],
+            json_schema={"type": "object"},
+        )
+
+        # Should still execute (via asyncio default executor) even without
+        # a mlx-step worker. Caller may then hit Stream(gpu, N), but the
+        # dispatch itself must not crash.
+        assert called["n"] == 1
+        assert result.text == '{"ok": true}'
+
+
+class TestMLLMSchedulerStepThread:
+    """#170 regression: MLLMScheduler must run every step on the mllm-step
+    worker, not split between worker (when waiting) and loop thread (when
+    only generating).
+
+    BatchGenerator keeps KV state across calls. Splitting prefill onto
+    mllm-step and decode onto the loop thread tags freshly-allocated
+    arrays with mismatched streams, so the next decode step crashes with
+    "There is no Stream(gpu, N) in current thread" inside
+    `mx.eval([c.state for c in self.prompt_cache])`.
+    """
+
+    @pytest.mark.asyncio
+    async def test_step_runs_on_mllm_step_thread_with_and_without_waiting(self):
+        """_step_no_queue must execute on mllm-step in BOTH branches.
+
+        Drives _process_loop for two iterations and toggles ``waiting``
+        between non-empty (prefill) and empty (decode-only). Pre-fix the
+        decode-only iteration ran inline on the loop thread; post-fix
+        every iteration must land on mllm-step.
+        """
+        from vllm_mlx.mllm_scheduler import MLLMScheduler
+
+        scheduler = MLLMScheduler.__new__(MLLMScheduler)
+        scheduler._running = True
+        scheduler._step_executor = None
+        scheduler._injected_step_executor = None  # _process_loop creates its own
+
+        threads: list[str] = []
+        waiting_seen: list[bool] = []
+        call_count = {"n": 0}
+
+        def fake_step():
+            threads.append(threading.current_thread().name)
+            waiting_seen.append(bool(scheduler.waiting))
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                # Prepare iter 2 to be decode-only (empty waiting).
+                scheduler.waiting = []
+            elif call_count["n"] >= 2:
+                scheduler._running = False
+            return None  # nothing to distribute
+
+        scheduler._step_no_queue = fake_step
+        scheduler.has_requests = lambda: True
+        scheduler.waiting = [object()]  # iter 1: prefill
+        scheduler._distribute_outputs = lambda _o: None
+
+        await scheduler._process_loop()
+
+        assert len(threads) == 2, f"Expected 2 step calls, got {len(threads)}"
+        assert waiting_seen == [True, False], (
+            f"Expected iter 1 with waiting + iter 2 without, got {waiting_seen}"
+        )
+        for i, name in enumerate(threads):
+            assert name.startswith("mllm-step"), (
+                f"step #{i + 1} (waiting={waiting_seen[i]}) ran on {name!r}, "
+                "expected mllm-step worker. Splitting steps between mllm-step "
+                "and loop thread tags BatchGenerator KV arrays with mismatched "
+                "streams and the next batch_generator.next() crashes with "
+                "'There is no Stream(gpu, N) in current thread'."
+            )
+
+    @pytest.mark.asyncio
+    async def test_step_uses_injected_executor_not_a_fresh_one(self):
+        """When BatchedEngine hands in the model-load executor, MLLMScheduler
+        MUST step on that same thread — the model arrays are tagged with its
+        stream. Creating a fresh mllm-step worker would be a new stream and
+        every batch_generator.next() would crash with Stream(gpu, N).
+        """
+        import concurrent.futures
+
+        from vllm_mlx.mllm_scheduler import MLLMScheduler
+
+        injected = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="mllm-step-injected"
+        )
+        try:
+            scheduler = MLLMScheduler.__new__(MLLMScheduler)
+            scheduler._running = True
+            scheduler._step_executor = None
+            scheduler._injected_step_executor = injected
+            scheduler._owns_step_executor = (
+                False  # set by _process_loop, but be explicit
+            )
+
+            captured: dict = {}
+            call_count = {"n": 0}
+
+            def fake_step():
+                captured["thread"] = threading.current_thread().name
+                call_count["n"] += 1
+                if call_count["n"] >= 1:
+                    scheduler._running = False
+                return None
+
+            scheduler._step_no_queue = fake_step
+            scheduler.has_requests = lambda: True
+            scheduler.waiting = [object()]
+            scheduler._distribute_outputs = lambda _o: None
+
+            await scheduler._process_loop()
+
+            assert captured["thread"].startswith("mllm-step-injected"), (
+                f"step ran on {captured['thread']!r}; expected the injected "
+                "executor's thread. A fresh executor would crash with "
+                "Stream(gpu, N) because the model arrays are tagged with the "
+                "injected executor's stream."
+            )
+        finally:
+            injected.shutdown(wait=True)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

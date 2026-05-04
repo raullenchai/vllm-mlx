@@ -95,11 +95,9 @@ class DeepSeekReviewStep(Step):
             )
 
         diff_full = Path(ctx.diff_path).read_text()
-        diff, omitted_files = _truncate_diff_at_file_boundary(diff_full, MAX_DIFF_BYTES)
-        # truncated is True whenever *anything* was cut — including the
-        # single-big-file case where omitted_files is empty but the diff
-        # itself was raw-sliced.
-        truncated = len(diff.encode()) < len(diff_full.encode())
+        diff, omitted_files, truncated = _truncate_diff_at_file_boundary(
+            diff_full, MAX_DIFF_BYTES
+        )
 
         if not PROMPT_PATH.exists():
             return StepResult(
@@ -264,57 +262,73 @@ def _build_user_prompt(
     return "\n".join(lines)
 
 
-_FILE_HEADER_RE = re.compile(r"^diff --git a/(.+?) b/", re.MULTILINE)
+# Header line is one of:
+#   diff --git a/<path> b/<path>            (no spaces in path)
+#   diff --git "a/<escaped>" "b/<escaped>"  (path with spaces / specials)
+# A single byte regex handles both. group(1) wins for the quoted form,
+# group(2) for the unquoted. Operating on bytes avoids the O(N·L)
+# re-encode-the-prefix dance that string-mode would force.
+_FILE_HEADER_RE = re.compile(
+    rb'^diff --git (?:"a/((?:[^"\\]|\\.)*)"|a/(\S+)) ',
+    re.MULTILINE,
+)
 
 
-def _truncate_diff_at_file_boundary(diff: str, max_bytes: int) -> tuple[str, list[str]]:
+def _truncate_diff_at_file_boundary(
+    diff: str, max_bytes: int
+) -> tuple[str, list[str], bool]:
     """Truncate *diff* to *max_bytes* at the nearest preceding file boundary.
 
-    Returns ``(kept_diff, omitted_file_paths)``.  If the diff fits, returns
-    the original string and an empty list.  If even the first file exceeds
-    the limit we fall back to a raw byte slice (better than nothing) and
-    list all remaining files as omitted.
+    Returns ``(kept_diff, omitted_file_paths, was_truncated)``.  If the diff
+    fits, returns the original string, an empty list, and ``False``.  If
+    even the first file exceeds the limit we fall back to a raw byte slice
+    (better than nothing) and list all remaining files as omitted.
 
     Sizes are measured in UTF-8 bytes (not Python character counts) to match
     what the HTTP layer actually sends.
     """
     diff_bytes = diff.encode()
     if len(diff_bytes) <= max_bytes:
-        return diff, []
+        return diff, [], False
 
-    # Find the byte offset of every per-file header. _FILE_HEADER_RE operates
-    # on the *string* (char positions), so convert each char offset to a byte
-    # offset once using encode() slicing.
-    positions = []
-    for m in _FILE_HEADER_RE.finditer(diff):
-        byte_pos = len(diff[: m.start()].encode())
-        positions.append((byte_pos, m.group(1)))
+    # Find every per-file header — byte offset and a-side path.
+    positions: list[tuple[int, str]] = []
+    for m in _FILE_HEADER_RE.finditer(diff_bytes):
+        path_bytes = m.group(1) if m.group(1) is not None else m.group(2)
+        # Quoted form uses C-style escapes (\\, \", \t, \n, octal); we don't
+        # try to fully unescape — the path is only used for human-readable
+        # "files NOT reviewed" listings, slight visual artifact is OK.
+        path = path_bytes.decode("utf-8", errors="replace")
+        positions.append((m.start(), path))
 
     # Walk forward and find the last file whose header fits within max_bytes.
     kept_end = 0
-    for _i, (pos, _) in enumerate(positions):
+    for pos, _ in positions:
         if pos > max_bytes:
             break
         kept_end = pos
     else:
         # All file headers start before the limit — the overflow is inside the
-        # last file's content. Keep everything up to (but not including) the
-        # last file so we only ship complete file diffs.
+        # last file's content. Drop the last file so we only ship complete
+        # per-file diffs (partial file diffs confuse the reviewer).
         kept_end = positions[-1][0] if positions else 0
 
     if kept_end == 0:
-        # Even the first file overflows. Raw-slice to the byte limit and list
-        # the remaining files as omitted (first file is partially shown).
-        raw = diff_bytes[:max_bytes].decode(errors="replace")
+        # Either no headers found, or even the first file alone overflows.
+        # Raw-slice to the byte limit and list the remaining files (if any)
+        # as omitted; the first file is shown partially.  ``errors="ignore"``
+        # drops a trailing incomplete UTF-8 sequence rather than replacing
+        # it with U+FFFD — the latter would re-encode to 3 bytes and could
+        # push us *over* ``max_bytes``, defeating the cap.
+        raw = diff_bytes[:max_bytes].decode("utf-8", errors="ignore")
         omitted = [path for _, path in positions[1:]]
-        return raw, omitted
+        return raw, omitted, True
 
-    # Slice at the byte boundary, then decode — safe because we sliced at a
-    # file-header start which is always ASCII.
+    # Slice at the byte boundary, then decode — safe because the boundary
+    # is always at the start of a header line (pure ASCII).
     kept_diff = diff_bytes[:kept_end].decode()
-    # Omitted = files whose header starts at or after kept_end.
     omitted = [path for pos, path in positions if pos >= kept_end]
-    return kept_diff, omitted
+    return kept_diff, omitted, True
 
 
 # Cap on how many directories we'll list — a 50-file refactor PR
@@ -350,7 +364,15 @@ def _gather_directory_context(ctx: Context) -> str:
         if not d:
             continue
         normalized = os.path.normpath(d)
-        if normalized.startswith("..") or os.path.isabs(normalized):
+        # Reject "." (current dir — gh api 404s on this), "../*" / ".." (parent
+        # traversal), and absolute paths. Note: a plain ``startswith("..")``
+        # would also reject legitimate names like ``..hidden`` or ``..env``;
+        # we want to match only the path-component sense of "..".
+        if (
+            normalized in (".", "..")
+            or normalized.startswith("../")
+            or os.path.isabs(normalized)
+        ):
             continue
         dirs.add(normalized)
 

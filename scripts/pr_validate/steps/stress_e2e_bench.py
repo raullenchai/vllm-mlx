@@ -252,7 +252,7 @@ def _available_ram_gb() -> float:
         )
         try:
             page_size = os.sysconf("SC_PAGE_SIZE")
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, OSError):
             page_size = 16384  # Apple Silicon default; vm_stat fallback
         free_pages = inactive_pages = 0
         for line in proc.stdout.splitlines():
@@ -543,13 +543,17 @@ def _run_bench(ctx: Context, choice: ModelChoice) -> dict[str, Any]:
         }
 
     baseline = json.loads(baseline_path.read_text())
-    # Accept both old (ttft) and new key names for backward compat
-    base_cold = baseline.get("cold_request_ms_median") or baseline.get(
-        "cold_ttft_ms_median", cold
-    )
-    base_warm = baseline.get("warm_request_ms_median") or baseline.get(
-        "warm_ttft_ms_median", warm
-    )
+    # Accept both old (ttft) and new key names for backward compat. Use an
+    # explicit ``in`` check rather than ``or`` short-circuit — ``or`` would
+    # also fall through on a numeric ``0`` or missing value, masking bugs.
+    if "cold_request_ms_median" in baseline:
+        base_cold = baseline["cold_request_ms_median"]
+    else:
+        base_cold = baseline.get("cold_ttft_ms_median", cold)
+    if "warm_request_ms_median" in baseline:
+        base_warm = baseline["warm_request_ms_median"]
+    else:
+        base_warm = baseline.get("warm_ttft_ms_median", warm)
 
     # Slowdown = current / baseline. >5% slower on cold OR warm = fail.
     cold_slow = (cold / base_cold - 1) * 100 if base_cold else 0

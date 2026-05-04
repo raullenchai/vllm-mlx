@@ -18,34 +18,37 @@ _MAX_BUFFER_BYTES = 4 * 1024 * 1024
 def _safe_json_loads(payload: str | bytes) -> dict | None:
     try:
         data = json.loads(payload)
-    except Exception:
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
         return None
     return data if isinstance(data, dict) else None
 
 
 def _extract_chat_delta(payload: dict) -> tuple[str | None, str | None]:
-    try:
-        choice = (payload.get("choices") or [None])[0]
-        if not choice:
-            return None, None
-        delta = choice.get("delta") or {}
-        text = delta.get("content")
-        if text is None:
-            message = choice.get("message") or {}
-            text = message.get("content")
-        return text, choice.get("finish_reason")
-    except Exception:
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
         return None, None
+    choice = choices[0]
+    if not isinstance(choice, dict):
+        return None, None
+    delta = choice.get("delta") or {}
+    if not isinstance(delta, dict):
+        delta = {}
+    text = delta.get("content")
+    if text is None:
+        message = choice.get("message") or {}
+        if isinstance(message, dict):
+            text = message.get("content")
+    return text, choice.get("finish_reason")
 
 
 def _extract_completion_delta(payload: dict) -> tuple[str | None, str | None]:
-    try:
-        choice = (payload.get("choices") or [None])[0]
-        if not choice:
-            return None, None
-        return choice.get("text"), choice.get("finish_reason")
-    except Exception:
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
         return None, None
+    choice = choices[0]
+    if not isinstance(choice, dict):
+        return None, None
+    return choice.get("text"), choice.get("finish_reason")
 
 
 def _extract_usage(payload: dict) -> tuple[int | None, int | None]:
@@ -81,7 +84,6 @@ class MetricsMiddleware:
         last_finish_reason: str | None = None
         last_prompt_tokens: int | None = None
         last_generated_tokens: int | None = None
-        running_text_tokens = 0
         engine_gen_tps = 0.0
         engine_ttft: float | None = None
 
@@ -103,12 +105,12 @@ class MetricsMiddleware:
                     ttft = request.get("ttft_s")
                     if ttft is not None and engine_ttft is None:
                         engine_ttft = float(ttft)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("metrics engine polling failed: %s", exc)
 
         def handle_payload(payload: dict) -> None:
             nonlocal first_token_seen, last_finish_reason
-            nonlocal last_prompt_tokens, last_generated_tokens, running_text_tokens
+            nonlocal last_prompt_tokens, last_generated_tokens
             text, finish = (
                 _extract_chat_delta(payload)
                 if is_chat
@@ -125,15 +127,10 @@ class MetricsMiddleware:
                 if not first_token_seen:
                     recorder.mark_first_token(req_id)
                     first_token_seen = True
-                running_text_tokens += max(1, len(text) // 4)
                 recorder.update(
                     req_id,
                     delta_text=text,
-                    generated_tokens=(
-                        last_generated_tokens
-                        if last_generated_tokens is not None
-                        else running_text_tokens
-                    ),
+                    generated_tokens=last_generated_tokens,
                     prompt_tokens=last_prompt_tokens,
                 )
             elif ptoks is not None or gtoks is not None:
@@ -145,7 +142,7 @@ class MetricsMiddleware:
 
         def consume_sse(buf: bytes) -> None:
             nonlocal sse_carry
-            data = sse_carry + buf
+            data = (sse_carry + buf).replace(b"\r\n", b"\n")
             *complete, sse_carry = data.split(b"\n\n")
             for raw_event in complete:
                 for line in raw_event.split(b"\n"):
@@ -177,8 +174,9 @@ class MetricsMiddleware:
                         consume_sse(body)
                     elif len(json_buffer) < _MAX_BUFFER_BYTES:
                         json_buffer.extend(body[: _MAX_BUFFER_BYTES - len(json_buffer)])
-                    poll_engine_stats()
                     if not more:
+                        if is_sse:
+                            consume_sse(b"\n\n")
                         if not is_sse and json_buffer:
                             payload = _safe_json_loads(bytes(json_buffer))
                             if payload is not None:
@@ -218,5 +216,5 @@ class MetricsMiddleware:
             poller_done.set()
             try:
                 await poller_task
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("metrics poller shutdown failed: %s", exc)

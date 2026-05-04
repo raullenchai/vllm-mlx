@@ -41,21 +41,21 @@ def _fetch_json(url: str, timeout: float = 2.0) -> tuple[dict, str | None]:
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8")), None
-    except Exception as exc:
+    except (json.JSONDecodeError, TimeoutError, urllib.error.URLError, OSError) as exc:
         return {}, str(exc)
 
 
 def _num(value, default: float = 0.0) -> float:
     try:
         return float(value)
-    except Exception:
+    except (TypeError, ValueError):
         return float(default)
 
 
 def _integer(value, default: int = 0) -> int:
     try:
         return int(float(value))
-    except Exception:
+    except (TypeError, ValueError):
         return int(default)
 
 
@@ -517,7 +517,7 @@ def _build_screen(
             ts = item.get("finished_at") or 0
             try:
                 when = time.strftime("%H:%M:%S", time.localtime(float(ts)))
-            except Exception:
+            except (TypeError, ValueError, OSError, OverflowError):
                 when = "--:--:--"
             surface = str(item.get("surface", "n/a"))[-18:].ljust(18)
             ttft = _entry_ttft(item)
@@ -656,7 +656,7 @@ def _read_key() -> str | None:
         return None
     try:
         return sys.stdin.read(1)
-    except Exception:
+    except OSError:
         return None
 
 
@@ -673,7 +673,7 @@ def run_monitor(base_url: str, interval: float = 1.0, pid: int | str = "?") -> i
         try:
             old_term = termios.tcgetattr(sys.stdin)
             tty.setcbreak(sys.stdin)
-        except Exception:
+        except termios.error:
             old_term = None
 
     try:
@@ -728,7 +728,7 @@ def run_monitor(base_url: str, interval: float = 1.0, pid: int | str = "?") -> i
         if old_term is not None:
             try:
                 termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_term)
-            except Exception:
+            except termios.error:
                 pass
         if tty_on:
             sys.stdout.write("\033[?25h\033[?1049l")

@@ -191,11 +191,8 @@ class RequestRecorder:
             return dict(self._entries[-1])
 
 
-_recorder: RequestRecorder | None = None
+_recorder = RequestRecorder()
 
 
 def get_recorder() -> RequestRecorder:
-    global _recorder
-    if _recorder is None:
-        _recorder = RequestRecorder()
     return _recorder

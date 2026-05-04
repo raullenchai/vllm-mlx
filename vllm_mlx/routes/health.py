@@ -3,15 +3,16 @@
 
 import gc
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..config import get_config
+from ..middleware.auth import verify_api_key
 from ..request_metrics import get_recorder
 
 router = APIRouter()
 
 
-@router.get("/v1/requests")
+@router.get("/v1/requests", dependencies=[Depends(verify_api_key)])
 async def recent_requests(limit: int = 50):
     """Return recent completed requests plus active request snapshot."""
     recorder = get_recorder()

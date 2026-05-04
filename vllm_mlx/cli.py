@@ -151,6 +151,8 @@ def serve_command(args):
     # Configure CORS
     cors_origins = args.cors_origins if args.cors_origins else ["*"]
     server.configure_cors(cors_origins)
+    if getattr(args, "tui", False):
+        server.configure_request_metrics()
     if args.rate_limit > 0:
         server._rate_limiter = RateLimiter(
             requests_per_minute=args.rate_limit, enabled=True
@@ -419,6 +421,7 @@ def serve_command(args):
 def _run_with_tui(app, host: str, port: int, log_level) -> None:
     """Run uvicorn in a background thread and the TUI in the foreground."""
     import os
+    import signal
     import threading
     import time
 
@@ -436,22 +439,40 @@ def _run_with_tui(app, host: str, port: int, log_level) -> None:
     # Signal handlers can only be installed from the main thread.
     server.install_signal_handlers = lambda: None  # type: ignore[assignment]
 
+    previous_handlers = {}
+
+    def _request_exit(signum, frame):
+        server.should_exit = True
+        previous = previous_handlers.get(signum)
+        if callable(previous):
+            previous(signum, frame)
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        previous_handlers[signum] = signal.getsignal(signum)
+        signal.signal(signum, _request_exit)
+
+    # Daemon mode keeps Ctrl-C responsive for the dev TUI. If uvicorn does not
+    # drain within the join timeout below, in-flight requests may be interrupted.
     server_thread = threading.Thread(target=server.run, daemon=True)
     server_thread.start()
 
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-
-    from .tui import run_monitor
-
-    tui_host = "127.0.0.1" if host == "0.0.0.0" else host
     try:
+        for _ in range(200):
+            if server.should_exit:
+                return
+            if server.started:
+                break
+            time.sleep(0.05)
+
+        from .tui import run_monitor
+
+        tui_host = "127.0.0.1" if host == "0.0.0.0" else host
         run_monitor(f"http://{tui_host}:{port}", interval=1.0, pid=os.getpid())
     finally:
         server.should_exit = True
         server_thread.join(timeout=5)
+        for signum, previous in previous_handlers.items():
+            signal.signal(signum, previous)
 
 
 def bench_command(args):

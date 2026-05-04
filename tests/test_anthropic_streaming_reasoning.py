@@ -17,19 +17,23 @@ from typing import Any
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Mock helpers
 # ---------------------------------------------------------------------------
 
+
 class _FakeTokenizer:
     """Tokenizer stub whose chat_template triggers _starts_thinking=True."""
+
     chat_template = "<think>\n{% for msg in messages %}{{ msg.content }}\n{% endfor %}{% if add_generation_prompt %}\n<think>\n{% endif %}"
 
 
 class MockDeltaOutput:
     """Simulates one async chunk from engine.stream_chat()."""
-    def __init__(self, new_text: str, prompt_tokens: int = 10, completion_tokens: int = 1):
+
+    def __init__(
+        self, new_text: str, prompt_tokens: int = 10, completion_tokens: int = 1
+    ):
         self.new_text = new_text
         self.prompt_tokens = prompt_tokens
         self.completion_tokens = completion_tokens
@@ -37,6 +41,7 @@ class MockDeltaOutput:
 
 class MockEngine:
     """Minimal engine that yields deltas and exposes a tokenizer."""
+
     def __init__(self, deltas: list[str]):
         self._deltas = deltas
         self.tokenizer = _FakeTokenizer()
@@ -51,13 +56,16 @@ class MockEngine:
 # Helper to collect SSE events from the async generator
 # ---------------------------------------------------------------------------
 
+
 def _collect_sse_events(gen):
     """Drain an async generator of SSE event strings into a list."""
+
     async def _collect():
         chunks = []
         async for chunk in gen:
             chunks.append(chunk)
         return chunks
+
     return asyncio.run(_collect())
 
 
@@ -120,10 +128,12 @@ def _extract_text_from_deltas(events: list[str]) -> str:
 # Scenarios
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def cfg_with_reasoning_parser():
     """Set up config singleton with reasoning_parser_name='qwen3'."""
     from vllm_mlx.config import server_config
+
     saved = {k: v for k, v in server_config._config.__dict__.items()}
     server_config.reset_config()
     server_config._config.model_name = "test-model"
@@ -138,6 +148,7 @@ def cfg_with_reasoning_parser():
 def cfg_without_reasoning_parser():
     """Set up config singleton with reasoning_parser_name=None."""
     from vllm_mlx.config import server_config
+
     saved = {k: v for k, v in server_config._config.__dict__.items()}
     server_config.reset_config()
     server_config._config.model_name = "test-model"
@@ -161,9 +172,9 @@ class TestAnthropicStreamingWithReasoningParser:
         non-empty content.
         """
         from vllm_mlx.routes.anthropic import (
-            _stream_anthropic_messages,
             AnthropicRequest,
             ChatCompletionRequest,
+            _stream_anthropic_messages,
         )
 
         engine = MockEngine(["1", ", ", "2", ", ", "3", ", ", "4", ", ", "5"])
@@ -190,7 +201,9 @@ class TestAnthropicStreamingWithReasoningParser:
         assert "1" in text and "5" in text, f"Missing expected content in: {text!r}"
 
         # Must have at least one text_delta event
-        text_deltas = [t for t in delta_types if t == ("content_block_delta", "text_delta")]
+        text_deltas = [
+            t for t in delta_types if t == ("content_block_delta", "text_delta")
+        ]
         assert text_deltas, f"No text_delta events in: {delta_types}"
 
         # Must have at least one text content_block_start
@@ -200,18 +213,20 @@ class TestAnthropicStreamingWithReasoningParser:
     def test_both_think_tags_emits_thinking_and_text(self, cfg_with_reasoning_parser):
         """Model outputs <think>...</think> → separated thinking + text blocks."""
         from vllm_mlx.routes.anthropic import (
-            _stream_anthropic_messages,
             AnthropicRequest,
             ChatCompletionRequest,
+            _stream_anthropic_messages,
         )
 
-        engine = MockEngine([
-            "Let me ",
-            "think",
-            "</think>",
-            "\nThe answer ",
-            "is 42.",
-        ])
+        engine = MockEngine(
+            [
+                "Let me ",
+                "think",
+                "</think>",
+                "\nThe answer ",
+                "is 42.",
+            ]
+        )
         openai_req = ChatCompletionRequest(
             model="test-model",
             messages=[{"role": "user", "content": "What is the answer?"}],
@@ -231,33 +246,46 @@ class TestAnthropicStreamingWithReasoningParser:
         text = _extract_text_from_deltas(events)
 
         # Must have reasoning in thinking block
-        thinking_deltas = [t for t in delta_types if t == ("content_block_delta", "thinking_delta")]
+        thinking_deltas = [
+            t for t in delta_types if t == ("content_block_delta", "thinking_delta")
+        ]
         assert thinking_deltas, f"No thinking_delta events in: {delta_types}"
 
         # Must have content in text block
         assert "42" in text, f"Missing '42' in text output: {text!r}"
 
         # thinking block comes before text block (by index order)
-        thinking_starts = [(i, t) for i, t in enumerate(delta_types) if t == ("content_block_start", "thinking")]
-        text_starts = [(i, t) for i, t in enumerate(delta_types) if t == ("content_block_start", "text")]
+        thinking_starts = [
+            (i, t)
+            for i, t in enumerate(delta_types)
+            if t == ("content_block_start", "thinking")
+        ]
+        text_starts = [
+            (i, t)
+            for i, t in enumerate(delta_types)
+            if t == ("content_block_start", "text")
+        ]
         if thinking_starts and text_starts:
-            assert thinking_starts[0][0] < text_starts[0][0], \
+            assert thinking_starts[0][0] < text_starts[0][0], (
                 f"thinking block must start before text block: {delta_types}"
+            )
 
     def test_only_close_tag_implicit_think(self, cfg_with_reasoning_parser):
         """Only </think> in output (think injected in prompt) → correct split."""
         from vllm_mlx.routes.anthropic import (
-            _stream_anthropic_messages,
             AnthropicRequest,
             ChatCompletionRequest,
+            _stream_anthropic_messages,
         )
 
-        engine = MockEngine([
-            "reasoning ",
-            "here",
-            "</think>",
-            "final answer",
-        ])
+        engine = MockEngine(
+            [
+                "reasoning ",
+                "here",
+                "</think>",
+                "final answer",
+            ]
+        )
         openai_req = ChatCompletionRequest(
             model="test-model",
             messages=[{"role": "user", "content": "Question"}],
@@ -279,8 +307,12 @@ class TestAnthropicStreamingWithReasoningParser:
         assert "final answer" in text, f"Missing 'final answer' in text: {text!r}"
 
         # Must have both thinking_delta and text_delta
-        thinking_deltas = [t for t in delta_types if t == ("content_block_delta", "thinking_delta")]
-        text_deltas = [t for t in delta_types if t == ("content_block_delta", "text_delta")]
+        thinking_deltas = [
+            t for t in delta_types if t == ("content_block_delta", "thinking_delta")
+        ]
+        text_deltas = [
+            t for t in delta_types if t == ("content_block_delta", "text_delta")
+        ]
         assert thinking_deltas, f"No thinking_delta in: {delta_types}"
         assert text_deltas, f"No text_delta in: {delta_types}"
 
@@ -297,9 +329,9 @@ class TestAnthropicStreamingWithoutReasoningParser:
         But the fallback path must still work (no crash, events emitted).
         """
         from vllm_mlx.routes.anthropic import (
-            _stream_anthropic_messages,
             AnthropicRequest,
             ChatCompletionRequest,
+            _stream_anthropic_messages,
         )
 
         engine = MockEngine(["hello", " world"])
@@ -321,8 +353,7 @@ class TestAnthropicStreamingWithoutReasoningParser:
         delta_types = _extract_delta_types(events)
 
         # Must have at least one content block (even if classified as thinking)
-        content_blocks = [t for t in delta_types
-                          if t[0] == "content_block_delta"]
+        content_blocks = [t for t in delta_types if t[0] == "content_block_delta"]
         assert content_blocks, f"No content emitted at all: {delta_types}"
 
         # message_start and message_stop must be present

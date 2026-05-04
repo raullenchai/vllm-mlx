@@ -103,5 +103,5 @@ class Qwen3ReasoningParser(BaseThinkingReasoningParser):
             cleaned = accumulated_text
             if cleaned.startswith(self.start_token):
                 cleaned = cleaned[len(self.start_token) :]
-            return DeltaMessage(content=cleaned.strip() or None)
+            return DeltaMessage(content=cleaned or None)
         return None

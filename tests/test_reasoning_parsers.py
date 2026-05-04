@@ -641,10 +641,10 @@ class TestQwen3:
         assert content == "just content"
 
     def test_only_start_tag_no_end(self):
-        """Start tag without end tag: Qwen3 checks end_token first → pure content."""
+        """Start tag without end tag: truncated thinking → reasoning, not content."""
         reasoning, content = self.parser.extract_reasoning("<think>incomplete")
-        assert reasoning is None
-        assert content == "<think>incomplete"
+        assert reasoning == "incomplete"
+        assert content is None
 
     def test_empty_tags(self):
         reasoning, content = self.parser.extract_reasoning("<think></think>content")

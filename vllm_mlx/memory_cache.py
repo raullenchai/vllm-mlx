@@ -75,6 +75,8 @@ def _safetensors_is_complete(path: str) -> bool:
             if len(header_bytes) != header_len:
                 return False
         header = json.loads(header_bytes)
+        if not isinstance(header, dict):
+            return False
         max_end = 0
         for name, meta in header.items():
             if name == "__metadata__":
@@ -84,12 +86,14 @@ def _safetensors_is_complete(path: str) -> bool:
                 not isinstance(offsets, list)
                 or len(offsets) != 2
                 or not all(isinstance(x, int) for x in offsets)
+                or offsets[0] < 0
+                or offsets[1] < offsets[0]
             ):
                 return False
             if offsets[1] > max_end:
                 max_end = offsets[1]
         return size >= 8 + header_len + max_end
-    except (OSError, ValueError, struct.error, json.JSONDecodeError):
+    except (OSError, ValueError, struct.error, AttributeError, TypeError):
         return False
 
 
@@ -1070,6 +1074,9 @@ class MemoryAwarePrefixCache:
             logger.warning("[cache_persist] mlx_lm not available, cannot save")
             return False
 
+        # Strip trailing separators so ``<cache_dir>.new`` is a sibling of
+        # cache_dir, not a child. A child path silently breaks the swap.
+        cache_dir = cache_dir.rstrip(os.sep)
         new_dir = cache_dir + ".new"
         old_dir = cache_dir + ".old"
 
@@ -1176,12 +1183,39 @@ class MemoryAwarePrefixCache:
         import shutil
         import time as _time
 
+        # load_from_disk is intended for a fresh, empty cache (lifespan
+        # startup). Refuse to merge into an already-populated one rather
+        # than silently double-counting memory or producing duplicate
+        # entries in _sorted_keys.
+        if self._entries:
+            logger.warning(
+                "[cache_persist] load_from_disk called on a non-empty cache — "
+                "skipping to avoid duplicate accounting"
+            )
+            return 0
+
+        # Strip trailing separators (see save_to_disk for rationale).
+        cache_dir = cache_dir.rstrip(os.sep)
         new_dir = cache_dir + ".new"
         old_dir = cache_dir + ".old"
 
+        def _has_valid_index(d: str) -> bool:
+            """Cheap sanity check: index.json exists, is valid JSON, has the
+            expected version. Defends recovery against a partial index.json
+            written by a crashed save (json.dump itself isn't atomic)."""
+            p = os.path.join(d, "index.json")
+            if not os.path.exists(p):
+                return False
+            try:
+                with open(p) as f:
+                    obj = json.load(f)
+            except (OSError, ValueError):
+                return False
+            return isinstance(obj, dict) and obj.get("version", 0) >= 2
+
         # Crash-recovery for an interrupted save_to_disk.
         if not os.path.exists(cache_dir):
-            if os.path.exists(os.path.join(new_dir, "index.json")):
+            if _has_valid_index(new_dir):
                 logger.info(
                     f"[cache_persist] recovering interrupted save: "
                     f"promoting {new_dir} → {cache_dir}"
@@ -1189,12 +1223,14 @@ class MemoryAwarePrefixCache:
                 os.rename(new_dir, cache_dir)
                 if os.path.exists(old_dir):
                     shutil.rmtree(old_dir, ignore_errors=True)
-            elif os.path.exists(os.path.join(old_dir, "index.json")):
+            elif _has_valid_index(old_dir):
                 logger.info(
                     f"[cache_persist] recovering interrupted save: "
                     f"restoring {old_dir} → {cache_dir}"
                 )
                 os.rename(old_dir, cache_dir)
+                if os.path.exists(new_dir):
+                    shutil.rmtree(new_dir, ignore_errors=True)
         else:
             # cache_dir exists — clean up any orphan staging dirs that a
             # previous interrupted save may have left behind.

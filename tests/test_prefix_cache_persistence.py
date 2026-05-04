@@ -277,25 +277,38 @@ def test_severely_truncated_safetensors_is_silently_skipped(tmp_path):
 
 
 def test_body_truncated_safetensors_should_fail_eagerly_at_load(tmp_path):
-    """BUG D — load_from_disk must eagerly materialize tensors so a body-
-    truncated safetensors raises here, not later in a worker thread.
+    """BUG D — load_from_disk must reject a body-truncated safetensors
+    even though ``mx.load`` will lazily mmap it without complaint.
     """
+    import struct
+
     cache = fresh_cache()
     cache.store(list(range(11)), make_kvcache(num_tokens=11))
     cache.save_to_disk(str(tmp_path))
 
-    # Cut just the trailing bytes (body), leaving the safetensors header valid.
     sf = tmp_path / "entry_0.safetensors"
     full = sf.read_bytes()
-    # Drop the last 100 bytes — header survives, tensor body is truncated.
-    sf.write_bytes(full[:-100])
+
+    # Compute the maximum data offset declared by the header so we can
+    # truncate strictly inside the body region — guards against future
+    # changes to padding/alignment in save_prompt_cache.
+    header_len = struct.unpack("<Q", full[:8])[0]
+    header = json.loads(full[8 : 8 + header_len])
+    max_end = max(
+        meta["data_offsets"][1]
+        for name, meta in header.items()
+        if name != "__metadata__"
+    )
+    declared_total = 8 + header_len + max_end
+    cut_to = declared_total - 100
+    assert cut_to > 8 + header_len, (
+        "test setup: cut would land in the header region, not the body — "
+        "use a larger entry"
+    )
+    sf.write_bytes(full[:cut_to])
 
     cache2 = fresh_cache()
     loaded = cache2.load_from_disk(str(tmp_path))
-
-    # CORRECT BEHAVIOR (xfail): load_from_disk should refuse a body-truncated
-    # entry. Currently it succeeds because mx.load is lazy — the corruption
-    # only surfaces later, at the first attention call.
     assert loaded == 0, (
         "Body-truncated safetensors was loaded as a usable cache entry. "
         "It will blow up later at attention time with a RuntimeError, "
@@ -392,6 +405,79 @@ def test_load_cleans_orphan_staging_dirs(tmp_path):
     assert loaded == 1
     assert not new_dir.exists()
     assert not old_dir.exists()
+
+
+def test_partial_new_index_json_is_not_promoted(tmp_path):
+    """If .new/index.json exists but is corrupt JSON (e.g. crash mid
+    json.dump), recovery must NOT promote .new — fall back to .old or
+    leave cache_dir absent rather than handing the partial snapshot
+    to subsequent json.load.
+    """
+    cache_dir = tmp_path / "snap"
+    new_dir = tmp_path / "snap.new"
+    old_dir = tmp_path / "snap.old"
+
+    # Build a valid snapshot at .old (the previous committed state)
+    c1 = fresh_cache()
+    c1.store(list(range(11)), make_kvcache(num_tokens=11))
+    c1.save_to_disk(str(cache_dir))
+    cache_dir.rename(old_dir)
+
+    # Hand-craft a .new with a *partial* index.json (simulates crash
+    # in the middle of json.dump).
+    new_dir.mkdir()
+    (new_dir / "index.json").write_text('{"versi')
+
+    c2 = fresh_cache()
+    loaded = c2.load_from_disk(str(cache_dir))
+    # Should fall through to .old, recovering the previous snapshot
+    assert loaded == 1
+    entry = next(iter(c2._entries.values()))
+    assert entry.tokens == tuple(range(11))
+
+
+def test_save_handles_trailing_slash_in_cache_dir(tmp_path):
+    """A user-supplied cache_dir with a trailing separator must still
+    swap atomically. Without the rstrip in save_to_disk, ``cache_dir +
+    '.new'`` would become a *child* of cache_dir rather than a sibling,
+    silently breaking the swap.
+    """
+    cache_dir = tmp_path / "snap"
+    cache = fresh_cache()
+    cache.store(list(range(11)), make_kvcache(num_tokens=11))
+    cache.save_to_disk(str(cache_dir) + "/")
+
+    # The committed snapshot lives at cache_dir, NOT cache_dir/.new
+    assert cache_dir.exists()
+    assert (cache_dir / "index.json").exists()
+    assert not (cache_dir / ".new").exists()
+    assert not (tmp_path / "snap/.new").exists()
+
+    # Round-trips with trailing slash on load too.
+    c2 = fresh_cache()
+    assert c2.load_from_disk(str(cache_dir) + "/") == 1
+
+
+def test_load_into_non_empty_cache_is_rejected(tmp_path):
+    """Calling load_from_disk on a populated cache would double-count
+    memory and corrupt _sorted_keys (bisect.insort would create
+    duplicate entries). Refuse rather than silently break invariants.
+    """
+    cache_dir = tmp_path / "snap"
+    c1 = fresh_cache()
+    c1.store(list(range(11)), make_kvcache(num_tokens=11))
+    c1.save_to_disk(str(cache_dir))
+
+    c2 = fresh_cache()
+    c2.store(list(range(20, 31)), make_kvcache(num_tokens=11, fill=2.0))
+    before_mem = c2._current_memory
+    before_keys = list(c2._sorted_keys)
+
+    loaded = c2.load_from_disk(str(cache_dir))
+    assert loaded == 0
+    # State unchanged — no duplicate insertion
+    assert c2._current_memory == before_mem
+    assert c2._sorted_keys == before_keys
 
 
 def test_save_routes_writes_through_staging_dir(tmp_path, monkeypatch):

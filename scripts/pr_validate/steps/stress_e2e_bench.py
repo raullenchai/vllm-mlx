@@ -544,16 +544,17 @@ def _run_bench(ctx: Context, choice: ModelChoice) -> dict[str, Any]:
         }
 
     baseline = json.loads(baseline_path.read_text())
-    # Accept both old (ttft) and new key names for backward compat. Use an
-    # explicit ``in`` check rather than ``or`` short-circuit — ``or`` would
-    # also fall through on a numeric ``0`` or missing value, masking bugs.
-    if "cold_request_ms_median" in baseline:
-        base_cold = baseline["cold_request_ms_median"]
-    else:
+    # Accept both old (ttft) and new key names for backward compat. Treat
+    # an explicit ``None`` (JSON ``null``) the same as a missing key so we
+    # don't end up with ``base_cold=None`` flowing into the division below.
+    # This is stricter than a plain ``or`` because we want a real ``0`` to
+    # be honoured (it's a legit value, even if the downstream guard makes
+    # it a no-op).
+    base_cold = baseline.get("cold_request_ms_median")
+    if base_cold is None:
         base_cold = baseline.get("cold_ttft_ms_median", cold)
-    if "warm_request_ms_median" in baseline:
-        base_warm = baseline["warm_request_ms_median"]
-    else:
+    base_warm = baseline.get("warm_request_ms_median")
+    if base_warm is None:
         base_warm = baseline.get("warm_ttft_ms_median", warm)
 
     # Slowdown = current / baseline. >5% slower on cold OR warm = fail.

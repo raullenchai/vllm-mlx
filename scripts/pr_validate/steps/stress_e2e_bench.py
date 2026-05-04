@@ -332,8 +332,11 @@ def _server(choice: ModelChoice, ctx: Context):
                 except subprocess.TimeoutExpired:
                     pass  # best-effort; log_f must close regardless
             # Ensure port is released before returning — the OS may take
-            # a moment to free the socket after the process exits.
-            _wait_for_port_free(BENCH_PORT, timeout=10)
+            # a moment to free the socket after the process exits.  If
+            # the wait times out, use ``lsof`` to find and force-kill
+            # whatever is still holding the port (zombie / orphan).
+            if not _wait_for_port_free(BENCH_PORT, timeout=10):
+                _force_kill_port(BENCH_PORT)
         if log_f is not None:
             log_f.close()
 
@@ -377,6 +380,29 @@ def _wait_for_port_free(port: int, timeout: int = 10) -> bool:
             return True
         time.sleep(0.5)
     return False
+
+
+def _force_kill_port(port: int) -> None:
+    """Find and SIGKILL any process holding ``port``."""
+    try:
+        result = subprocess.run(
+            ["lsof", "-ti", f":{port}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return
+    if not result.stdout:
+        return
+    for pid_str in result.stdout.strip().split():
+        try:
+            pid = int(pid_str)
+            os.kill(pid, 9)
+        except (ValueError, OSError):
+            pass
+    # One more wait for the port to drain.
+    _wait_for_port_free(port, timeout=5)
 
 
 # ---------------------------------------------------------------------------

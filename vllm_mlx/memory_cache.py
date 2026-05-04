@@ -1183,17 +1183,6 @@ class MemoryAwarePrefixCache:
         import shutil
         import time as _time
 
-        # load_from_disk is intended for a fresh, empty cache (lifespan
-        # startup). Refuse to merge into an already-populated one rather
-        # than silently double-counting memory or producing duplicate
-        # entries in _sorted_keys.
-        if self._entries:
-            logger.warning(
-                "[cache_persist] load_from_disk called on a non-empty cache — "
-                "skipping to avoid duplicate accounting"
-            )
-            return 0
-
         # Strip trailing separators (see save_to_disk for rationale).
         cache_dir = cache_dir.rstrip(os.sep)
         new_dir = cache_dir + ".new"
@@ -1261,7 +1250,8 @@ class MemoryAwarePrefixCache:
             return 0
 
         loaded = 0
-        skipped = 0
+        corrupt_skipped = 0
+        duplicate_skipped = 0
         for entry_meta in index.get("entries", []):
             i = entry_meta["index"]
             expected_num_tokens = entry_meta["num_tokens"]
@@ -1270,7 +1260,7 @@ class MemoryAwarePrefixCache:
 
             if not os.path.exists(entry_path) or not os.path.exists(tokens_path):
                 logger.warning(f"[cache_persist] missing files for entry {i}, skipping")
-                skipped += 1
+                corrupt_skipped += 1
                 continue
 
             # Cross-check tokens.bin size against index.json's claim.
@@ -1284,7 +1274,7 @@ class MemoryAwarePrefixCache:
                     f"(expected {expected_bytes} bytes for {expected_num_tokens} "
                     f"tokens, got {actual_bytes}) — corruption, skipping"
                 )
-                skipped += 1
+                corrupt_skipped += 1
                 continue
 
             # mx.load mmaps safetensors lazily and will silently return
@@ -1296,7 +1286,7 @@ class MemoryAwarePrefixCache:
                     f"[cache_persist] entry {i} safetensors body is short of "
                     f"its header's declared data range — corruption, skipping"
                 )
-                skipped += 1
+                corrupt_skipped += 1
                 continue
 
             try:
@@ -1322,8 +1312,21 @@ class MemoryAwarePrefixCache:
                             f"({head_offset}) != tokens length ({len(tokens)}) "
                             f"— corruption, skipping"
                         )
-                        skipped += 1
+                        corrupt_skipped += 1
                         continue
+
+                # Skip duplicates (e.g. an entry that warmup already
+                # populated). Without this, bisect.insort would create
+                # duplicate keys in _sorted_keys and memory would
+                # double-count. Benign — not a corruption signal.
+                tokens_key = tuple(tokens)
+                if tokens_key in self._entries:
+                    logger.debug(
+                        f"[cache_persist] entry {i} already present in cache "
+                        f"(len={len(tokens)}), skipping disk copy"
+                    )
+                    duplicate_skipped += 1
+                    continue
 
                 # Estimate memory
                 memory = estimate_kv_cache_memory(cache)
@@ -1337,7 +1340,6 @@ class MemoryAwarePrefixCache:
                     )
                     break
 
-                tokens_key = tuple(tokens)
                 entry = _CacheEntry(
                     tokens=tokens_key,
                     cache=cache,
@@ -1356,21 +1358,25 @@ class MemoryAwarePrefixCache:
 
             except Exception as e:
                 logger.warning(f"[cache_persist] failed to load entry {i}: {e}")
-                skipped += 1
+                corrupt_skipped += 1
 
         self._stats.entry_count = len(self._entries)
         self._stats.current_memory_bytes = self._current_memory
 
         dt = _time.monotonic() - t0
-        if skipped:
+        summary = (
+            f"[cache_persist] LOADED {loaded} entries from {cache_dir} "
+            f"in {dt:.1f}s ({self._current_memory / _BYTES_PER_MB:.0f}MB total)"
+        )
+        if duplicate_skipped:
+            summary += (
+                f", {duplicate_skipped} skipped as duplicates of in-memory entries"
+            )
+        if corrupt_skipped:
             logger.warning(
-                f"[cache_persist] LOADED {loaded} entries from {cache_dir} "
-                f"in {dt:.1f}s ({self._current_memory / _BYTES_PER_MB:.0f}MB total), "
-                f"SKIPPED {skipped} corrupt entries — disk cache may need cleanup"
+                f"{summary}, SKIPPED {corrupt_skipped} corrupt entries — "
+                f"disk cache may need cleanup"
             )
         else:
-            logger.info(
-                f"[cache_persist] LOADED {loaded} entries from {cache_dir} "
-                f"in {dt:.1f}s ({self._current_memory / _BYTES_PER_MB:.0f}MB total)"
-            )
+            logger.info(summary)
         return loaded

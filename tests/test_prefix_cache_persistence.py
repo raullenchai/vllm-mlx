@@ -458,26 +458,37 @@ def test_save_handles_trailing_slash_in_cache_dir(tmp_path):
     assert c2.load_from_disk(str(cache_dir) + "/") == 1
 
 
-def test_load_into_non_empty_cache_is_rejected(tmp_path):
-    """Calling load_from_disk on a populated cache would double-count
-    memory and corrupt _sorted_keys (bisect.insort would create
-    duplicate entries). Refuse rather than silently break invariants.
+def test_load_into_non_empty_cache_skips_duplicates(tmp_path):
+    """If load_from_disk is called on a cache that already contains some
+    keys (e.g. populated by warmup before lifespan calls load), entries
+    whose tokens_key matches an in-memory entry must be skipped — not
+    re-inserted. Otherwise bisect.insort produces duplicate keys in
+    _sorted_keys and _current_memory double-counts.
     """
     cache_dir = tmp_path / "snap"
-    c1 = fresh_cache()
-    c1.store(list(range(11)), make_kvcache(num_tokens=11))
-    c1.save_to_disk(str(cache_dir))
+    # Persist two entries to disk: one duplicates a future in-memory
+    # entry; one is fresh.
+    persisted = fresh_cache()
+    persisted.store(list(range(11)), make_kvcache(num_tokens=11))
+    persisted.store(list(range(50, 61)), make_kvcache(num_tokens=11, fill=2.0))
+    persisted.save_to_disk(str(cache_dir))
 
-    c2 = fresh_cache()
-    c2.store(list(range(20, 31)), make_kvcache(num_tokens=11, fill=2.0))
-    before_mem = c2._current_memory
-    before_keys = list(c2._sorted_keys)
+    # Simulated warmup state: the [0..10] entry is already in memory.
+    runtime = fresh_cache()
+    runtime.store(list(range(11)), make_kvcache(num_tokens=11))
+    warmup_mem = runtime._current_memory
+    warmup_keys = list(runtime._sorted_keys)
 
-    loaded = c2.load_from_disk(str(cache_dir))
-    assert loaded == 0
-    # State unchanged — no duplicate insertion
-    assert c2._current_memory == before_mem
-    assert c2._sorted_keys == before_keys
+    loaded = runtime.load_from_disk(str(cache_dir))
+    assert loaded == 1, "exactly one fresh entry should have been loaded"
+    # The duplicate did not double-insert
+    assert runtime._sorted_keys.count(tuple(range(11))) == 1
+    assert tuple(range(50, 61)) in runtime._sorted_keys
+    # Memory grew by exactly the new entry's footprint
+    new_entry_mem = runtime._current_memory - warmup_mem
+    assert new_entry_mem > 0
+    # Pre-existing entry untouched in keys list ordering wrt itself
+    assert warmup_keys[0] in runtime._sorted_keys
 
 
 def test_save_routes_writes_through_staging_dir(tmp_path, monkeypatch):

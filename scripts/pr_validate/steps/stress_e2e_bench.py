@@ -301,11 +301,15 @@ def _server(choice: ModelChoice, ctx: Context):
         str(BENCH_PORT),
         *choice.extra_args,
     ]
-    log_f = open(log_path, "w")
-    proc = subprocess.Popen(  # noqa: S603
-        cmd, stdout=log_f, stderr=subprocess.STDOUT, cwd=str(ctx.repo_root)
-    )
+    # Open the log inside the try so a Popen failure (e.g. fork EAGAIN,
+    # disk full) doesn't leak the file handle.
+    log_f = None
+    proc = None
     try:
+        log_f = open(log_path, "w")  # noqa: SIM115 — explicit close in finally
+        proc = subprocess.Popen(  # noqa: S603
+            cmd, stdout=log_f, stderr=subprocess.STDOUT, cwd=str(ctx.repo_root)
+        )
         if not _wait_for_server(BENCH_PORT, SERVER_BOOT_TIMEOUT_S):
             raise _ServerStartError(
                 f"server did not respond on :{BENCH_PORT} within "
@@ -314,13 +318,15 @@ def _server(choice: ModelChoice, ctx: Context):
         yield str(log_path)
     finally:
         # Graceful first (lifespan saves prefix cache); SIGKILL fallback.
-        proc.send_signal(2)  # SIGINT
-        try:
-            proc.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=10)
-        log_f.close()
+        if proc is not None:
+            proc.send_signal(2)  # SIGINT
+            try:
+                proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=10)
+        if log_f is not None:
+            log_f.close()
 
 
 def _port_in_use(port: int) -> bool:

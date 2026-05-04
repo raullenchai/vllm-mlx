@@ -56,7 +56,7 @@ The script grades your PR through 7 steps and prints a strict markdown scorecard
 | step | what it does | when |
 |---|---|---|
 | `fetch` | pulls your PR + diff, classifies blast radius | always |
-| `deepseek_review` | adversarial code review (skipped if no API key) | when `DEEPSEEK_API_KEY` is set |
+| `deepseek_review` | adversarial code review (skipped if no API key) | when `DEEPSEEK_API_KEY` is set and `PR_VALIDATE_NO_DEEPSEEK` is unset |
 | `supply_chain` | flags new deps, install hooks, `eval`/`exec`/`shell=True`, hardcoded URLs | always |
 | `lint` | `ruff check` + `ruff format --check` | when diff has `.py` |
 | `targeted_tests` | runs tests touching the files you changed; **negative-control** filters pre-existing flakes | when diff has `.py` |

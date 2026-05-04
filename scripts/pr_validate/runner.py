@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 
-from .base import Step, StepResult
+from .base import Step
 from .context import Context
 from .scorecard import render_scorecard, verdict
 from .steps.deepseek_review import DeepSeekReviewStep
@@ -90,10 +90,3 @@ def run_pipeline(pr_number: int, *, verbose: bool = False) -> int:
 
     # Exit code: 0 only if every step is pass-or-skip (strict).
     return 0 if final_verdict == "MERGE-SAFE" else 1
-
-
-def _step_status(results: list[StepResult], name: str) -> str | None:
-    for r in results:
-        if r.name == name:
-            return r.status
-    return None

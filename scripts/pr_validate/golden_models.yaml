@@ -42,7 +42,7 @@ families:
 # tool-calling tests). Keep small — most models don't need this.
 overrides:
   "mlx-community/Qwen3.6-27B-4bit":
-    args: ["--enable-auto-tool-choice"]
+    args: ["--enable-auto-tool-choice", "--tool-call-parser", "hermes"]
 
 # Agent integrations — each is a tests/integrations/ test_X.py script
 # we exec against the live server. The matrix is models × agents.

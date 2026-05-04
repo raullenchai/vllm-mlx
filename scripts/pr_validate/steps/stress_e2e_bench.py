@@ -331,6 +331,9 @@ def _server(choice: ModelChoice, ctx: Context):
                     proc.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     pass  # best-effort; log_f must close regardless
+            # Ensure port is released before returning — the OS may take
+            # a moment to free the socket after the process exits.
+            _wait_for_port_free(BENCH_PORT, timeout=10)
         if log_f is not None:
             log_f.close()
 
@@ -363,6 +366,16 @@ def _wait_for_server(port: int, timeout_s: int) -> bool:
         except (urllib.error.URLError, OSError):
             pass
         time.sleep(2)
+    return False
+
+
+def _wait_for_port_free(port: int, timeout: int = 10) -> bool:
+    """Poll until ``port`` is no longer bound or ``timeout`` expires."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _port_in_use(port):
+            return True
+        time.sleep(0.5)
     return False
 
 

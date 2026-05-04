@@ -20,7 +20,8 @@ def _sse_event(payload: dict, *, crlf: bool = False, terminate: bool = True) -> 
 
 def test_request_metrics_middleware_is_not_enabled_by_default():
     assert all(
-        middleware.cls is not MetricsMiddleware for middleware in server.app.user_middleware
+        middleware.cls is not MetricsMiddleware
+        for middleware in server.app.user_middleware
     )
 
 

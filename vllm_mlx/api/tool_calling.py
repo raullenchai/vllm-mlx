@@ -260,7 +260,7 @@ def _is_tool_call_json(obj: dict) -> bool:
 
     # "arguments" must be JSON-like
     args = obj["arguments"]
-    if not isinstance(args, (dict, list, str)):
+    if not isinstance(args, (dict, str)):
         return False
 
     return True

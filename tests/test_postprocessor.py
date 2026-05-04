@@ -413,6 +413,7 @@ class TestStreamingPostProcessorToolCalls:
         assert len(tool_events[0].tool_calls) == 1
         args = json.loads(tool_events[0].tool_calls[0]["function"]["arguments"])
         assert args["filePath"] == "/tmp/package.json"
+
     def test_qwen_xml_tool_uses_schema_after_content_prefix(self):
         """Schema conversion still works if text appears before tool markup."""
         request = {
@@ -462,6 +463,7 @@ class TestStreamingPostProcessorToolCalls:
         args = json.loads(events[0].tool_calls[0]["function"]["arguments"])
         assert isinstance(args["todos"], list)
         assert args["todos"][0]["content"] == "Install tests"
+
 
 class TestStreamingPostProcessorNemotron:
     """Tests for Nemotron thinking prefix."""

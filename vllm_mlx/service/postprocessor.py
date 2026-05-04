@@ -691,9 +691,7 @@ class StreamingPostProcessor:
             return tool_result
 
         if "Calling tool:" in self.tool_accumulated_text:
-            _, tool_calls = parse_tool_calls(
-                self.tool_accumulated_text, self.request
-            )
+            _, tool_calls = parse_tool_calls(self.tool_accumulated_text, self.request)
             if tool_calls:
                 chunks = self._tool_calls_to_stream_chunks(tool_calls)
                 if not chunks:

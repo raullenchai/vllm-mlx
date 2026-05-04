@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from vllm_mlx.api.tool_calling import (
     _is_tool_call_json,
     _parse_raw_json_tool_calls,
+    _serialize_tool_arguments,
     convert_tools_for_template,
     format_tool_call_for_message,
     parse_tool_calls,
@@ -258,6 +259,54 @@ class TestParseToolCalls:
         cleaned, tool_calls = parse_tool_calls(text, request=request)
 
         assert tool_calls is not None
+
+    def test_schema_without_properties_does_not_coerce_schema_keys(self):
+        request = {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "foo",
+                        "parameters": {"type": "object", "required": ["x"]},
+                    },
+                }
+            ]
+        }
+
+        result = _serialize_tool_arguments(
+            {"type": "1", "required": "false"},
+            tool_name="foo",
+            request=request,
+        )
+
+        assert result == '{"type": "1", "required": "false"}'
+
+    def test_boolean_schema_coerces_common_aliases(self):
+        request = {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "foo",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {"type": "boolean"},
+                                "disabled": {"type": "boolean"},
+                            },
+                        },
+                    },
+                }
+            ]
+        }
+
+        result = _serialize_tool_arguments(
+            {"enabled": "yes", "disabled": "0"},
+            tool_name="foo",
+            request=request,
+        )
+
+        assert result == '{"enabled": true, "disabled": false}'
 
 
 class TestConvertToolsForTemplate:

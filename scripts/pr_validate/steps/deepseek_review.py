@@ -42,10 +42,10 @@ ENDPOINT = "https://api.deepseek.com/v1/chat/completions"
 MODEL = "deepseek-v4-pro"
 
 # Hard cap on diff size we send. DeepSeek can take more, but past
-# ~80KB of diff the signal-to-noise of the review drops sharply (the
+# ~120KB of diff the signal-to-noise of the review drops sharply (the
 # model starts skimming). For very large PRs we send the diff
-# truncated and note it in the prompt.
-MAX_DIFF_BYTES = 80_000
+# truncated at a file boundary and note which files were omitted.
+MAX_DIFF_BYTES = 120_000
 
 # Token budget. Reasoning-model behavior: we observed ~6K tokens of
 # reasoning + 500-1500 tokens of visible content for a normal review.
@@ -94,12 +94,12 @@ class DeepSeekReviewStep(Step):
                 ),
             )
 
-        diff = Path(ctx.diff_path).read_text()
-        truncated = False
-        diff_bytes = diff.encode("utf-8")
-        if len(diff_bytes) > MAX_DIFF_BYTES:
-            diff = diff_bytes[:MAX_DIFF_BYTES].decode("utf-8", errors="ignore")
-            truncated = True
+        diff_full = Path(ctx.diff_path).read_text()
+        diff, omitted_files = _truncate_diff_at_file_boundary(diff_full, MAX_DIFF_BYTES)
+        # truncated is True whenever *anything* was cut — including the
+        # single-big-file case where omitted_files is empty but the diff
+        # itself was raw-sliced.
+        truncated = len(diff.encode()) < len(diff_full.encode())
 
         if not PROMPT_PATH.exists():
             return StepResult(
@@ -109,7 +109,7 @@ class DeepSeekReviewStep(Step):
             )
         system_prompt = PROMPT_PATH.read_text()
 
-        user_prompt = _build_user_prompt(ctx, diff, truncated)
+        user_prompt = _build_user_prompt(ctx, diff, omitted_files, truncated)
 
         # Save what we sent — useful for debugging "why did the review
         # say X" without re-running.
@@ -193,8 +193,10 @@ class DeepSeekReviewStep(Step):
         # human-decides flow here; that's what looking at the artifact
         # is for. The step's role is to surface, not to triage.)
         summary = f"{len(findings)} finding(s)"
-        if truncated:
-            summary += " (diff truncated for review)"
+        if omitted_files:
+            summary += f" (diff truncated — {len(omitted_files)} file(s) not reviewed)"
+        elif truncated:
+            summary += " (diff truncated — single large file, partial review)"
         return StepResult(
             name=self.name,
             status="fail",
@@ -210,7 +212,9 @@ class DeepSeekReviewStep(Step):
         )
 
 
-def _build_user_prompt(ctx: Context, diff: str, truncated: bool) -> str:
+def _build_user_prompt(
+    ctx: Context, diff: str, omitted_files: list[str], truncated: bool = False
+) -> str:
     """Compose the user message: PR context + directory listings + diff.
 
     The directory-context section is what stops the canonical false
@@ -238,16 +242,79 @@ def _build_user_prompt(ctx: Context, diff: str, truncated: bool) -> str:
         lines.append("")
     lines.append("## Diff")
     lines.append("")
-    if truncated:
+    if omitted_files:
+        omitted_str = ", ".join(f"`{f}`" for f in omitted_files)
         lines.append(
-            f"_Note: diff truncated to {MAX_DIFF_BYTES} bytes for review. "
-            "Full diff is on disk; review what's shown._"
+            f"_Note: diff capped at {MAX_DIFF_BYTES} bytes — truncated at a file "
+            f"boundary. **The following files were NOT included in this review and "
+            f"MUST NOT be assumed clean**: {omitted_str}. "
+            "Full diff is on disk; review only what's shown below._"
+        )
+        lines.append("")
+    elif truncated:
+        # Single large file that had to be raw-sliced (no earlier boundary).
+        lines.append(
+            f"_Note: diff truncated to {MAX_DIFF_BYTES} bytes (single large file). "
+            "The shown diff may be incomplete; review cautiously._"
         )
         lines.append("")
     lines.append("```diff")
     lines.append(diff)
     lines.append("```")
     return "\n".join(lines)
+
+
+_FILE_HEADER_RE = re.compile(r"^diff --git a/(.+?) b/", re.MULTILINE)
+
+
+def _truncate_diff_at_file_boundary(diff: str, max_bytes: int) -> tuple[str, list[str]]:
+    """Truncate *diff* to *max_bytes* at the nearest preceding file boundary.
+
+    Returns ``(kept_diff, omitted_file_paths)``.  If the diff fits, returns
+    the original string and an empty list.  If even the first file exceeds
+    the limit we fall back to a raw byte slice (better than nothing) and
+    list all remaining files as omitted.
+
+    Sizes are measured in UTF-8 bytes (not Python character counts) to match
+    what the HTTP layer actually sends.
+    """
+    diff_bytes = diff.encode()
+    if len(diff_bytes) <= max_bytes:
+        return diff, []
+
+    # Find the byte offset of every per-file header. _FILE_HEADER_RE operates
+    # on the *string* (char positions), so convert each char offset to a byte
+    # offset once using encode() slicing.
+    positions = []
+    for m in _FILE_HEADER_RE.finditer(diff):
+        byte_pos = len(diff[: m.start()].encode())
+        positions.append((byte_pos, m.group(1)))
+
+    # Walk forward and find the last file whose header fits within max_bytes.
+    kept_end = 0
+    for _i, (pos, _) in enumerate(positions):
+        if pos > max_bytes:
+            break
+        kept_end = pos
+    else:
+        # All file headers start before the limit — the overflow is inside the
+        # last file's content. Keep everything up to (but not including) the
+        # last file so we only ship complete file diffs.
+        kept_end = positions[-1][0] if positions else 0
+
+    if kept_end == 0:
+        # Even the first file overflows. Raw-slice to the byte limit and list
+        # the remaining files as omitted (first file is partially shown).
+        raw = diff_bytes[:max_bytes].decode(errors="replace")
+        omitted = [path for _, path in positions[1:]]
+        return raw, omitted
+
+    # Slice at the byte boundary, then decode — safe because we sliced at a
+    # file-header start which is always ASCII.
+    kept_diff = diff_bytes[:kept_end].decode()
+    # Omitted = files whose header starts at or after kept_end.
+    omitted = [path for pos, path in positions if pos >= kept_end]
+    return kept_diff, omitted
 
 
 # Cap on how many directories we'll list — a 50-file refactor PR
@@ -349,7 +416,7 @@ def _list_repo_dir(repo: str, ref: str, path: str) -> list[str]:
             text=True,
             timeout=15,
         )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except Exception:  # noqa: BLE001 — directory context is best-effort, never a gate
         return []
     if proc.returncode != 0:
         return []

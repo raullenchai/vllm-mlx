@@ -1,21 +1,86 @@
 name: Feature Request
-description: Suggest a new feature or improvement
+description: Suggest a new feature, model, parser, or improvement
 labels: ["enhancement"]
 body:
-  - type: textarea
-    id: description
+  - type: markdown
     attributes:
-      label: What would you like?
-      placeholder: Describe the feature and why it would be useful.
+      value: |
+        Use this for ideas, missing features, new model support, new parser support, or any "it would be great if Rapid-MLX could …".
+
+        Best feature requests start from a real **use case** (what you're trying to do today and where you got stuck), not from a proposed implementation. We're more likely to act on something with concrete user need behind it.
+
+        For bugs / wrong output, use **Bug Report**. For slowdowns, use **Performance Issue**.
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: What are you trying to do?
+      description: Describe the user-facing goal — the workflow, integration, or capability you want. Be concrete.
+      placeholder: |
+        I'm building a Cursor-style code agent and want to use a local Qwen3.5-Coder model.
+        I need it to do parallel tool calls so the editor can apply multiple file edits in one round-trip.
     validations:
       required: true
+
+  - type: textarea
+    id: blocker
+    attributes:
+      label: What's blocking you today?
+      description: What does Rapid-MLX currently do (or not do) that prevents the workflow above? Concrete error / behavior / missing flag please.
+      placeholder: |
+        `--enable-auto-tool-choice` works for one tool per response, but when the model emits two `<tool_call>` blocks, only the first one comes through in the SSE stream. Looks like the Hermes parser stops after the first close-tag.
+    validations:
+      required: true
+
   - type: textarea
     id: workaround
     attributes:
-      label: Current workaround
-      placeholder: How do you handle this today, if at all?
+      label: Current workaround (if any)
+      description: How are you handling this today? "I can't" is a valid answer — that's useful info.
+      placeholder: |
+        Issuing two sequential requests instead of parallel — adds ~500ms per round trip and the agent doesn't get full context until both complete.
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach (optional)
+      description: |
+        If you have an idea for how to implement this, describe it. If not, leave blank — we'd rather have a clear use case than a half-baked design. Skip "use vLLM" / "use Ollama" — we know about them and have specific reasons for being on MLX.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Other tools you tried, other workarounds, similar features in adjacent projects (vLLM, llama.cpp, Ollama, mlx-lm). Saying "I tried X and it failed because Y" makes the case stronger.
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware (if relevant)
+      description: Only required if the request is hardware-specific (e.g. "support unified memory >256GB", "use M4 efficiency cores").
+      placeholder: "e.g. MacBook Pro M3 Max, 64 GB"
+
+  - type: input
+    id: model
+    attributes:
+      label: Model (if relevant)
+      description: Only required if the request is about a specific model (e.g. "support DeepSeek-V4", "Gemma 4 tool calling").
+      placeholder: "e.g. mlx-community/Qwen3.5-Coder-32B-MLX-4bit"
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Are you willing to contribute this?
+      description: Helps us prioritize — feature requests with a willing implementer move much faster.
+      options:
+        - "Yes, I can open a PR with guidance"
+        - "Yes, I can help test"
+        - "No, I'm just requesting"
+    validations:
+      required: true
+
   - type: textarea
     id: context
     attributes:
       label: Additional context
-      placeholder: Links, screenshots, related issues, etc.
+      placeholder: Links to upstream issues, related projects, papers, screenshots, prior discussions.

@@ -15,11 +15,11 @@ failures or a missing API key → ``skip`` with a clear summary, NOT
 ``fail`` — we don't want a temporarily-down API to block every PR.
 The strictness is at the human-review layer, not the API layer.
 
-The API key is read from the environment (``DEEPSEEK_API_KEY``) and
-falls back to a hardcoded development key documented in
-``memory/knowledge/deepseek_api_key.md``. Putting it in source is OK
-here ONLY because the key is the user's personal review-budget key,
-not a production credential — but env override is preferred.
+The API key MUST be supplied via ``DEEPSEEK_API_KEY`` — there is no
+in-source default (the repo is public). Without the env var the step
+skips gracefully so contributors without keys can still run the rest
+of the pipeline. The user's personal key is documented in
+``memory/knowledge/deepseek_api_key.md`` for local development.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 
 from ..base import Step, StepResult
@@ -209,8 +210,15 @@ class DeepSeekReviewStep(Step):
 
 
 def _build_user_prompt(ctx: Context, diff: str, truncated: bool) -> str:
-    """Compose the user message: PR context + diff. The system prompt
-    explains how to review; this provides what to review."""
+    """Compose the user message: PR context + directory listings + diff.
+
+    The directory-context section is what stops the canonical false
+    positive class "you added X but didn't update Y" / "X is missing"
+    when X actually exists outside the diff. Without it, DeepSeek
+    flagged PR #179 for having no ``feature_request.yml`` even though
+    the file already lived in ``.github/ISSUE_TEMPLATE/`` (just outside
+    the diff). With it, the listing makes sibling files visible.
+    """
     lines = [
         f"# PR #{ctx.pr_number}: {ctx.pr_title}",
         "",
@@ -222,9 +230,13 @@ def _build_user_prompt(ctx: Context, diff: str, truncated: bool) -> str:
         "",
         ctx.pr_body or "_(no description)_",
         "",
-        "## Diff",
-        "",
     ]
+    dir_context = _gather_directory_context(ctx)
+    if dir_context:
+        lines.append(dir_context)
+        lines.append("")
+    lines.append("## Diff")
+    lines.append("")
     if truncated:
         lines.append(
             f"_Note: diff truncated to {MAX_DIFF_BYTES} bytes for review. "
@@ -235,6 +247,105 @@ def _build_user_prompt(ctx: Context, diff: str, truncated: bool) -> str:
     lines.append(diff)
     lines.append("```")
     return "\n".join(lines)
+
+
+# Cap on how many directories we'll list — a 50-file refactor PR
+# shouldn't bloat the prompt with 20 directory listings. Most PRs touch
+# 1-5 dirs.
+_MAX_DIRS_LISTED = 15
+# Per-directory cap. Anything more is noise; we tag the overflow with
+# a count so the model knows there's more.
+_MAX_FILES_PER_DIR = 30
+
+
+def _gather_directory_context(ctx: Context) -> str:
+    """Return a markdown section listing files in each directory the PR
+    touches, fetched at HEAD via ``gh api``.
+
+    Empty string if we can't query (no head_sha, gh missing, all errors)
+    — in which case the review degrades to the old diff-only behavior.
+    Never raises; this is a context enhancement, not a gate.
+    """
+    if not ctx.head_sha or not ctx.files_changed:
+        return ""
+
+    # Collect unique directory paths from changed files. Root files
+    # (no dirname) get represented by "" which we map to the repo root
+    # listing — usually less interesting, so we skip it.
+    dirs: set[str] = set()
+    for path in ctx.files_changed:
+        d = os.path.dirname(path)
+        if d:
+            dirs.add(d)
+
+    if not dirs:
+        return ""
+
+    sorted_dirs = sorted(dirs)
+    capped = sorted_dirs[:_MAX_DIRS_LISTED]
+
+    sections: list[str] = []
+    for d in capped:
+        files = _list_repo_dir(ctx.repo, ctx.head_sha, d)
+        if not files:
+            # Either dir is gone at HEAD, gh failed, or empty — skip
+            # silently rather than misleading the model with "(empty)"
+            # which could itself trigger a false positive.
+            continue
+        listing_lines = [f"  - `{f}`" for f in files[:_MAX_FILES_PER_DIR]]
+        if len(files) > _MAX_FILES_PER_DIR:
+            listing_lines.append(f"  - … ({len(files) - _MAX_FILES_PER_DIR} more)")
+        sections.append(
+            f"### `{d}/` (post-PR state — fetched from HEAD)\n"
+            + "\n".join(listing_lines)
+        )
+
+    if not sections:
+        return ""
+
+    overflow_note = ""
+    if len(sorted_dirs) > _MAX_DIRS_LISTED:
+        overflow_note = (
+            f"\n_(Listing first {_MAX_DIRS_LISTED} of {len(sorted_dirs)} "
+            "touched directories; rest omitted to keep the prompt small.)_"
+        )
+
+    return (
+        "## Directory context\n\n"
+        "Files that exist in directories the diff touches, at the PR's "
+        "HEAD commit. Use this to avoid 'X is missing' false positives "
+        "— a sibling file you don't see in the diff might still be "
+        "present. Don't claim a file is missing without checking here "
+        "first.\n" + overflow_note + "\n\n" + "\n\n".join(sections)
+    )
+
+
+def _list_repo_dir(repo: str, ref: str, path: str) -> list[str]:
+    """List entry names in ``repo``/``path`` at ``ref`` via ``gh api``.
+
+    Returns just file/dir basenames sorted. Empty list on any failure
+    (network, 404, malformed JSON, missing gh) — caller treats absence
+    of context as "no enhancement", never a hard error.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603
+            [
+                "gh",
+                "api",
+                f"repos/{repo}/contents/{path}?ref={ref}",
+                "--jq",
+                ".[] | .name",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+    if proc.returncode != 0:
+        return []
+    names = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    return sorted(names)
 
 
 # Phrases that indicate a clean review. Match case-insensitively. If

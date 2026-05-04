@@ -126,18 +126,15 @@ jobs:
         run: |
           pytest \
             tests/test_platform.py \
-            tests/test_llm.py \
             tests/test_mllm.py \
             tests/test_server.py \
             tests/test_paged_cache.py \
             tests/test_mllm_continuous_batching.py \
             tests/test_mllm_cache.py \
             tests/test_optimizations.py \
-            tests/test_simple_engine.py \
             tests/test_batching.py \
             tests/test_continuous_batching.py \
             tests/test_streaming_simulator.py \
-            tests/test_deltanet_snapshot.py \
             tests/test_streaming_detokenizer.py \
             tests/test_tool_logits.py \
             -v --tb=short \

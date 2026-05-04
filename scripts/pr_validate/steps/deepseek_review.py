@@ -139,7 +139,11 @@ class DeepSeekReviewStep(Step):
                         "max_tokens": MAX_TOKENS,
                     },
                 )
-        except (httpx.TimeoutException, httpx.NetworkError) as e:
+        except httpx.RequestError as e:
+            # Catch the whole request-failure tree: TimeoutException,
+            # NetworkError (ConnectError, ReadError), and ProtocolError
+            # (RemoteProtocolError when the server cuts the connection
+            # mid-response — observed under DeepSeek API load).
             return StepResult(
                 name=self.name,
                 status="skip",

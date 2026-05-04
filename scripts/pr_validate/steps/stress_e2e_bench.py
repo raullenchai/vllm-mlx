@@ -252,7 +252,7 @@ def _available_ram_gb() -> float:
         )
         try:
             page_size = os.sysconf("SC_PAGE_SIZE")
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, OSError):
             page_size = 16384  # Apple Silicon default; vm_stat fallback
         free_pages = inactive_pages = 0
         for line in proc.stdout.splitlines():
@@ -320,25 +320,32 @@ def _server(choice: ModelChoice, ctx: Context):
             )
         yield str(log_path)
     finally:
-        # Graceful first (lifespan saves prefix cache); SIGKILL fallback.
-        if proc is not None:
-            proc.send_signal(2)  # SIGINT
-            try:
-                proc.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+        # Nested try/finally so log_f.close() runs even if the proc
+        # cleanup or _wait_for_port_free raises (e.g., _port_in_use's
+        # socket call can raise OSError under fd exhaustion).
+        try:
+            # Graceful first (lifespan saves prefix cache); SIGKILL the
+            # direct child if SIGINT timed out; lsof-based fallback for
+            # stragglers (zombies / port still held).  Keep BOTH paths:
+            # proc.kill() handles a process that survived SIGINT but isn't
+            # holding the port any more (would otherwise leak), and
+            # _force_kill_port handles a process tree where a child of the
+            # spawned proc is what's actually bound.
+            if proc is not None:
+                proc.send_signal(2)  # SIGINT
                 try:
-                    proc.wait(timeout=10)
+                    proc.wait(timeout=30)
                 except subprocess.TimeoutExpired:
-                    pass  # best-effort; log_f must close regardless
-            # Ensure port is released before returning — the OS may take
-            # a moment to free the socket after the process exits.  If
-            # the wait times out, use ``lsof`` to find and force-kill
-            # whatever is still holding the port (zombie / orphan).
-            if not _wait_for_port_free(BENCH_PORT, timeout=10):
-                _force_kill_port(BENCH_PORT)
-        if log_f is not None:
-            log_f.close()
+                    proc.kill()
+                    try:
+                        proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        pass  # _force_kill_port handles port-bound orphans
+                if not _wait_for_port_free(BENCH_PORT, timeout=10):
+                    _force_kill_port(BENCH_PORT)
+        finally:
+            if log_f is not None:
+                log_f.close()
 
 
 def _port_in_use(port: int) -> bool:
@@ -543,13 +550,18 @@ def _run_bench(ctx: Context, choice: ModelChoice) -> dict[str, Any]:
         }
 
     baseline = json.loads(baseline_path.read_text())
-    # Accept both old (ttft) and new key names for backward compat
-    base_cold = baseline.get("cold_request_ms_median") or baseline.get(
-        "cold_ttft_ms_median", cold
-    )
-    base_warm = baseline.get("warm_request_ms_median") or baseline.get(
-        "warm_ttft_ms_median", warm
-    )
+    # Accept both old (ttft) and new key names for backward compat. Treat
+    # an explicit ``None`` (JSON ``null``) the same as a missing key so we
+    # don't end up with ``base_cold=None`` flowing into the division below.
+    # This is stricter than a plain ``or`` because we want a real ``0`` to
+    # be honoured (it's a legit value, even if the downstream guard makes
+    # it a no-op).
+    base_cold = baseline.get("cold_request_ms_median")
+    if base_cold is None:
+        base_cold = baseline.get("cold_ttft_ms_median", cold)
+    base_warm = baseline.get("warm_request_ms_median")
+    if base_warm is None:
+        base_warm = baseline.get("warm_ttft_ms_median", warm)
 
     # Slowdown = current / baseline. >5% slower on cold OR warm = fail.
     cold_slow = (cold / base_cold - 1) * 100 if base_cold else 0

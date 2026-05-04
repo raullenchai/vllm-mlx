@@ -324,17 +324,23 @@ def _server(choice: ModelChoice, ctx: Context):
         # cleanup or _wait_for_port_free raises (e.g., _port_in_use's
         # socket call can raise OSError under fd exhaustion).
         try:
-            # Graceful first (lifespan saves prefix cache); SIGKILL fallback.
+            # Graceful first (lifespan saves prefix cache); SIGKILL the
+            # direct child if SIGINT timed out; lsof-based fallback for
+            # stragglers (zombies / port still held).  Keep BOTH paths:
+            # proc.kill() handles a process that survived SIGINT but isn't
+            # holding the port any more (would otherwise leak), and
+            # _force_kill_port handles a process tree where a child of the
+            # spawned proc is what's actually bound.
             if proc is not None:
                 proc.send_signal(2)  # SIGINT
                 try:
                     proc.wait(timeout=30)
                 except subprocess.TimeoutExpired:
-                    pass  # best-effort; _force_kill_port handles stragglers
-                # Ensure port is released before returning — the OS may take
-                # a moment to free the socket after the process exits.  If
-                # the wait times out, use ``lsof`` to find and force-kill
-                # whatever is still holding the port (zombie / orphan).
+                    proc.kill()
+                    try:
+                        proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        pass  # _force_kill_port handles port-bound orphans
                 if not _wait_for_port_free(BENCH_PORT, timeout=10):
                     _force_kill_port(BENCH_PORT)
         finally:

@@ -345,6 +345,32 @@ _MAX_DIRS_LISTED = 15
 _MAX_FILES_PER_DIR = 30
 
 
+def _is_safe_listing_path(d: str) -> bool:
+    """Return True iff *d* is safe to feed into ``gh api repos/.../contents/<d>``.
+
+    We reject:
+    * ``.`` — current dir; GitHub's contents API 404s on it.
+    * ``..`` and ``../*`` — parent-traversal in the path-component sense.
+      A plain ``startswith("..")`` would also reject legitimate names like
+      ``..hidden`` or ``..env``; we only want the ``..`` *component* form.
+    * absolute paths — never come from ``gh pr diff`` and could probe
+      outside the repo's tree on a misbehaving server.
+
+    *d* is the directory part of a changed-file path (``os.path.dirname``).
+    Empty input returns False — caller should already have skipped it.
+    """
+    if not d:
+        return False
+    normalized = os.path.normpath(d)
+    if normalized in (".", ".."):
+        return False
+    if normalized.startswith("../"):
+        return False
+    if os.path.isabs(normalized):
+        return False
+    return True
+
+
 def _gather_directory_context(ctx: Context) -> str:
     """Return a markdown section listing files in each directory the PR
     touches, fetched at HEAD via ``gh api``.
@@ -366,20 +392,9 @@ def _gather_directory_context(ctx: Context) -> str:
     dirs: set[str] = set()
     for path in ctx.files_changed:
         d = os.path.dirname(path)
-        if not d:
+        if not _is_safe_listing_path(d):
             continue
-        normalized = os.path.normpath(d)
-        # Reject "." (current dir — gh api 404s on this), "../*" / ".." (parent
-        # traversal), and absolute paths. Note: a plain ``startswith("..")``
-        # would also reject legitimate names like ``..hidden`` or ``..env``;
-        # we want to match only the path-component sense of "..".
-        if (
-            normalized in (".", "..")
-            or normalized.startswith("../")
-            or os.path.isabs(normalized)
-        ):
-            continue
-        dirs.add(normalized)
+        dirs.add(os.path.normpath(d))
 
     if not dirs:
         return ""

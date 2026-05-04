@@ -21,6 +21,7 @@ import os
 import pytest
 
 from scripts.pr_validate.steps.deepseek_review import (
+    _is_safe_listing_path,
     _truncate_diff_at_file_boundary,
 )
 
@@ -102,8 +103,14 @@ class TestTruncateDiffAtFileBoundary:
 
         assert truncated is True
         assert omitted == []
-        # Raw-sliced to exactly the byte limit.
-        assert len(kept.encode()) == 120_000
+        # Raw-sliced near the byte limit.  Use ``<=`` rather than ``==``
+        # because ``errors="ignore"`` will drop a trailing incomplete UTF-8
+        # sequence (1-3 bytes) if the cap lands mid-codepoint.  Test data
+        # here is pure ASCII so today the equality holds, but the contract
+        # is "≤ max_bytes", not "exactly max_bytes".
+        kept_bytes = len(kept.encode())
+        assert kept_bytes <= 120_000
+        assert kept_bytes >= 120_000 - 3  # never drop more than a code point
 
     def test_first_file_overflows_with_more_files_lists_them_omitted(self):
         """First file alone overflows AND there are subsequent files —
@@ -149,42 +156,30 @@ class TestTruncateDiffAtFileBoundary:
 
 
 class TestPathFilter:
-    """The ``_gather_directory_context`` path filter must reject path-traversal
-    attempts and ``.``/``..`` while accepting legitimate names that happen to
-    start with two dots (``..hidden``, ``..env``)."""
-
-    def _filter(self, path: str) -> bool:
-        """Returns True if *path*'s dirname survives the filter (would be
-        added to ``dirs``). Mirrors the inline logic in
-        ``_gather_directory_context`` so we can exercise it without a Context."""
-        d = os.path.dirname(path)
-        if not d:
-            return False
-        normalized = os.path.normpath(d)
-        if (
-            normalized in (".", "..")
-            or normalized.startswith("../")
-            or os.path.isabs(normalized)
-        ):
-            return False
-        return True
+    """``_is_safe_listing_path`` must reject path-traversal attempts and
+    ``.``/``..`` while accepting legitimate names that happen to start with
+    two dots (``..hidden``, ``..env``).  We test the production helper
+    directly so production-side changes can't drift away from these
+    expectations silently."""
 
     @pytest.mark.parametrize(
         "path,expected",
         [
+            # Accepted — pass dirname through to gh api.
             ("scripts/foo.py", True),
             ("vllm_mlx/routes/anthropic.py", True),
             ("..hidden/foo.py", True),  # legitimate name starting with ..
             ("..env/x.py", True),
             ("foo/..hidden/bar.py", True),
-            # rejected
+            # Rejected — would either traverse, hit an invalid endpoint, or
+            # be silently dropped because there's no dirname to feed.
             ("../escape/foo.py", False),
             ("../../etc/passwd", False),
             ("/etc/passwd", False),
-            ("./foo.py", False),  # dirname='.', normpath='.', should reject
+            ("./foo.py", False),  # dirname='.', normpath='.'
             ("..", False),  # all-traversal
-            ("foo.py", False),  # no dirname → skipped (not a rejection per se)
+            ("foo.py", False),  # no dirname at all
         ],
     )
     def test_filter(self, path, expected):
-        assert self._filter(path) is expected
+        assert _is_safe_listing_path(os.path.dirname(path)) is expected

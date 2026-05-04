@@ -336,14 +336,6 @@ async def _stream_anthropic_messages(
     accumulated_text = ""
     accumulated_raw = ""
     tool_filter = StreamingToolCallFilter()
-    _tokenizer = engine.tokenizer if hasattr(engine, "tokenizer") else None
-    _chat_template = ""
-    if _tokenizer and hasattr(_tokenizer, "chat_template"):
-        _chat_template = _tokenizer.chat_template or ""
-    _starts_thinking = (
-        "<think>" in _chat_template and "add_generation_prompt" in _chat_template
-    )
-    think_router = StreamingThinkRouter(start_in_thinking=_starts_thinking)
     prompt_tokens = 0
     completion_tokens = 0
 
@@ -362,6 +354,20 @@ async def _stream_anthropic_messages(
             pass
     if reasoning_parser:
         reasoning_parser.reset_state()
+
+    # StreamingThinkRouter is only used as a heuristic fallback when no
+    # reasoning parser is active. When a parser is configured it already
+    # separates thinking from content, making the router redundant.
+    think_router = None
+    if not reasoning_parser:
+        _tokenizer = engine.tokenizer if hasattr(engine, "tokenizer") else None
+        _chat_template = ""
+        if _tokenizer and hasattr(_tokenizer, "chat_template"):
+            _chat_template = _tokenizer.chat_template or ""
+        _starts_thinking = (
+            "<think>" in _chat_template and "add_generation_prompt" in _chat_template
+        )
+        think_router = StreamingThinkRouter(start_in_thinking=_starts_thinking)
 
     async for output in engine.stream_chat(messages=messages, **chat_kwargs):
         delta_text = output.new_text
@@ -382,40 +388,70 @@ async def _stream_anthropic_messages(
                     previous_raw, accumulated_raw, delta_text
                 )
                 if delta_msg is not None:
-                    content = delta_msg.content
+                    # The reasoning parser already separates reasoning from
+                    # content — bypass StreamingThinkRouter and emit each
+                    # directly as the appropriate SSE block type.
+                    if delta_msg.reasoning:
+                        pieces = [("thinking", delta_msg.reasoning)]
+                        (
+                            events,
+                            current_block_type,
+                            block_index,
+                        ) = _emit_content_pieces(
+                            pieces, current_block_type, block_index
+                        )
+                        for event in events:
+                            yield event
+                    if delta_msg.content:
+                        cleaned = strip_special_tokens(delta_msg.content)
+                        if cleaned:
+                            filtered = tool_filter.process(cleaned)
+                            if filtered:
+                                pieces = [("text", filtered)]
+                                (
+                                    events,
+                                    current_block_type,
+                                    block_index,
+                                ) = _emit_content_pieces(
+                                    pieces, current_block_type, block_index
+                                )
+                                for event in events:
+                                    yield event
             else:
                 content = strip_special_tokens(delta_text)
+                if content:
+                    filtered = tool_filter.process(content)
+                    if not filtered:
+                        continue
+                    pieces = think_router.process(filtered)
+                    events, current_block_type, block_index = _emit_content_pieces(
+                        pieces, current_block_type, block_index
+                    )
+                    for event in events:
+                        yield event
 
-            if content:
-                content = strip_special_tokens(content)
-
-            if content:
-                filtered = tool_filter.process(content)
-                if not filtered:
-                    continue
-                pieces = think_router.process(filtered)
-                events, current_block_type, block_index = _emit_content_pieces(
-                    pieces, current_block_type, block_index
-                )
-                for event in events:
-                    yield event
-
-    # Flush remaining from both filters
+    # Flush remaining from tool filter
     remaining = tool_filter.flush()
     if remaining:
+        pieces = (
+            [("text", remaining)]
+            if reasoning_parser
+            else think_router.process(remaining)
+        )
         events, current_block_type, block_index = _emit_content_pieces(
-            think_router.process(remaining), current_block_type, block_index
+            pieces, current_block_type, block_index
         )
         for event in events:
             yield event
 
-    flush_pieces = think_router.flush()
-    if flush_pieces:
-        events, current_block_type, block_index = _emit_content_pieces(
-            flush_pieces, current_block_type, block_index
-        )
-        for event in events:
-            yield event
+    if not reasoning_parser:
+        flush_pieces = think_router.flush()
+        if flush_pieces:
+            events, current_block_type, block_index = _emit_content_pieces(
+                flush_pieces, current_block_type, block_index
+            )
+            for event in events:
+                yield event
 
     # Close final content block
     if current_block_type is not None:

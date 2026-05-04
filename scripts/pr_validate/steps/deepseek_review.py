@@ -271,12 +271,20 @@ def _gather_directory_context(ctx: Context) -> str:
 
     # Collect unique directory paths from changed files. Root files
     # (no dirname) get represented by "" which we map to the repo root
-    # listing — usually less interesting, so we skip it.
+    # listing — usually less interesting, so we skip it. Reject any
+    # path that escapes via ``..`` or is absolute — git+GitHub usually
+    # block these on commit but we'd rather not feed an unsanitized
+    # path to ``gh api`` (the URL-resolved request could probe outside
+    # the PR's tree on a misbehaving server).
     dirs: set[str] = set()
     for path in ctx.files_changed:
         d = os.path.dirname(path)
-        if d:
-            dirs.add(d)
+        if not d:
+            continue
+        normalized = os.path.normpath(d)
+        if normalized.startswith("..") or os.path.isabs(normalized):
+            continue
+        dirs.add(normalized)
 
     if not dirs:
         return ""

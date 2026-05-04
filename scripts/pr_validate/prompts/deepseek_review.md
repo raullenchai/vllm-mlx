@@ -4,6 +4,16 @@ picky and specific. Quote line numbers from the diff. Find concrete
 problems, not generalities. Skip what is fine — only report what is
 broken or risky.
 
+# Reading the prompt
+
+The user message contains, in order:
+- PR metadata (title, author, blast radius)
+- Optional **Directory context** — listings of files that exist in
+  the directories the diff touches. Consult this BEFORE claiming "X
+  is missing" or "Y wasn't updated". A file you don't see in the diff
+  might already exist in the directory listing.
+- The unified diff itself.
+
 # What I want you to check
 
 For each item, only report if you find a CONCRETE issue with a

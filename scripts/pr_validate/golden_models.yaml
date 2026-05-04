@@ -1,0 +1,62 @@
+# Golden-model registry for stress + bench.
+#
+# Each family is a logical model line (Qwen3, Qwen3.5, MiniMax …). The
+# pipeline picks ONE candidate per family — the highest-quality one
+# whose `ram_gb_required` fits on the current machine (with some
+# headroom). If nothing fits, the family is skipped.
+#
+# `quality_tier` is for display + tie-breaking, not for selection. It
+# describes how trustworthy the quantization is for behavior testing:
+#   - golden:   the canonical sweet spot — use when validating "the
+#               server still works"
+#   - smoke:    too small to catch much, but always-runnable so we can
+#               at least confirm boot + inference + token streaming
+#   - small/medium: middle of the road
+#
+# `stop_at_first_fit`: keep the highest-quality entry per family that
+# fits the machine; we don't run multiple sizes from the same family
+# (they'd test the same code paths).
+#
+# Add new families by appending. Entries are evaluated top-to-bottom
+# within a family — put highest-quality first.
+families:
+  - family: qwen3-smoke
+    candidates:
+      - id: mlx-community/Qwen3-0.6B-8bit
+        ram_gb_required: 2
+        quality_tier: smoke
+
+  - family: qwen3.5
+    candidates:
+      - id: mlx-community/Qwen3.5-4B-MLX-4bit
+        ram_gb_required: 4
+        quality_tier: small
+
+  - family: qwen3.6
+    candidates:
+      - id: mlx-community/Qwen3.6-27B-4bit
+        ram_gb_required: 18
+        quality_tier: golden
+
+# Per-model overrides: extra CLI args (e.g. parser overrides for
+# tool-calling tests). Keep small — most models don't need this.
+overrides:
+  "mlx-community/Qwen3.6-27B-4bit":
+    args: ["--enable-auto-tool-choice"]
+
+# Agent integrations — each is a tests/integrations/ test_X.py script
+# we exec against the live server. The matrix is models × agents.
+# Tests that already work today; we expand the list as integrations
+# stabilize.
+agents:
+  - name: anthropic_sdk
+    script: tests/integrations/test_anthropic_sdk.py
+    # Tests skipped for tiny models — Anthropic streaming + 0.6B is the
+    # known #185 false-positive zone.
+    skip_for_smoke: false
+  - name: langchain
+    script: tests/integrations/test_langchain.py
+    skip_for_smoke: false
+  - name: pydantic_ai
+    script: tests/integrations/test_pydantic_ai_full.py
+    skip_for_smoke: true  # multi-tool fails on 0.6B; expected

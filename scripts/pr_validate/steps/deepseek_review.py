@@ -96,8 +96,9 @@ class DeepSeekReviewStep(Step):
 
         diff = Path(ctx.diff_path).read_text()
         truncated = False
-        if len(diff) > MAX_DIFF_BYTES:
-            diff = diff[:MAX_DIFF_BYTES]
+        diff_bytes = diff.encode("utf-8")
+        if len(diff_bytes) > MAX_DIFF_BYTES:
+            diff = diff_bytes[:MAX_DIFF_BYTES].decode("utf-8", errors="ignore")
             truncated = True
 
         if not PROMPT_PATH.exists():
@@ -117,7 +118,7 @@ class DeepSeekReviewStep(Step):
             f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_prompt}"
         )
 
-        ctx.run_log(f"calling {MODEL} ({len(diff)} bytes of diff)…")
+        ctx.run_log(f"calling {MODEL} ({len(diff.encode())} bytes of diff)…")
 
         try:
             with httpx.Client(timeout=TIMEOUT_SECONDS) as client:

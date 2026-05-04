@@ -250,7 +250,10 @@ def _available_ram_gb() -> float:
         proc = subprocess.run(  # noqa: S603
             ["vm_stat"], capture_output=True, text=True, check=True
         )
-        page_size = 16384  # Apple Silicon default; we'll override below
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+        except (ValueError, AttributeError):
+            page_size = 16384  # Apple Silicon default; vm_stat fallback
         free_pages = inactive_pages = 0
         for line in proc.stdout.splitlines():
             if line.startswith("Mach Virtual Memory Statistics"):
@@ -324,7 +327,10 @@ def _server(choice: ModelChoice, ctx: Context):
                 proc.wait(timeout=30)
             except subprocess.TimeoutExpired:
                 proc.kill()
-                proc.wait(timeout=10)
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass  # best-effort; log_f must close regardless
         if log_f is not None:
             log_f.close()
 
@@ -475,8 +481,8 @@ def _run_bench(ctx: Context, choice: ModelChoice) -> dict[str, Any]:
     speedup = cold / warm if warm else 0
     metrics = {
         "model": choice.model_id,
-        "cold_ttft_ms_median": cold,
-        "warm_ttft_ms_median": warm,
+        "cold_request_ms_median": cold,
+        "warm_request_ms_median": warm,
         "speedup_x": speedup,
     }
 
@@ -498,8 +504,13 @@ def _run_bench(ctx: Context, choice: ModelChoice) -> dict[str, Any]:
         }
 
     baseline = json.loads(baseline_path.read_text())
-    base_cold = baseline.get("cold_ttft_ms_median", cold)
-    base_warm = baseline.get("warm_ttft_ms_median", warm)
+    # Accept both old (ttft) and new key names for backward compat
+    base_cold = baseline.get("cold_request_ms_median") or baseline.get(
+        "cold_ttft_ms_median", cold
+    )
+    base_warm = baseline.get("warm_request_ms_median") or baseline.get(
+        "warm_ttft_ms_median", warm
+    )
 
     # Slowdown = current / baseline. >5% slower on cold OR warm = fail.
     cold_slow = (cold / base_cold - 1) * 100 if base_cold else 0

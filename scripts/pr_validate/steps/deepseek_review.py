@@ -47,10 +47,13 @@ MODEL = "deepseek-v4-pro"
 # truncated at a file boundary and note which files were omitted.
 MAX_DIFF_BYTES = 120_000
 
-# Token budget. Reasoning-model behavior: we observed ~6K tokens of
-# reasoning + 500-1500 tokens of visible content for a normal review.
-# 16K leaves headroom.
-MAX_TOKENS = 16_384
+# Token budget. Reasoning-model behavior is highly variable: a simple
+# diff burns ~6K reasoning tokens; a complex multi-commit one (like
+# PR #203's 22KB / 5-commit diff) burns ~16K reasoning tokens before
+# emitting any visible content. We observed the response getting cut
+# mid-finding at MAX_TOKENS=16384 because reasoning consumed the full
+# budget. 32K leaves room for ~16K reasoning + ~16K visible reply.
+MAX_TOKENS = 32_768
 
 # How long we wait for the API. DeepSeek V4 Pro reasoning takes
 # 30-90s typical, up to 5min for big diffs.
@@ -302,16 +305,14 @@ def _truncate_diff_at_file_boundary(
         positions.append((m.start(), path))
 
     # Walk forward and find the last file whose header fits within max_bytes.
+    # If we never break, kept_end naturally lands on the last header position
+    # — which is exactly what we want: drop the last file (its content is
+    # what overflows) so we only ship complete per-file diffs.
     kept_end = 0
     for pos, _ in positions:
         if pos > max_bytes:
             break
         kept_end = pos
-    else:
-        # All file headers start before the limit — the overflow is inside the
-        # last file's content. Drop the last file so we only ship complete
-        # per-file diffs (partial file diffs confuse the reviewer).
-        kept_end = positions[-1][0] if positions else 0
 
     if kept_end == 0:
         # Either no headers found, or even the first file alone overflows.

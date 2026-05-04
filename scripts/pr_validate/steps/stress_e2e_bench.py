@@ -320,25 +320,26 @@ def _server(choice: ModelChoice, ctx: Context):
             )
         yield str(log_path)
     finally:
-        # Graceful first (lifespan saves prefix cache); SIGKILL fallback.
-        if proc is not None:
-            proc.send_signal(2)  # SIGINT
-            try:
-                proc.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+        # Nested try/finally so log_f.close() runs even if the proc
+        # cleanup or _wait_for_port_free raises (e.g., _port_in_use's
+        # socket call can raise OSError under fd exhaustion).
+        try:
+            # Graceful first (lifespan saves prefix cache); SIGKILL fallback.
+            if proc is not None:
+                proc.send_signal(2)  # SIGINT
                 try:
-                    proc.wait(timeout=10)
+                    proc.wait(timeout=30)
                 except subprocess.TimeoutExpired:
-                    pass  # best-effort; log_f must close regardless
-            # Ensure port is released before returning — the OS may take
-            # a moment to free the socket after the process exits.  If
-            # the wait times out, use ``lsof`` to find and force-kill
-            # whatever is still holding the port (zombie / orphan).
-            if not _wait_for_port_free(BENCH_PORT, timeout=10):
-                _force_kill_port(BENCH_PORT)
-        if log_f is not None:
-            log_f.close()
+                    pass  # best-effort; _force_kill_port handles stragglers
+                # Ensure port is released before returning — the OS may take
+                # a moment to free the socket after the process exits.  If
+                # the wait times out, use ``lsof`` to find and force-kill
+                # whatever is still holding the port (zombie / orphan).
+                if not _wait_for_port_free(BENCH_PORT, timeout=10):
+                    _force_kill_port(BENCH_PORT)
+        finally:
+            if log_f is not None:
+                log_f.close()
 
 
 def _port_in_use(port: int) -> bool:

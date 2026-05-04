@@ -597,3 +597,314 @@ def test_save_routes_writes_through_staging_dir(tmp_path, monkeypatch):
     assert not (tmp_path / "snap.new").exists()
     assert (cache_dir / "index.json").exists()
     assert (cache_dir / "entry_0.safetensors").exists()
+
+
+# --------------------------------------------------------------------------
+# Issue #198 BUG B — incompatible cache types loaded across config changes
+# --------------------------------------------------------------------------
+#
+# When the previous server run persisted ``QuantizedKVCache`` entries
+# (``--kv-cache-quantization`` or earlier ``--kv-cache-turboquant`` runs
+# that fell back to mlx-lm quantization) and the next run starts under
+# a different cache config, the on-disk entries' tuple-form ``keys``
+# bypass the dequantize path in ``_decompress_cache`` and reach the
+# scheduler, which crashes with::
+#
+#     AttributeError: 'list' object has no attribute 'shape'
+#
+# The hasattr guards in ``scheduler.py`` stop the crash, but the entry
+# is unusable. Real fix: ``load_from_disk`` rejects entries whose
+# persisted cache class can't be safely dequantized under the current
+# config, and counts them in ``incompatible_skipped`` (distinct from
+# ``corrupt_skipped`` so users don't see "may need cleanup" warnings
+# for an expected config change).
+
+
+def _make_quantized_kvcache(num_tokens: int, *, n_layers: int = 2):
+    """Build an mlx-lm ``QuantizedKVCache`` list with ``num_tokens`` positions.
+
+    Used to simulate persisted entries from a previous ``--kv-cache-
+    quantization`` run.
+    """
+    QuantizedKVCache = pytest.importorskip("mlx_lm.models.cache").QuantizedKVCache
+    layers = []
+    for layer_idx in range(n_layers):
+        c = QuantizedKVCache(group_size=64, bits=8)
+        # Need a head_dim that's a clean multiple of group_size for quantize.
+        keys = mx.full((1, 4, num_tokens, 64), 0.5 + layer_idx, dtype=mx.float16)
+        values = mx.full((1, 4, num_tokens, 64), -(0.5 + layer_idx), dtype=mx.float16)
+        c.update_and_fetch(keys, values)
+        layers.append(c)
+    return layers
+
+
+def _save_one_entry(
+    cache_dir, tokens, kv_layers, *, cache_types: list[str] | None = None
+):
+    """Write a one-entry snapshot directly (no MemoryAwarePrefixCache).
+
+    ``cache_types`` lets a test pretend the index.json is from a
+    different config than what we'd write today.
+    """
+    os.makedirs(cache_dir, exist_ok=True)
+    write_entry_files(str(cache_dir), 0, tokens, kv_layers)
+    types = (
+        cache_types
+        if cache_types is not None
+        else ([type(layer).__name__ for layer in kv_layers])
+    )
+    index = {
+        "version": 2,
+        "num_entries": 1,
+        "total_memory_bytes": 0,
+        "entries": [
+            {
+                "index": 0,
+                "num_tokens": len(tokens),
+                "memory_bytes": 0,
+                "cache_types": types,
+            }
+        ],
+    }
+    with open(os.path.join(str(cache_dir), "index.json"), "w") as f:
+        json.dump(index, f)
+
+
+def test_quantized_entry_rejected_under_plain_config(tmp_path):
+    """BUG B — loading a persisted QuantizedKVCache under a plain config
+    must reject the entry (otherwise the tuple-form keys reach the
+    scheduler and crash with ``'list' has no attribute 'shape'``)."""
+    tokens = list(range(11))
+    _save_one_entry(tmp_path, tokens, _make_quantized_kvcache(num_tokens=11))
+
+    cache = MemoryAwarePrefixCache(
+        model=object(),
+        config=MemoryCacheConfig(max_memory_mb=64, max_entries=100, kv_quantize=False),
+    )
+    loaded = cache.load_from_disk(str(tmp_path))
+    assert loaded == 0
+    assert tuple(tokens) not in cache._entries
+
+
+def test_quantized_entry_rejected_under_turboquant_config(tmp_path):
+    """BUG B (the exact scenario in #198) — previous run wrote
+    QuantizedKVCache; current run uses ``--kv-cache-turboquant``.
+    ``_turboquant_decompress_cache`` only handles ``TurboQuantKVCache``
+    so any other type slips through unchanged. Reject at load."""
+    tokens = list(range(11))
+    _save_one_entry(tmp_path, tokens, _make_quantized_kvcache(num_tokens=11))
+
+    cache = MemoryAwarePrefixCache(
+        model=object(),
+        config=MemoryCacheConfig(max_memory_mb=64, max_entries=100, kv_turboquant=True),
+    )
+    loaded = cache.load_from_disk(str(tmp_path))
+    assert loaded == 0
+
+
+def test_quantized_entry_loadable_under_kv_quantize(tmp_path):
+    """Negative control — same config restart must still load."""
+    tokens = list(range(11))
+    _save_one_entry(tmp_path, tokens, _make_quantized_kvcache(num_tokens=11))
+
+    cache = MemoryAwarePrefixCache(
+        model=object(),
+        config=MemoryCacheConfig(max_memory_mb=64, max_entries=100, kv_quantize=True),
+    )
+    loaded = cache.load_from_disk(str(tmp_path))
+    assert loaded == 1
+
+
+def test_plain_entry_loadable_under_kv_quantize(tmp_path):
+    """Plain ``KVCache`` is forward-compatible with any config — the next
+    ``store()`` recompresses, until then fetch passes through unchanged.
+    Don't reject these; that would force users to wipe their cache when
+    enabling ``--kv-cache-quantization``."""
+    tokens = list(range(11))
+    _save_one_entry(tmp_path, tokens, make_kvcache(num_tokens=11))
+
+    cache = MemoryAwarePrefixCache(
+        model=object(),
+        config=MemoryCacheConfig(max_memory_mb=64, max_entries=100, kv_quantize=True),
+    )
+    loaded = cache.load_from_disk(str(tmp_path))
+    assert loaded == 1
+
+
+def test_plain_entry_loadable_under_turboquant(tmp_path):
+    """Same forward-compat as above but for ``--kv-cache-turboquant``."""
+    tokens = list(range(11))
+    _save_one_entry(tmp_path, tokens, make_kvcache(num_tokens=11))
+
+    cache = MemoryAwarePrefixCache(
+        model=object(),
+        config=MemoryCacheConfig(max_memory_mb=64, max_entries=100, kv_turboquant=True),
+    )
+    loaded = cache.load_from_disk(str(tmp_path))
+    assert loaded == 1
+
+
+def test_hybrid_entry_with_one_quantized_layer_rejected_under_plain_config(
+    tmp_path,
+):
+    """A hybrid model could mix layer types (e.g. global attention layers
+    quantized for memory, sliding-window layers kept plain). The compat
+    check must reject the WHOLE entry if ANY layer requires a config the
+    current run doesn't have — otherwise the partial dequantize at fetch
+    leaves the quantized layer's tuple-form keys for the scheduler.
+
+    Constructs an entry with [KVCache, QuantizedKVCache, KVCache] and
+    asserts rejection under plain config.
+    """
+    QuantizedKVCache = pytest.importorskip("mlx_lm.models.cache").QuantizedKVCache
+    plain = make_kvcache(num_tokens=11, n_layers=1)[0]
+    quant_layer = QuantizedKVCache(group_size=64, bits=8)
+    qk = mx.full((1, 4, 11, 64), 0.5, dtype=mx.float16)
+    qv = mx.full((1, 4, 11, 64), -0.5, dtype=mx.float16)
+    quant_layer.update_and_fetch(qk, qv)
+    plain2 = make_kvcache(num_tokens=11, n_layers=1)[0]
+    mixed = [plain, quant_layer, plain2]
+
+    tokens = list(range(11))
+    _save_one_entry(tmp_path, tokens, mixed)
+    # Sanity: the recorded list reflects the hybrid layout.
+    with open(tmp_path / "index.json") as f:
+        idx = json.load(f)
+    assert idx["entries"][0]["cache_types"] == [
+        "KVCache",
+        "QuantizedKVCache",
+        "KVCache",
+    ]
+
+    cache = MemoryAwarePrefixCache(
+        model=object(),
+        config=MemoryCacheConfig(max_memory_mb=64, max_entries=100, kv_quantize=False),
+    )
+    loaded = cache.load_from_disk(str(tmp_path))
+    assert loaded == 0, (
+        "hybrid entry with even one QuantizedKVCache layer must be "
+        "rejected under plain config — partial dequantize would leave "
+        "tuple-form keys for the scheduler"
+    )
+
+
+def test_legacy_index_without_cache_types_falls_back_to_safetensors_metadata(
+    tmp_path,
+):
+    """Backward compat — index.json from before #198 lacks ``cache_types``.
+    Loader must peek at the safetensors ``__metadata__`` to figure out
+    the persisted class. Without this fallback, every legacy quantized
+    entry would be incorrectly accepted under a plain config and crash
+    the scheduler the moment it's fetched."""
+    tokens = list(range(11))
+    _save_one_entry(
+        tmp_path,
+        tokens,
+        _make_quantized_kvcache(num_tokens=11),
+        cache_types=[],  # simulate legacy index without the field
+    )
+    # Sanity: the index.json should now have cache_types == [].
+    with open(tmp_path / "index.json") as f:
+        idx = json.load(f)
+    assert idx["entries"][0]["cache_types"] == []
+
+    cache = MemoryAwarePrefixCache(
+        model=object(),
+        config=MemoryCacheConfig(max_memory_mb=64, max_entries=100, kv_quantize=False),
+    )
+    loaded = cache.load_from_disk(str(tmp_path))
+    assert loaded == 0, (
+        "expected legacy QuantizedKVCache entry to be rejected via "
+        "safetensors-metadata fallback under plain config"
+    )
+
+
+def test_save_to_disk_records_cache_types_in_index(tmp_path):
+    """Forward-looking — the field must be present in newly written
+    index.json so future loads can pre-filter without parsing each
+    safetensors header."""
+    cache = fresh_cache()
+    cache.store(list(range(11)), make_kvcache(num_tokens=11))
+    cache.save_to_disk(str(tmp_path))
+
+    with open(tmp_path / "index.json") as f:
+        idx = json.load(f)
+    assert idx["entries"][0]["cache_types"] == ["KVCache", "KVCache"]
+
+
+def test_incompatible_skipped_does_not_count_as_corruption(tmp_path, caplog):
+    """The summary log must distinguish "config changed → expected skips"
+    from "disk corrupt → user should investigate". A WARNING for an
+    expected config change would be alarm fatigue."""
+    import logging as _logging
+
+    tokens = list(range(11))
+    _save_one_entry(tmp_path, tokens, _make_quantized_kvcache(num_tokens=11))
+
+    cache = MemoryAwarePrefixCache(
+        model=object(),
+        config=MemoryCacheConfig(max_memory_mb=64, max_entries=100, kv_quantize=False),
+    )
+    with caplog.at_level(_logging.INFO, logger="vllm_mlx.memory_cache"):
+        cache.load_from_disk(str(tmp_path))
+
+    text = caplog.text
+    assert "incompatible" in text, "summary should mention incompatible skips"
+    assert "may need cleanup" not in text, (
+        "config-change skips must not surface as corruption warnings"
+    )
+
+
+# --------------------------------------------------------------------------
+# Issue #198 BUG A — scheduler-side hasattr guards
+# --------------------------------------------------------------------------
+#
+# Tests for the three ``.shape``-on-tuple-keys crash sites in
+# ``vllm_mlx/scheduler.py``. We exercise the validators directly with
+# the cache shape they receive when a QuantizedKVCache reaches them
+# (which happens for stale-cache scenarios where Bug B fix didn't fire,
+# or for in-memory mid-prefill states under quantized model paths).
+
+
+class _FakeQuantizedLayer:
+    """Stand-in for QuantizedKVCache shape: ``keys`` is a tuple, not array.
+
+    We use this rather than the real class to keep the test independent
+    of mlx-lm's internal layout — only the surface seen by the scheduler
+    matters for the regression we're guarding against.
+    """
+
+    def __init__(self, num_tokens: int = 11):
+        # mlx-lm QuantizedKVCache stores keys/values as 3-tuples
+        # (data, scales, biases); only ``data`` is a real array.
+        data = mx.zeros((1, 4, num_tokens, 16), dtype=mx.uint32)
+        scales = mx.zeros((1, 4, num_tokens, 1), dtype=mx.float16)
+        biases = mx.zeros((1, 4, num_tokens, 1), dtype=mx.float16)
+        self.keys = (data, scales, biases)
+        self.values = (data, scales, biases)
+
+
+def test_scheduler_validator_accepts_tuple_keys_without_crashing():
+    """BUG A — the validator must not raise ``AttributeError`` when
+    ``layer.keys`` is the QuantizedKVCache 3-tuple.
+
+    Pre-fix this would do ``layer_cache.keys.shape[0]`` and crash on
+    the tuple, taking down whichever request triggered the fetch.
+    Post-fix the validator skips the batch-dim check for non-array
+    keys (the dim is structurally guaranteed by the cache class) and
+    returns truthfully.
+
+    Note: the only Bug A site that actually fires under #198's repro
+    is this validator. The two other sites in
+    ``_reconstruct_cache_from_states`` are gated on
+    ``cache_cls is _BatchKVCache`` whose state tuple is always
+    array-typed in practice; their ``hasattr`` guards are defensive,
+    not load-bearing, so we don't pin them with tests.
+    """
+    from vllm_mlx.scheduler import Scheduler
+
+    layer = _FakeQuantizedLayer(num_tokens=11)
+    # _validate_cache is an instance method but doesn't touch self for
+    # the list-of-layers path — call unbound.
+    is_valid = Scheduler._validate_cache(None, [layer])
+    assert is_valid in (True, False)

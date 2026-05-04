@@ -26,8 +26,11 @@ from __future__ import annotations
 
 import bisect
 import copy
+import json
 import logging
 import math
+import os
+import struct
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -56,27 +59,12 @@ def _safetensors_is_complete(path: str) -> bool:
 
     Returns False on any structural problem (caller should drop the entry).
     """
-    import json
-    import os
-    import struct
-
+    parsed = _read_safetensors_header(path)
+    if parsed is None:
+        return False
+    header, header_len = parsed
     try:
         size = os.path.getsize(path)
-        if size < 8:
-            return False
-        with open(path, "rb") as f:
-            header_len_bytes = f.read(8)
-            if len(header_len_bytes) != 8:
-                return False
-            header_len = struct.unpack("<Q", header_len_bytes)[0]
-            if header_len <= 0 or 8 + header_len > size:
-                return False
-            header_bytes = f.read(header_len)
-            if len(header_bytes) != header_len:
-                return False
-        header = json.loads(header_bytes)
-        if not isinstance(header, dict):
-            return False
         max_end = 0
         for name, meta in header.items():
             if name == "__metadata__":
@@ -95,6 +83,128 @@ def _safetensors_is_complete(path: str) -> bool:
         return size >= 8 + header_len + max_end
     except (OSError, ValueError, struct.error, AttributeError, TypeError):
         return False
+
+
+def _read_safetensors_header(path: str) -> tuple[dict, int] | None:
+    """Parse a safetensors header without loading any tensor data.
+
+    Returns ``(header_dict, header_len_bytes)`` on success, or ``None`` if
+    the file is structurally invalid. Both values are needed by
+    :func:`_safetensors_is_complete` to compute the absolute end-of-data
+    offset; :func:`_safetensors_cache_classes` ignores ``header_len``.
+    Returning both from one read avoids opening the file twice.
+    """
+    try:
+        size = os.path.getsize(path)
+        if size < 8:
+            return None
+        with open(path, "rb") as f:
+            header_len_bytes = f.read(8)
+            if len(header_len_bytes) != 8:
+                return None
+            header_len = struct.unpack("<Q", header_len_bytes)[0]
+            if header_len <= 0 or 8 + header_len > size:
+                return None
+            header_bytes = f.read(header_len)
+            if len(header_bytes) != header_len:
+                return None
+        header = json.loads(header_bytes)
+        if not isinstance(header, dict):
+            return None
+        return header, header_len
+    except (OSError, ValueError, struct.error, AttributeError, TypeError):
+        return None
+
+
+def _safetensors_cache_classes(path: str) -> list[str]:
+    """Read mlx-lm cache class names from a safetensors prompt-cache file.
+
+    ``mlx_lm.models.cache.save_prompt_cache`` writes per-layer class names
+    under metadata keys of the form ``"2.{layer_idx}"``. This reads them
+    back without instantiating the cache — needed to gate disk-cache
+    loading on cache-type compatibility (see Bug B in #198).
+
+    Returns ``[]`` if the file is unreadable, has no metadata, or has no
+    ``2.*`` keys. The caller treats ``[]`` as "permissive — assume
+    ``KVCache``" for backward compat with files saved before the
+    in-index ``cache_types`` field existed; that's safe today because
+    every mlx-lm version we depend on writes the ``2.*`` metadata, so
+    an actually-quantized file always yields a non-empty list. If a
+    future mlx-lm changes the metadata key layout this will silently
+    misclassify quantized files as KVCache and re-expose Bug A — emit
+    a one-time WARNING when the metadata block exists but yields no
+    ``2.*`` keys, so format drift is at least visible in logs.
+    """
+    parsed = _read_safetensors_header(path)
+    if parsed is None:
+        return []
+    header, _ = parsed
+    meta = header.get("__metadata__")
+    if not isinstance(meta, dict):
+        return []
+    layer_classes: dict[int, str] = {}
+    for k, v in meta.items():
+        if not isinstance(k, str) or not k.startswith("2."):
+            continue
+        try:
+            idx = int(k.split(".", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        if isinstance(v, str) and v:
+            layer_classes[idx] = v
+    if not layer_classes and meta:
+        # Header has metadata but no recognizable per-layer class keys —
+        # likely a future mlx-lm format change. Surface it so the cause
+        # is diagnosable without parsing the safetensors by hand.
+        logger.warning(
+            f"[cache_persist] {path}: safetensors __metadata__ present "
+            f"but no '2.*' cache-class keys found "
+            f"(meta_keys={sorted(meta)[:8]}...) — assuming plain KVCache; "
+            f"if this file was actually quantized, the entry may crash "
+            f"the scheduler at fetch (#198 BUG A)"
+        )
+    return [layer_classes[i] for i in sorted(layer_classes)]
+
+
+def _cache_classes_compatible(
+    class_names: list[str], config: MemoryCacheConfig
+) -> tuple[bool, str]:
+    """Check whether a persisted cache is loadable under the current config.
+
+    Reasoning (see #198 BUG B):
+
+    * ``KVCache`` / ``MambaCache`` / etc. — always loadable. Under
+      ``kv_quantize`` or ``kv_turboquant`` the next ``store()`` call
+      will recompress; until then they pass through fetch unchanged.
+    * ``QuantizedKVCache`` — only loadable when ``kv_quantize=True``.
+      The dequantize path in ``_decompress_cache`` is guarded on the
+      flag; under any other config the tuple-form ``keys`` reach the
+      scheduler and crash (#198 BUG A's downstream symptom).
+    * ``TurboQuantKVCache`` — only loadable when ``kv_turboquant=True``.
+      In practice never persisted (no ``state`` attribute), so this
+      branch is defensive.
+
+    Returns ``(is_compatible, reason)``. ``reason`` is empty when ok.
+    """
+    if not class_names:
+        # Backward compat: pre-cache_type files have no class info. Assume
+        # KVCache (the only thing all earlier rapid-mlx versions wrote).
+        # Always compatible.
+        return True, ""
+    for cn in class_names:
+        if cn == "QuantizedKVCache" and not config.kv_quantize:
+            return (
+                False,
+                f"persisted {cn} requires --kv-cache-quantization "
+                "(current config does not enable it)",
+            )
+        if cn == "TurboQuantKVCache" and not config.kv_turboquant:
+            return (
+                False,
+                f"persisted {cn} requires --kv-cache-turboquant "
+                "(current config does not enable it)",
+            )
+    return True, ""
 
 
 def _get_available_memory() -> int:
@@ -1057,8 +1167,6 @@ class MemoryAwarePrefixCache:
 
         Returns True if at least one entry was saved.
         """
-        import json
-        import os
         import shutil
         import time as _time
 
@@ -1112,11 +1220,22 @@ class MemoryAwarePrefixCache:
                 with open(tokens_path, "wb") as f:
                     arr.tofile(f)
 
+                # Record the per-layer cache class names so loaders can
+                # gate on cache-type compatibility (#198 BUG B). Stored
+                # inline in index.json so we can pre-filter incompatible
+                # entries without parsing the safetensors header for each.
+                # Falls back to ``[]`` if the entry was empty (defensive —
+                # shouldn't happen since we reject empty caches at store).
+                cache_types = [
+                    type(layer).__name__ for layer in entry.cache if layer is not None
+                ]
+
                 index["entries"].append(
                     {
                         "index": i,
                         "num_tokens": len(tokens_key),
                         "memory_bytes": entry.memory_bytes,
+                        "cache_types": cache_types,
                     }
                 )
                 saved += 1
@@ -1178,8 +1297,6 @@ class MemoryAwarePrefixCache:
 
         Returns the number of entries successfully loaded.
         """
-        import json
-        import os
         import shutil
         import time as _time
 
@@ -1269,6 +1386,7 @@ class MemoryAwarePrefixCache:
         loaded = 0
         corrupt_skipped = 0
         duplicate_skipped = 0
+        incompatible_skipped = 0
         for entry_meta in index.get("entries", []):
             i = entry_meta["index"]
             expected_num_tokens = entry_meta["num_tokens"]
@@ -1278,6 +1396,25 @@ class MemoryAwarePrefixCache:
             if not os.path.exists(entry_path) or not os.path.exists(tokens_path):
                 logger.warning(f"[cache_persist] missing files for entry {i}, skipping")
                 corrupt_skipped += 1
+                continue
+
+            # Cache-type compatibility check (#198 BUG B). Reject entries
+            # whose persisted cache class doesn't match what the current
+            # config can dequantize at fetch time — otherwise tuple-form
+            # keys reach the scheduler. Done early to skip the safetensors
+            # body validation work for entries we'd discard anyway.
+            cache_types = entry_meta.get("cache_types") or []
+            if not cache_types:
+                # Backward compat with index.json from before cache_types
+                # existed: peek at safetensors __metadata__.
+                cache_types = _safetensors_cache_classes(entry_path)
+            ok, reason = _cache_classes_compatible(cache_types, self._config)
+            if not ok:
+                logger.info(
+                    f"[cache_persist] entry {i} skipped — {reason}; "
+                    f"persisted types={cache_types}"
+                )
+                incompatible_skipped += 1
                 continue
 
             # Cross-check tokens.bin size against index.json's claim.
@@ -1390,6 +1527,11 @@ class MemoryAwarePrefixCache:
         if duplicate_skipped:
             summary += (
                 f", {duplicate_skipped} skipped as duplicates of in-memory entries"
+            )
+        if incompatible_skipped:
+            summary += (
+                f", {incompatible_skipped} skipped as incompatible with "
+                f"current cache config (e.g. config changed between runs)"
             )
         if corrupt_skipped:
             logger.warning(

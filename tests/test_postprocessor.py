@@ -324,11 +324,11 @@ class TestStreamingPostProcessorToolCalls:
         )
         pp.reset()
 
-        heading_events = pp.process_chunk(_make_output("Next step\n\n["))
+        heading_events = pp.process_chunk(_make_output("Next step\n\n[C"))
         assert len(heading_events) == 1
         assert heading_events[0].type == "content"
         assert heading_events[0].content == "Next step"
-        assert pp.process_chunk(_make_output("Calling tool")) == []
+        assert pp.process_chunk(_make_output("alling tool")) == []
         events = pp.process_chunk(
             _make_output(
                 ': bash({"command":"npm test", "timeout": "60000"})]',
@@ -364,6 +364,25 @@ class TestStreamingPostProcessorToolCalls:
         assert len(array_events) == 1
         assert array_events[0].type == "content"
         assert array_events[0].content == "const snake = ["
+
+    def test_line_start_bare_bracket_is_not_stripped(self):
+        """A bare array bracket on its own line is normal content."""
+        cfg = _make_cfg(
+            enable_auto_tool_choice=True,
+            tool_call_parser="qwen3_coder_xml",
+        )
+        pp = StreamingPostProcessor(
+            cfg,
+            tools_requested=True,
+            request={"tools": []},
+        )
+        pp.reset()
+
+        events = pp.process_chunk(_make_output("Here is an array:\n["))
+
+        assert len(events) == 1
+        assert events[0].type == "content"
+        assert events[0].content == "Here is an array:\n["
 
     def test_generic_tool_call_drops_missing_required_duplicate(self):
         """Malformed duplicate calls should not reach clients for schema rejection."""

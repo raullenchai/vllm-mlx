@@ -67,7 +67,7 @@ def _get_tool_param_config(
         properties = parameters.get("properties")
         if isinstance(properties, dict):
             return properties
-        return parameters
+        return {}
     return {}
 
 
@@ -118,9 +118,10 @@ def _coerce_schema_value(value: Any, schema: Any) -> Any:
     except (TypeError, ValueError):
         return value
     if schema_type in ("boolean", "bool"):
-        if stripped.lower() == "true":
+        normalized = stripped.lower()
+        if normalized in {"true", "1", "yes", "y", "on"}:
             return True
-        if stripped.lower() == "false":
+        if normalized in {"false", "0", "no", "n", "off"}:
             return False
     return value
 

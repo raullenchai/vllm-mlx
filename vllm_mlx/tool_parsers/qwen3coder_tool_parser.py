@@ -22,6 +22,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
+from ..api.tool_calling import _decode_json_like, _schema_type
 from .abstract_tool_parser import (
     ExtractedToolCallInformation,
     ToolParser,
@@ -47,63 +48,8 @@ def _get_arguments_config(func_name: str, tools: list[dict] | None) -> dict:
             params = func.get("parameters", {})
             if isinstance(params, dict) and "properties" in params:
                 return params["properties"]
-            elif isinstance(params, dict):
-                return params
             return {}
     return {}
-
-
-def _decode_json_like(value: Any) -> Any:
-    """Decode JSON-looking strings, including double-encoded values."""
-    if not isinstance(value, str):
-        return value
-
-    current: Any = value.strip()
-    for _ in range(3):
-        if not isinstance(current, str):
-            return current
-        stripped = current.strip()
-        if not stripped or stripped[0] not in '[{"':
-            return current
-        try:
-            parsed = json.loads(stripped)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            return current
-        if parsed == current:
-            return parsed
-        current = parsed
-    return current
-
-
-def _schema_type(schema: Any) -> str | None:
-    """Infer a JSON schema type for tool argument conversion."""
-    if isinstance(schema, str):
-        return schema.strip().lower()
-    if not isinstance(schema, dict):
-        return None
-
-    schema_type = schema.get("type")
-    if isinstance(schema_type, list):
-        schema_type = next((item for item in schema_type if item != "null"), None)
-    if isinstance(schema_type, str):
-        return schema_type.strip().lower()
-
-    for key in ("anyOf", "oneOf", "allOf"):
-        options = schema.get(key)
-        if not isinstance(options, list):
-            continue
-        for option in options:
-            option_type = _schema_type(option)
-            if option_type and option_type != "null":
-                return option_type
-
-    if "items" in schema:
-        return "array"
-    if "properties" in schema or "additionalProperties" in schema:
-        return "object"
-    if "enum" in schema:
-        return "string"
-    return None
 
 
 def _convert_param_value(

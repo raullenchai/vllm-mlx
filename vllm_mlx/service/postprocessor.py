@@ -54,8 +54,6 @@ def _has_partial_calling_tool_marker(text: str) -> bool:
     """Return True when a stream tail may become `Calling tool:`."""
     marker = "Calling tool:"
     tail = text.rstrip()
-    if tail.endswith("[") and _starts_current_line(tail, len(tail) - 1):
-        return True
     for i in range(1, len(marker)):
         partial = marker[:i]
         if tail.endswith(partial):
@@ -79,11 +77,6 @@ def _find_trailing_calling_tool_prefix(text: str) -> int | None:
     marker = "Calling tool:"
     tail_end = len(text.rstrip())
     tail = text[:tail_end]
-
-    if tail.endswith("["):
-        start = len(tail) - 1
-        if _starts_current_line(tail, start):
-            return start
 
     for i in range(1, len(marker)):
         partial = marker[:i]

@@ -42,6 +42,57 @@ _MIN_MEMORY_BYTES = 100 * _BYTES_PER_MB  # Minimum 100MB
 _MAX_ENTRIES_FALLBACK = 50  # Fallback if memory detection fails
 
 
+def _safetensors_is_complete(path: str) -> bool:
+    """Validate a safetensors file is at least as long as its header claims.
+
+    Catches the body-truncated case that ``mx.load`` happily mmaps over —
+    a partial KV file that returns zeros at the missing positions and only
+    blows up much later with a wrong-output bug. Cheap: reads ≤ a few KB.
+
+    File layout (per safetensors spec):
+        [8 bytes LE uint64: header_len]
+        [header_len bytes: JSON header with data_offsets per tensor]
+        [tensor data]
+
+    Returns False on any structural problem (caller should drop the entry).
+    """
+    import json
+    import os
+    import struct
+
+    try:
+        size = os.path.getsize(path)
+        if size < 8:
+            return False
+        with open(path, "rb") as f:
+            header_len_bytes = f.read(8)
+            if len(header_len_bytes) != 8:
+                return False
+            header_len = struct.unpack("<Q", header_len_bytes)[0]
+            if header_len <= 0 or 8 + header_len > size:
+                return False
+            header_bytes = f.read(header_len)
+            if len(header_bytes) != header_len:
+                return False
+        header = json.loads(header_bytes)
+        max_end = 0
+        for name, meta in header.items():
+            if name == "__metadata__":
+                continue
+            offsets = meta.get("data_offsets") if isinstance(meta, dict) else None
+            if (
+                not isinstance(offsets, list)
+                or len(offsets) != 2
+                or not all(isinstance(x, int) for x in offsets)
+            ):
+                return False
+            if offsets[1] > max_end:
+                max_end = offsets[1]
+        return size >= 8 + header_len + max_end
+    except (OSError, ValueError, struct.error, json.JSONDecodeError):
+        return False
+
+
 def _get_available_memory() -> int:
     """
     Get available system memory in bytes.
@@ -983,18 +1034,28 @@ class MemoryAwarePrefixCache:
     def save_to_disk(self, cache_dir: str) -> bool:
         """Save all cache entries to disk using mlx_lm's safetensors format.
 
-        Directory layout::
+        The snapshot is committed via a directory-rename to make it
+        all-or-nothing: writes go to ``<cache_dir>.new/``, then a
+        three-step swap (``cache_dir → .old``, ``.new → cache_dir``,
+        ``rm .old``) atomically replaces the previous snapshot. A crash
+        anywhere during the writes leaves the previous snapshot intact;
+        :meth:`load_from_disk` recovers from a crash mid-swap.
+
+        Directory layout (committed)::
 
             cache_dir/
               index.json          # token keys + metadata per entry
               entry_0.safetensors # KV arrays for entry 0
+              entry_0_tokens.bin
               entry_1.safetensors
+              entry_1_tokens.bin
               ...
 
         Returns True if at least one entry was saved.
         """
         import json
         import os
+        import shutil
         import time as _time
 
         if not self._entries:
@@ -1002,13 +1063,23 @@ class MemoryAwarePrefixCache:
             return False
 
         t0 = _time.monotonic()
-        os.makedirs(cache_dir, exist_ok=True)
 
         try:
             from mlx_lm.models.cache import save_prompt_cache
         except ImportError:
             logger.warning("[cache_persist] mlx_lm not available, cannot save")
             return False
+
+        new_dir = cache_dir + ".new"
+        old_dir = cache_dir + ".old"
+
+        # Pre-clean stale staging dirs from a previous interrupted save.
+        for stale in (new_dir, old_dir):
+            if os.path.exists(stale):
+                logger.info(f"[cache_persist] removing stale staging dir: {stale}")
+                shutil.rmtree(stale, ignore_errors=True)
+
+        os.makedirs(new_dir, exist_ok=True)
 
         index = {
             "version": 2,
@@ -1019,15 +1090,15 @@ class MemoryAwarePrefixCache:
 
         saved = 0
         for i, (tokens_key, entry) in enumerate(self._entries.items()):
-            entry_path = os.path.join(cache_dir, f"entry_{i}.safetensors")
+            entry_path = os.path.join(new_dir, f"entry_{i}.safetensors")
+            tokens_path = os.path.join(new_dir, f"entry_{i}_tokens.bin")
             try:
                 save_prompt_cache(
                     entry_path,
                     entry.cache,
                     metadata={"num_tokens": str(len(tokens_key))},
                 )
-                # Save tokens separately (can be 100K+ ints → binary is smaller)
-                tokens_path = os.path.join(cache_dir, f"entry_{i}_tokens.bin")
+                # Save tokens separately (can be 100K+ ints → binary is smaller).
                 import array as _array
 
                 arr = _array.array("i", tokens_key)  # 32-bit signed ints
@@ -1051,9 +1122,24 @@ class MemoryAwarePrefixCache:
             except Exception as e:
                 logger.warning(f"[cache_persist] failed to save entry {i}: {e}")
 
-        index_path = os.path.join(cache_dir, "index.json")
+        if saved == 0:
+            shutil.rmtree(new_dir, ignore_errors=True)
+            logger.warning("[cache_persist] no entries saved successfully, aborting")
+            return False
+
+        # Write index.json LAST inside the staging dir. Its presence is the
+        # signal to load_from_disk that .new contains a complete snapshot.
+        index_path = os.path.join(new_dir, "index.json")
         with open(index_path, "w") as f:
             json.dump(index, f, indent=2)
+
+        # Atomic-ish directory swap. If we crash between the two renames,
+        # load_from_disk's recovery path (see below) handles it.
+        if os.path.exists(cache_dir):
+            os.rename(cache_dir, old_dir)
+        os.rename(new_dir, cache_dir)
+        if os.path.exists(old_dir):
+            shutil.rmtree(old_dir, ignore_errors=True)
 
         dt = _time.monotonic() - t0
         logger.info(
@@ -1066,11 +1152,56 @@ class MemoryAwarePrefixCache:
     def load_from_disk(self, cache_dir: str) -> int:
         """Load cache entries from disk.
 
+        Recovers from a save interrupted between the two directory
+        renames in :meth:`save_to_disk`:
+
+        * if ``cache_dir`` is missing but ``cache_dir.new/index.json``
+          exists, the snapshot was fully written but never swapped in
+          → promote ``.new`` to ``cache_dir``;
+        * else if ``cache_dir.old`` is present and ``cache_dir`` is
+          missing, restore ``.old``.
+
+        Each entry is validated before insertion: the on-disk
+        ``tokens.bin`` size must match ``num_tokens * 4``, the
+        ``.safetensors`` file size must cover the data range declared
+        in its header (``mx.load`` mmaps lazily and returns zeros past
+        EOF, so a body-truncated KV would otherwise slip through), and
+        ``cache.offset`` must equal ``len(tokens)``. Any entry that
+        fails validation is dropped with a warning.
+
         Returns the number of entries successfully loaded.
         """
         import json
         import os
+        import shutil
         import time as _time
+
+        new_dir = cache_dir + ".new"
+        old_dir = cache_dir + ".old"
+
+        # Crash-recovery for an interrupted save_to_disk.
+        if not os.path.exists(cache_dir):
+            if os.path.exists(os.path.join(new_dir, "index.json")):
+                logger.info(
+                    f"[cache_persist] recovering interrupted save: "
+                    f"promoting {new_dir} → {cache_dir}"
+                )
+                os.rename(new_dir, cache_dir)
+                if os.path.exists(old_dir):
+                    shutil.rmtree(old_dir, ignore_errors=True)
+            elif os.path.exists(os.path.join(old_dir, "index.json")):
+                logger.info(
+                    f"[cache_persist] recovering interrupted save: "
+                    f"restoring {old_dir} → {cache_dir}"
+                )
+                os.rename(old_dir, cache_dir)
+        else:
+            # cache_dir exists — clean up any orphan staging dirs that a
+            # previous interrupted save may have left behind.
+            for stale in (new_dir, old_dir):
+                if os.path.exists(stale):
+                    logger.info(f"[cache_persist] cleaning orphan staging dir: {stale}")
+                    shutil.rmtree(stale, ignore_errors=True)
 
         index_path = os.path.join(cache_dir, "index.json")
         if not os.path.exists(index_path):
@@ -1094,13 +1225,42 @@ class MemoryAwarePrefixCache:
             return 0
 
         loaded = 0
+        skipped = 0
         for entry_meta in index.get("entries", []):
             i = entry_meta["index"]
+            expected_num_tokens = entry_meta["num_tokens"]
             entry_path = os.path.join(cache_dir, f"entry_{i}.safetensors")
             tokens_path = os.path.join(cache_dir, f"entry_{i}_tokens.bin")
 
             if not os.path.exists(entry_path) or not os.path.exists(tokens_path):
                 logger.warning(f"[cache_persist] missing files for entry {i}, skipping")
+                skipped += 1
+                continue
+
+            # Cross-check tokens.bin size against index.json's claim.
+            # Mismatch means the entry was partially rewritten by an
+            # interrupted previous save (BUG A). Drop it.
+            expected_bytes = expected_num_tokens * 4  # 32-bit signed ints
+            actual_bytes = os.path.getsize(tokens_path)
+            if actual_bytes != expected_bytes:
+                logger.warning(
+                    f"[cache_persist] entry {i} tokens.bin size mismatch "
+                    f"(expected {expected_bytes} bytes for {expected_num_tokens} "
+                    f"tokens, got {actual_bytes}) — corruption, skipping"
+                )
+                skipped += 1
+                continue
+
+            # mx.load mmaps safetensors lazily and will silently return
+            # zeros for positions past EOF. Verify the body is fully on
+            # disk via the safetensors header before trusting the entry
+            # (BUG D — body-truncated file slips through load otherwise).
+            if not _safetensors_is_complete(entry_path):
+                logger.warning(
+                    f"[cache_persist] entry {i} safetensors body is short of "
+                    f"its header's declared data range — corruption, skipping"
+                )
+                skipped += 1
                 continue
 
             try:
@@ -1109,11 +1269,25 @@ class MemoryAwarePrefixCache:
 
                 arr = _array.array("i")
                 with open(tokens_path, "rb") as f:
-                    arr.fromfile(f, entry_meta["num_tokens"])
+                    arr.fromfile(f, expected_num_tokens)
                 tokens = list(arr)
 
-                # Load KV cache
+                # Load KV cache (header completeness already validated above).
                 cache = load_prompt_cache(entry_path)
+
+                # Invariant: a well-formed entry has cache.offset == len(tokens).
+                # Any deviation means BUG A poisoning slipped through earlier
+                # checks; drop it rather than risk corrupting fetch output.
+                if cache:
+                    head_offset = getattr(cache[0], "offset", None)
+                    if head_offset is not None and head_offset != len(tokens):
+                        logger.warning(
+                            f"[cache_persist] entry {i} cache offset "
+                            f"({head_offset}) != tokens length ({len(tokens)}) "
+                            f"— corruption, skipping"
+                        )
+                        skipped += 1
+                        continue
 
                 # Estimate memory
                 memory = estimate_kv_cache_memory(cache)
@@ -1146,13 +1320,21 @@ class MemoryAwarePrefixCache:
 
             except Exception as e:
                 logger.warning(f"[cache_persist] failed to load entry {i}: {e}")
+                skipped += 1
 
         self._stats.entry_count = len(self._entries)
         self._stats.current_memory_bytes = self._current_memory
 
         dt = _time.monotonic() - t0
-        logger.info(
-            f"[cache_persist] LOADED {loaded} entries from {cache_dir} "
-            f"in {dt:.1f}s ({self._current_memory / _BYTES_PER_MB:.0f}MB total)"
-        )
+        if skipped:
+            logger.warning(
+                f"[cache_persist] LOADED {loaded} entries from {cache_dir} "
+                f"in {dt:.1f}s ({self._current_memory / _BYTES_PER_MB:.0f}MB total), "
+                f"SKIPPED {skipped} corrupt entries — disk cache may need cleanup"
+            )
+        else:
+            logger.info(
+                f"[cache_persist] LOADED {loaded} entries from {cache_dir} "
+                f"in {dt:.1f}s ({self._current_memory / _BYTES_PER_MB:.0f}MB total)"
+            )
         return loaded

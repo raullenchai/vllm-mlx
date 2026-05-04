@@ -1190,8 +1190,12 @@ class MemoryAwarePrefixCache:
 
         def _has_valid_index(d: str) -> bool:
             """Cheap sanity check: index.json exists, is valid JSON, has the
-            expected version. Defends recovery against a partial index.json
-            written by a crashed save (json.dump itself isn't atomic)."""
+            expected version, AND at least one referenced entry file exists
+            on disk. The last check defends against the pathological case
+            where index.json survives but its entry files don't (manual
+            deletion, fs corruption, partial restore from backup) — without
+            it, recovery would promote a "valid index, no data" snapshot
+            and discard the previous good `.old` snapshot for nothing."""
             p = os.path.join(d, "index.json")
             if not os.path.exists(p):
                 return False
@@ -1200,7 +1204,20 @@ class MemoryAwarePrefixCache:
                     obj = json.load(f)
             except (OSError, ValueError):
                 return False
-            return isinstance(obj, dict) and obj.get("version", 0) >= 2
+            if not (isinstance(obj, dict) and obj.get("version", 0) >= 2):
+                return False
+            entries = obj.get("entries") or []
+            if not entries:
+                # An index claiming zero entries is degenerate; nothing to
+                # promote. Treat as missing so recovery can fall through
+                # to a real snapshot in the other staging dir.
+                return False
+            first_idx = entries[0].get("index")
+            if first_idx is None:
+                return False
+            sf = os.path.join(d, f"entry_{first_idx}.safetensors")
+            tk = os.path.join(d, f"entry_{first_idx}_tokens.bin")
+            return os.path.exists(sf) and os.path.exists(tk)
 
         # Crash-recovery for an interrupted save_to_disk.
         if not os.path.exists(cache_dir):
@@ -1298,6 +1315,21 @@ class MemoryAwarePrefixCache:
                     arr.fromfile(f, expected_num_tokens)
                 tokens = list(arr)
 
+                # Skip duplicates (e.g. an entry that warmup already
+                # populated). Done BEFORE load_prompt_cache so a duplicate
+                # entry doesn't pay the safetensors mmap cost only to be
+                # discarded. Without this guard, bisect.insort would also
+                # create duplicate keys in _sorted_keys and memory would
+                # double-count. Benign — not a corruption signal.
+                tokens_key = tuple(tokens)
+                if tokens_key in self._entries:
+                    logger.debug(
+                        f"[cache_persist] entry {i} already present in cache "
+                        f"(len={len(tokens)}), skipping disk copy"
+                    )
+                    duplicate_skipped += 1
+                    continue
+
                 # Load KV cache (header completeness already validated above).
                 cache = load_prompt_cache(entry_path)
 
@@ -1314,19 +1346,6 @@ class MemoryAwarePrefixCache:
                         )
                         corrupt_skipped += 1
                         continue
-
-                # Skip duplicates (e.g. an entry that warmup already
-                # populated). Without this, bisect.insort would create
-                # duplicate keys in _sorted_keys and memory would
-                # double-count. Benign — not a corruption signal.
-                tokens_key = tuple(tokens)
-                if tokens_key in self._entries:
-                    logger.debug(
-                        f"[cache_persist] entry {i} already present in cache "
-                        f"(len={len(tokens)}), skipping disk copy"
-                    )
-                    duplicate_skipped += 1
-                    continue
 
                 # Estimate memory
                 memory = estimate_kv_cache_memory(cache)

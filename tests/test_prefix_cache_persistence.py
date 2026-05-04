@@ -491,6 +491,78 @@ def test_load_into_non_empty_cache_skips_duplicates(tmp_path):
     assert warmup_keys[0] in runtime._sorted_keys
 
 
+def test_recovery_rejects_new_with_index_but_no_entry_files(tmp_path):
+    """If ``.new/index.json`` references entries but the entry files are
+    missing on disk (manual deletion, fs corruption, partial restore),
+    recovery must NOT promote ``.new``. Doing so would discard ``.old``
+    in favor of an empty snapshot — net data loss.
+    """
+    cache_dir = tmp_path / "snap"
+    new_dir = tmp_path / "snap.new"
+    old_dir = tmp_path / "snap.old"
+
+    # Build a real, complete snapshot in .old
+    c1 = fresh_cache()
+    c1.store(list(range(11)), make_kvcache(num_tokens=11))
+    c1.save_to_disk(str(cache_dir))
+    cache_dir.rename(old_dir)
+
+    # Hand-craft a .new with valid-looking index.json but NO entry files
+    new_dir.mkdir()
+    (new_dir / "index.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "num_entries": 1,
+                "total_memory_bytes": 12345,
+                "entries": [{"index": 0, "num_tokens": 11, "memory_bytes": 12345}],
+            }
+        )
+    )
+
+    c2 = fresh_cache()
+    loaded = c2.load_from_disk(str(cache_dir))
+    # Recovery should fall through to .old, not silently lose the snapshot
+    assert loaded == 1, "recovery promoted an empty .new and lost .old"
+    entry = next(iter(c2._entries.values()))
+    assert entry.tokens == tuple(range(11))
+
+
+def test_load_dedup_check_runs_before_safetensors_load(tmp_path, monkeypatch):
+    """Performance + memory: a tokens_key that's already in the in-memory
+    cache must skip ``load_prompt_cache`` entirely. Otherwise every
+    duplicate entry mmaps its safetensors only to discard it — wastes
+    file descriptors, memory, and time.
+    """
+    cache_dir = tmp_path / "snap"
+    persisted = fresh_cache()
+    persisted.store(list(range(11)), make_kvcache(num_tokens=11))
+    persisted.save_to_disk(str(cache_dir))
+
+    # Spy on load_prompt_cache to count calls
+    import mlx_lm.models.cache as mlx_cache_mod
+
+    real_load = mlx_cache_mod.load_prompt_cache
+    call_count = {"n": 0}
+
+    def spy(path):
+        call_count["n"] += 1
+        return real_load(path)
+
+    monkeypatch.setattr(mlx_cache_mod, "load_prompt_cache", spy)
+    monkeypatch.setattr("vllm_mlx.memory_cache.load_prompt_cache", spy, raising=False)
+
+    runtime = fresh_cache()
+    runtime.store(list(range(11)), make_kvcache(num_tokens=11))
+    loaded = runtime.load_from_disk(str(cache_dir))
+
+    assert loaded == 0, "the only persisted entry was a duplicate"
+    assert call_count["n"] == 0, (
+        f"load_prompt_cache should not be called for duplicates "
+        f"(was called {call_count['n']} time(s))"
+    )
+
+
 def test_save_routes_writes_through_staging_dir(tmp_path, monkeypatch):
     """Atomicity invariant: save_safetensors must be called with a path
     inside a sibling ``<cache_dir>.new`` staging directory, not directly

@@ -53,8 +53,9 @@ def test_build_screen_renders_request_metrics():
         False,
     )
 
-    assert "Last Request" in screen
-    assert "Averages (1 requests)" in screen
-    assert "Recent Requests" in screen
-    assert "decode=10.0 tok/s" in screen
-    assert "ttft=n/a" in screen
+    assert "Last request" in screen
+    assert "Averages so far (1 requests)" in screen
+    assert "Recent requests" in screen
+    assert "tokens/s" in screen
+    assert "10.0" in screen
+    assert "n/a" in screen

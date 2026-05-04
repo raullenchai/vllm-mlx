@@ -1566,7 +1566,10 @@ class Scheduler:
                     return False
                 # Validate batch dimension == 1 for KVCache layers
                 if hasattr(layer_cache, "keys") and layer_cache.keys is not None:
-                    if hasattr(layer_cache.keys, "shape") and layer_cache.keys.shape[0] != 1:
+                    if (
+                        hasattr(layer_cache.keys, "shape")
+                        and layer_cache.keys.shape[0] != 1
+                    ):
                         logger.debug(
                             f"Cache layer invalid: keys batch={layer_cache.keys.shape[0]}, expected 1"
                         )
@@ -1686,7 +1689,11 @@ class Scheduler:
                     cache = KVCache()
                     cache.keys, cache.values = state
                     cache.offset = (
-                        int(meta_state[0]) if meta_state else (cache.keys.shape[2] if hasattr(cache.keys, "shape") else 0)
+                        int(meta_state[0])
+                        if meta_state
+                        else (
+                            cache.keys.shape[2] if hasattr(cache.keys, "shape") else 0
+                        )
                     )
 
                 caches.append(cache)

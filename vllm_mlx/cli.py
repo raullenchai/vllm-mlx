@@ -151,6 +151,8 @@ def serve_command(args):
     # Configure CORS
     cors_origins = args.cors_origins if args.cors_origins else ["*"]
     server.configure_cors(cors_origins)
+    if getattr(args, "tui", False):
+        server.configure_request_metrics()
     if args.rate_limit > 0:
         server._rate_limiter = RateLimiter(
             requests_per_minute=args.rate_limit, enabled=True
@@ -398,13 +400,79 @@ def serve_command(args):
     print(f"  Ready: http://{host_display}:{args.port}/v1")
     print(f"  Docs:  http://{host_display}:{args.port}/docs")
     print()
-    uvicorn.run(
+
+    if getattr(args, "tui", False):
+        _run_with_tui(
+            app,
+            host=args.host,
+            port=args.port,
+            log_level=uvicorn_log_level,
+        )
+    else:
+        uvicorn.run(
+            app,
+            host=args.host,
+            port=args.port,
+            log_level=uvicorn_log_level,
+            timeout_keep_alive=30,
+        )
+
+
+def _run_with_tui(app, host: str, port: int, log_level) -> None:
+    """Run uvicorn in a background thread and the TUI in the foreground."""
+    import os
+    import signal
+    import threading
+    import time
+
+    import uvicorn
+
+    config = uvicorn.Config(
         app,
-        host=args.host,
-        port=args.port,
-        log_level=uvicorn_log_level,
+        host=host,
+        port=port,
+        log_level=log_level,
         timeout_keep_alive=30,
+        access_log=False,
     )
+    server = uvicorn.Server(config)
+    # Signal handlers can only be installed from the main thread.
+    server.install_signal_handlers = lambda: None  # type: ignore[assignment]
+
+    previous_handlers = {}
+
+    def _request_exit(signum, frame):
+        server.should_exit = True
+        previous = previous_handlers.get(signum)
+        if callable(previous):
+            previous(signum, frame)
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        previous_handlers[signum] = signal.getsignal(signum)
+        signal.signal(signum, _request_exit)
+
+    # Daemon mode keeps Ctrl-C responsive for the dev TUI. If uvicorn does not
+    # drain within the join timeout below, in-flight requests may be interrupted.
+    server_thread = threading.Thread(target=server.run, daemon=True)
+    server_thread.start()
+
+    try:
+        for _ in range(200):
+            if server.should_exit:
+                return
+            if server.started:
+                break
+            time.sleep(0.05)
+
+        from .tui import run_monitor
+
+        tui_host = "127.0.0.1" if host == "0.0.0.0" else host
+        run_monitor(f"http://{tui_host}:{port}", interval=1.0, pid=os.getpid())
+    finally:
+        server.should_exit = True
+        server_thread.join(timeout=5)
+        for signum, previous in previous_handlers.items():
+            signal.signal(signum, previous)
 
 
 def bench_command(args):
@@ -1372,6 +1440,11 @@ Examples:
         type=str,
         default=None,
         help="Pre-load an embedding model at startup (e.g. mlx-community/embeddinggemma-300m-6bit)",
+    )
+    serve_parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Run a live full-screen monitor TUI alongside the server (q to quit).",
     )
     # Bench command
     bench_parser = subparsers.add_parser("bench", help="Run benchmark")

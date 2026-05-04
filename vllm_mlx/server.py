@@ -332,6 +332,20 @@ def configure_cors(origins: list[str]) -> None:
     )
 
 
+_request_metrics_configured = False
+
+
+def configure_request_metrics() -> None:
+    """Enable per-request metrics for the opt-in TUI monitor."""
+    global _request_metrics_configured
+    if _request_metrics_configured:
+        return
+    from .middleware.metrics import MetricsMiddleware
+
+    app.add_middleware(MetricsMiddleware)
+    _request_metrics_configured = True
+
+
 # Auth and rate limiting — moved to middleware/auth.py
 from .middleware.auth import (  # noqa: E402
     RateLimiter,  # noqa: F401

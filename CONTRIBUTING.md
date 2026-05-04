@@ -40,7 +40,51 @@ Most tests run without a model. Tests in `tests/test_event_loop.py` require a ru
 1. Fork the repo and create a branch: `feat/`, `fix/`, `docs/`, `refactor/`
 2. Make your changes with tests if applicable
 3. Run `ruff check` and `ruff format` before committing
-4. Open a PR against `main` with a clear description
+4. **Self-validate your PR** (see below) — saves a round trip with maintainers
+5. Open a PR against `main` with a clear description
+
+## Self-Validating Your PR
+
+Before opening (or after pushing fixes to) your PR, run our validation pipeline against it. The same script is what maintainers run before merging — running it yourself catches the easy stuff before review and signals you've done your homework.
+
+```bash
+python3 -m scripts.pr_validate.pr_validate <PR#>
+```
+
+The script grades your PR through 7 steps and prints a strict markdown scorecard. Exit code 0 = `MERGE-SAFE`, exit code 1 = at least one step failed.
+
+| step | what it does | when |
+|---|---|---|
+| `fetch` | pulls your PR + diff, classifies blast radius | always |
+| `deepseek_review` | adversarial code review (skipped if no API key) | when `DEEPSEEK_API_KEY` is set |
+| `supply_chain` | flags new deps, install hooks, `eval`/`exec`/`shell=True`, hardcoded URLs | always |
+| `lint` | `ruff check` + `ruff format --check` | when diff has `.py` |
+| `targeted_tests` | runs tests touching the files you changed; **negative-control** filters pre-existing flakes | when diff has `.py` |
+| `full_unit` | full pytest suite minus integrations | medium/high blast |
+| `stress_e2e_bench` | boots a server, runs stress + agent integrations + bench vs baseline | high blast (engine/scheduler/memory_cache) |
+
+**You don't need every step to pass for a clean PR**, but the more green checks you have, the faster review goes. In particular:
+
+- **`lint` and `targeted_tests` are non-negotiable** — run these locally even without the full pipeline.
+- **`supply_chain` warnings** mean a maintainer will read your changes carefully (especially if you touched `setup.py`, `.github/workflows/`, `Makefile`, or added a new dep). That's not a problem — just be ready to explain the why.
+- **`stress_e2e_bench` requires Apple Silicon + enough RAM** to load a small model (≥6GB free). If you don't have the hardware, opt out with `PR_VALIDATE_NO_STRESS=1` — maintainers will run it for you on merge.
+- **`deepseek_review` needs an API key** — opt out with `PR_VALIDATE_NO_DEEPSEEK=1` if you don't have one. Maintainers will run it for you.
+
+```bash
+# Quick local check (no DeepSeek, no stress) — covers the "did I break anything obvious" case in <1 minute for most PRs:
+PR_VALIDATE_NO_DEEPSEEK=1 PR_VALIDATE_NO_STRESS=1 \
+    python3 -m scripts.pr_validate.pr_validate <PR#>
+```
+
+Full step list, gating logic, and how to add steps: [`scripts/pr_validate/README.md`](scripts/pr_validate/README.md).
+
+### What if my PR fails on a pre-existing main bug?
+
+`targeted_tests` already handles this — it re-runs failures on your PR's base commit and reclassifies "fails on main too" as pre-existing (not a regression). For `full_unit` you'll currently see the failure surfaced; mention it in the PR comment ("`test_X` is failing on main too — see issue #123") and a maintainer will confirm.
+
+### What if `pr_validate` itself misbehaves?
+
+It's still new. File an issue with `[pr_validate]` in the title and the artifacts under `/tmp/pr_validate/pr-<N>/` attached.
 
 ## Ways to Contribute
 

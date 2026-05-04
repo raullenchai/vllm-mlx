@@ -75,20 +75,33 @@ class Qwen3ReasoningParser(BaseThinkingReasoningParser):
         """
         Finalize streaming output.
 
-        If no tags were ever seen, the base class classified everything as
-        reasoning (to support implicit think mode where <think> is in the
-        prompt). But if </think> never appeared either, the model simply
-        doesn't use think tags — all output should have been content.
+        Three cases:
 
-        Emit a correction chunk with the full text as content. The server
-        emits this as a final SSE chunk so the client receives the complete
-        response.
+        1. No tags seen at all — base class classified everything as reasoning
+           (to support implicit think). Emit correction with full text.
 
-        This is safe because:
-        - Explicit think (<think>...<think>content): _saw_any_tag is True, no correction
-        - Implicit think (reasoning</think>content): _saw_any_tag is True, no correction
-        - No tags at all: _saw_any_tag is False, correction emitted
+        2. <think> seen (template injected or model generated) but </think>
+           never appeared — model never produced the closing tag. The base
+           class classified everything as reasoning. Emit correction with
+           full text (stripping the template-injected <think> prefix).
+
+        3. </think> seen — reasoning was properly completed. Either the model
+           produced content after </think> (already emitted as text_delta), or
+           the stream ended right at </think>. No correction needed.
+
+        Cases 1 and 2 fix a regression in the Anthropic streaming adapter
+        (#185 follow-on): when the chat template injects <think> as a prefix,
+        _saw_any_tag is set True from the first delta, preventing the original
+        no-tags correction. Checking for </think> presence directly handles
+        both the template-injected and genuinely-no-thought scenarios.
         """
-        if not self._saw_any_tag and accumulated_text:
-            return DeltaMessage(content=accumulated_text)
+        if self.end_token in accumulated_text:
+            # Case 3: proper close tag seen — no correction
+            return None
+        if accumulated_text:
+            # Cases 1 & 2: no close tag — emit full text as content
+            cleaned = accumulated_text
+            if cleaned.startswith(self.start_token):
+                cleaned = cleaned[len(self.start_token) :]
+            return DeltaMessage(content=cleaned or None)
         return None

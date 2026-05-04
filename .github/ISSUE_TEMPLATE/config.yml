@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / discussion
+    url: https://github.com/raullenchai/Rapid-MLX/discussions
+    about: For open-ended questions, share use cases, or general discussion. Bug reports, performance issues, and feature requests should use the forms above.

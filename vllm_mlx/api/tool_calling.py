@@ -104,6 +104,10 @@ def _coerce_schema_value(value: Any, schema: Any) -> Any:
         return value
     if value is None:
         return None
+    if schema_type in ("string", "str", "text", "varchar", "char", "enum"):
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False)
     if schema_type in ("array", "object"):
         return value
     if not isinstance(value, str):
@@ -303,13 +307,27 @@ def _parse_raw_json_tool_calls(text: str) -> list[dict] | None:
         except json.JSONDecodeError:
             pass
 
-    # Find JSON objects with balanced braces
+    # Find JSON objects with balanced braces. Respect quoted strings so
+    # file contents like '{"compilerOptions": {...}}' do not corrupt depth.
     tool_calls = []
     depth = 0
     start = None
+    in_string = False
+    escaped = False
 
     for i, char in enumerate(text):
-        if char == "{":
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
             if depth == 0:
                 start = i
             depth += 1

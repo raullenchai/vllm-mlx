@@ -79,6 +79,38 @@ def test_deepseek_v4_jangtq_loader_uses_tokenizer_patch(tmp_path, monkeypatch):
     ]
 
 
+def test_jang_loader_applies_tokenizer_chat_template(tmp_path, monkeypatch):
+    _install_fake_mlx_lm(monkeypatch)
+    (tmp_path / "config.json").write_text('{"model_type": "qwen3_5_moe"}')
+    (tmp_path / "jang_config.json").write_text(
+        json.dumps({"format": "jang", "format_version": "2.0"})
+    )
+    (tmp_path / "tokenizer_config.json").write_text(
+        json.dumps(
+            {
+                "chat_template": "{{ messages[0].content }}",
+                "bos_token": "<s>",
+                "eos_token": "</s>",
+            }
+        )
+    )
+
+    jang_tools = types.ModuleType("jang_tools")
+    loader = types.ModuleType("jang_tools.loader")
+    tokenizer = types.SimpleNamespace(chat_template=None, bos_token=None, eos_token=None)
+
+    loader.load_jang_model = lambda model_path: ("jang-v2-model", tokenizer)
+    monkeypatch.setitem(sys.modules, "jang_tools", jang_tools)
+    monkeypatch.setitem(sys.modules, "jang_tools.loader", loader)
+
+    from vllm_mlx.utils.tokenizer import load_model_with_fallback
+
+    assert load_model_with_fallback(str(tmp_path)) == ("jang-v2-model", tokenizer)
+    assert tokenizer.chat_template == "{{ messages[0].content }}"
+    assert tokenizer.bos_token == "<s>"
+    assert tokenizer.eos_token == "</s>"
+
+
 def test_jang_model_uses_standard_jang_loader(tmp_path, monkeypatch):
     _install_fake_mlx_lm(monkeypatch)
     (tmp_path / "config.json").write_text('{"model_type": "qwen3_5_moe"}')

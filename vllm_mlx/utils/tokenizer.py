@@ -137,6 +137,38 @@ def _patch_deepseek_v4_jangtq_tokenizer(model_path: Path):
         AutoTokenizer.from_pretrained = original_from_pretrained
 
 
+def _apply_jang_tokenizer_metadata(model_path: Path, tokenizer):
+    tokenizer_config_path = model_path / "tokenizer_config.json"
+    if not tokenizer_config_path.exists():
+        return tokenizer
+
+    try:
+        with open(tokenizer_config_path) as f:
+            tokenizer_config = json.load(f)
+    except Exception as e:
+        logger.debug(f"Failed to read tokenizer config for {model_path}: {e}")
+        return tokenizer
+
+    chat_template = tokenizer_config.get("chat_template")
+    if chat_template and not getattr(tokenizer, "chat_template", None):
+        tokenizer.chat_template = chat_template
+
+    for attr, key in (
+        ("bos_token", "bos_token"),
+        ("eos_token", "eos_token"),
+        ("unk_token", "unk_token"),
+        ("pad_token", "pad_token"),
+    ):
+        value = tokenizer_config.get(key)
+        if value and not getattr(tokenizer, attr, None):
+            try:
+                setattr(tokenizer, attr, value)
+            except Exception:
+                logger.debug(f"Failed to set tokenizer.{attr} for {model_path}")
+
+    return tokenizer
+
+
 def _load_jang_model(model_name: str):
     jang_config = _read_jang_config(model_name) or {}
     model_path = _resolve_model_path(model_name)
@@ -152,7 +184,8 @@ def _load_jang_model(model_name: str):
 
         logger.info(f"Loading JANGTQ/MXTQ model with jang-tools: {model_path}")
         with _patch_deepseek_v4_jangtq_tokenizer(model_path):
-            return load_jangtq_model(model_path)
+            model, tokenizer = load_jangtq_model(model_path)
+        return model, _apply_jang_tokenizer_metadata(model_path, tokenizer)
 
     try:
         from jang_tools.loader import load_jang_model
@@ -163,7 +196,8 @@ def _load_jang_model(model_name: str):
         ) from e
 
     logger.info(f"Loading JANG model with jang-tools: {model_path}")
-    return load_jang_model(model_path)
+    model, tokenizer = load_jang_model(model_path)
+    return model, _apply_jang_tokenizer_metadata(model_path, tokenizer)
 
 
 def _is_vendored_arch_model(model_name: str) -> bool:

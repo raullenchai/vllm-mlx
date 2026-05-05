@@ -513,15 +513,27 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
     if tool_calls and request.tools:
         _validate_tool_call_params(tool_calls, request.tools)
 
-    # Extract reasoning content FIRST.
-    # Note: extract_reasoning() is stateless (pure regex on full text),
-    # so using the singleton is safe here unlike the streaming variant.
+    # Extract reasoning content. extract_reasoning() is stateless (pure regex
+    # on full text), so the singleton is safe here unlike the streaming variant.
+    #
+    # When the tool parser successfully extracted tool_calls, its `cleaned_text`
+    # is authoritative (it has already stripped both <think> and <tool_call>
+    # tags). We only need reasoning_text for the separate response field — we
+    # must NOT replace cleaned_text by re-running the reasoning parser on the
+    # raw output, because that would re-introduce the tool tags the parser
+    # stripped. (Bug repro: model emits an unclosed `<tool_call>` — Hermes
+    # lenient regex extracts the JSON and returns content=None, which becomes
+    # ""; the old `cleaned_text or output.text` then fed the raw text back to
+    # the reasoning parser, leaving `<tool_call>` in the user-facing content.)
     reasoning_text = None
     if cfg.reasoning_parser:
-        text_to_parse = cleaned_text or output.text
-        reasoning_text, cleaned_text = cfg.reasoning_parser.extract_reasoning(
-            text_to_parse
-        )
+        if tool_calls:
+            reasoning_text, _ = cfg.reasoning_parser.extract_reasoning(output.text)
+        else:
+            text_to_parse = cleaned_text or output.text
+            reasoning_text, cleaned_text = cfg.reasoning_parser.extract_reasoning(
+                text_to_parse
+            )
 
     # Process response_format if specified (after reasoning parser cleaned the text)
     if response_format and not tool_calls:

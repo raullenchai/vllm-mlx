@@ -7,8 +7,10 @@ that transformers doesn't recognize. This module provides fallback loading
 directly from tokenizer.json.
 """
 
+import importlib.util
 import json
 import logging
+import types
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -166,7 +168,69 @@ def _apply_jang_tokenizer_metadata(model_path: Path, tokenizer):
             except Exception:
                 logger.debug(f"Failed to set tokenizer.{attr} for {model_path}")
 
+    if _is_deepseek_v4_path(model_path):
+        _apply_deepseek_v4_chat_encoder(model_path, tokenizer)
+
     return tokenizer
+
+
+def _apply_deepseek_v4_chat_encoder(model_path: Path, tokenizer):
+    encoding_path = model_path / "encoding" / "encoding_dsv4.py"
+    if not encoding_path.exists():
+        return
+
+    try:
+        spec = importlib.util.spec_from_file_location(
+            f"encoding_dsv4_{abs(hash(str(model_path.resolve())))}",
+            str(encoding_path),
+        )
+        if spec is None or spec.loader is None:
+            return
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except Exception as e:
+        logger.debug(f"Failed to load DSV4 chat encoder for {model_path}: {e}")
+        return
+
+    def apply_chat_template(
+        self,
+        messages,
+        *,
+        tokenize=False,
+        add_generation_prompt=True,
+        enable_thinking=None,
+        tools=None,
+        reasoning_effort=None,
+        **kwargs,
+    ):
+        prepared = [dict(message) for message in messages]
+        if tools:
+            if prepared and prepared[0].get("role") in {"system", "developer"}:
+                prepared[0] = {**prepared[0], "tools": tools}
+            else:
+                prepared.insert(0, {"role": "developer", "content": "", "tools": tools})
+
+        # DSV4 JANG bundles declare chat as their default mode.  rapid-mlx's
+        # shared helper auto-enables thinking for generic reasoning-capable
+        # models, so ignore that auto flag here unless a caller passes an
+        # explicit reasoning_effort.
+        thinking_mode = "thinking" if reasoning_effort else "chat"
+        prompt = module.encode_messages(
+            prepared,
+            thinking_mode=thinking_mode,
+            reasoning_effort=reasoning_effort,
+        )
+        if not add_generation_prompt:
+            for suffix in ("<｜Assistant｜><think>", "<｜Assistant｜></think>"):
+                if prompt.endswith(suffix):
+                    prompt = prompt[: -len(suffix)]
+                    break
+        if tokenize:
+            return self.encode(prompt, **kwargs)
+        return prompt
+
+    tokenizer.apply_chat_template = types.MethodType(apply_chat_template, tokenizer)
+    tokenizer._rapid_mlx_direct_generate = True
 
 
 def _patch_deepseek_v4_jangtq_rope_offset():
@@ -182,12 +246,20 @@ def _patch_deepseek_v4_jangtq_rope_offset():
 
     original_call = rope_cls.__call__
 
+    def _as_python_int(value):
+        for convert in (int, lambda v: v.item(), lambda v: v.tolist()):
+            try:
+                converted = convert(value)
+                if isinstance(converted, list):
+                    converted = converted[0]
+                return int(converted)
+            except (AttributeError, IndexError, TypeError, ValueError):
+                continue
+        return value
+
     def patched_call(self, x, offset=0, inverse=False, positions=None):
         if positions is None and not isinstance(offset, (int, float)):
-            try:
-                offset = int(offset.item())
-            except (AttributeError, TypeError, ValueError):
-                pass
+            offset = _as_python_int(offset)
         return original_call(
             self, x, offset=offset, inverse=inverse, positions=positions
         )

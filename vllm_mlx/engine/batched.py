@@ -11,6 +11,7 @@ MLLMBatchGenerator. MLLM models only initialise the MLLM scheduler (not the
 LLM engine), so text-only requests must also be routed through it.
 """
 
+import asyncio
 import functools
 import logging
 from collections.abc import AsyncIterator
@@ -593,6 +594,15 @@ class BatchedEngine(BaseEngine):
         if not self._loaded:
             await self.start()
 
+        if self._should_use_direct_generate(images, videos):
+            return await self._direct_generate(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop,
+            )
+
         if self._is_mllm and self._mllm_scheduler:
             # Use MLLM scheduler for all requests when model is multimodal.
             # MLLM models only initialise the _mllm_scheduler (not _engine),
@@ -640,6 +650,76 @@ class BatchedEngine(BaseEngine):
             finish_reason=output.finish_reason,
         )
 
+    def _should_use_direct_generate(
+        self,
+        images: list[str] | None = None,
+        videos: list[str] | None = None,
+    ) -> bool:
+        return (
+            not self._is_mllm
+            and not images
+            and not videos
+            and bool(getattr(self._tokenizer, "_rapid_mlx_direct_generate", False))
+        )
+
+    async def _direct_generate(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        stop: list[str] | None,
+    ) -> GenerationOutput:
+        loop = asyncio.get_running_loop()
+        runner = functools.partial(
+            self._run_direct_generate,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            stop=stop,
+        )
+        if self._model_load_executor is not None:
+            return await loop.run_in_executor(self._model_load_executor, runner)
+        return await asyncio.to_thread(runner)
+
+    def _run_direct_generate(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        stop: list[str] | None,
+    ) -> GenerationOutput:
+        from mlx_lm import generate as mlx_generate
+        from mlx_lm.sample_utils import make_sampler
+
+        sampler = make_sampler(temp=temperature, top_p=top_p) if temperature > 0 else None
+        kwargs = {
+            "prompt": prompt,
+            "max_tokens": max_tokens,
+            "verbose": False,
+        }
+        if sampler is not None:
+            kwargs["sampler"] = sampler
+
+        text = mlx_generate(self._model, self._tokenizer, **kwargs)
+        if stop:
+            for stop_seq in stop:
+                if stop_seq and stop_seq in text:
+                    text = text.split(stop_seq, 1)[0]
+                    break
+        text = clean_output_text(text)
+        tokens = self._tokenizer.encode(text)
+
+        return GenerationOutput(
+            text=text,
+            tokens=tokens,
+            prompt_tokens=len(self._tokenizer.encode(prompt)),
+            completion_tokens=len(tokens),
+            finish_reason="stop",
+        )
+
     async def stream_generate(
         self,
         prompt: str,
@@ -669,6 +749,25 @@ class BatchedEngine(BaseEngine):
         """
         if not self._loaded:
             await self.start()
+
+        if self._should_use_direct_generate(images, videos):
+            output = await self._direct_generate(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop,
+            )
+            yield GenerationOutput(
+                text=output.text,
+                new_text=output.text,
+                tokens=output.tokens,
+                prompt_tokens=output.prompt_tokens,
+                completion_tokens=output.completion_tokens,
+                finished=True,
+                finish_reason=output.finish_reason,
+            )
+            return
 
         if self._is_mllm and self._mllm_scheduler:
             # Use MLLM scheduler for all streaming when model is multimodal

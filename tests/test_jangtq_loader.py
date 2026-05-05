@@ -1,3 +1,4 @@
+import contextlib
 import json
 import sys
 import types
@@ -111,6 +112,61 @@ def test_jang_loader_applies_tokenizer_chat_template(tmp_path, monkeypatch):
     assert tokenizer.eos_token == "</s>"
 
 
+def test_deepseek_v4_jang_loader_uses_dsv4_chat_encoder(tmp_path, monkeypatch):
+    _install_fake_mlx_lm(monkeypatch)
+    (tmp_path / "config.json").write_text('{"model_type": "deepseek_v4"}')
+    (tmp_path / "jang_config.json").write_text(
+        json.dumps({"weight_format": "mxtq"})
+    )
+    (tmp_path / "tokenizer_config.json").write_text(
+        json.dumps({"chat_template": "hf-template"})
+    )
+    encoding_dir = tmp_path / "encoding"
+    encoding_dir.mkdir()
+    (encoding_dir / "encoding_dsv4.py").write_text(
+        "def encode_messages(messages, thinking_mode='chat', reasoning_effort=None):\n"
+        "    return f'dsv4:{thinking_mode}:{messages[-1][\"content\"]}'\n"
+    )
+
+    jang_tools = types.ModuleType("jang_tools")
+    load_jangtq = types.ModuleType("jang_tools.load_jangtq")
+    tokenizer = types.SimpleNamespace(
+        chat_template=None,
+        encode=lambda text, **kwargs: [ord(c) for c in text],
+    )
+    load_jangtq.load_jangtq_model = lambda model_path: ("jang-model", tokenizer)
+    monkeypatch.setitem(sys.modules, "jang_tools", jang_tools)
+    monkeypatch.setitem(sys.modules, "jang_tools.load_jangtq", load_jangtq)
+
+    from vllm_mlx.utils import tokenizer as tokenizer_module
+
+    monkeypatch.setattr(
+        tokenizer_module,
+        "_patch_deepseek_v4_jangtq_tokenizer",
+        lambda model_path: contextlib.nullcontext(),
+    )
+    monkeypatch.setattr(
+        tokenizer_module,
+        "_patch_deepseek_v4_jangtq_rope_offset",
+        lambda: None,
+    )
+
+    _, loaded_tokenizer = tokenizer_module.load_model_with_fallback(str(tmp_path))
+
+    assert loaded_tokenizer.apply_chat_template(
+        [{"role": "user", "content": "ok"}],
+        tokenize=False,
+        add_generation_prompt=True,
+        enable_thinking=True,
+    ) == "dsv4:chat:ok"
+    assert loaded_tokenizer.apply_chat_template(
+        [{"role": "user", "content": "ok"}],
+        tokenize=True,
+        add_generation_prompt=True,
+        reasoning_effort="high",
+    ) == [ord(c) for c in "dsv4:thinking:ok"]
+
+
 def test_deepseek_v4_rope_offset_patch_converts_scalar_offset(monkeypatch):
     class FakeOffset:
         def item(self):
@@ -134,6 +190,59 @@ def test_deepseek_v4_rope_offset_patch_converts_scalar_offset(monkeypatch):
     rope = FakeRoPE()
     assert rope("x", offset=FakeOffset()) == 7
     assert rope("x", offset=3) == 3
+
+
+def test_direct_generate_path_uses_mlx_lm_generate(monkeypatch):
+    from vllm_mlx.engine.batched import BatchedEngine
+
+    mlx_lm = types.ModuleType("mlx_lm")
+    sample_utils = types.ModuleType("mlx_lm.sample_utils")
+
+    calls = []
+
+    def fake_generate(model, tokenizer, **kwargs):
+        calls.append((model, tokenizer, kwargs))
+        return "4"
+
+    mlx_lm.generate = fake_generate
+    sample_utils.make_sampler = lambda temp, top_p: ("sampler", temp, top_p)
+    monkeypatch.setitem(sys.modules, "mlx_lm", mlx_lm)
+    monkeypatch.setitem(sys.modules, "mlx_lm.sample_utils", sample_utils)
+
+    engine = BatchedEngine.__new__(BatchedEngine)
+    engine._model = "model"
+
+    class FakeTokenizer:
+        _rapid_mlx_direct_generate = True
+
+        def encode(self, text):
+            return list(text)
+
+    engine._tokenizer = FakeTokenizer()
+
+    output = engine._run_direct_generate(
+        prompt="prompt",
+        max_tokens=8,
+        temperature=0.6,
+        top_p=0.95,
+        stop=None,
+    )
+
+    assert output.text == "4"
+    assert output.prompt_tokens == 6
+    assert output.completion_tokens == 1
+    assert calls == [
+        (
+            "model",
+            engine._tokenizer,
+            {
+                "prompt": "prompt",
+                "max_tokens": 8,
+                "verbose": False,
+                "sampler": ("sampler", 0.6, 0.95),
+            },
+        )
+    ]
 
 
 def test_jang_model_uses_standard_jang_loader(tmp_path, monkeypatch):

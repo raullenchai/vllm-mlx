@@ -657,6 +657,7 @@ async def stream_chat_completion(
         processor = StreamingPostProcessor(
             cfg,
             tools_requested=bool(request.tools),
+            enable_thinking=kwargs.get("enable_thinking"),
             json_mode=bool(
                 request.response_format
                 and getattr(request.response_format, "type", "text") != "text"

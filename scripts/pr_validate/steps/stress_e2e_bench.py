@@ -46,7 +46,17 @@ BASELINE_DIR = Path("harness/baselines")
 BENCH_PORT = 8451
 BENCH_THRESHOLD_PCT = 5.0
 SERVER_BOOT_TIMEOUT_S = 180
-SERVER_REQUEST_TIMEOUT_S = 60
+# Per-request timeout. Sized for the worst case in the matrix: cold-start
+# of a 27B-class model (~17 GB weights to mmap) immediately after the
+# previous server's lifespan finished writing its prefix cache to disk.
+# 60s was tuned for a 4B small-model matrix; raised to 180s when the
+# golden registry moved to real-capacity 27-35B models (PR #208).
+SERVER_REQUEST_TIMEOUT_S = 180
+# How long to wait for the previous server's port to free between back-
+# to-back model boots. SIGINT triggers a lifespan shutdown that writes
+# the prefix cache to disk — for large models this can run past the old
+# 10s budget. 30s covers a 35B model's cache flush comfortably.
+PORT_FREE_TIMEOUT_S = 30
 RAM_HEADROOM_GB = 8.0  # leave this much free for the OS + model load spike
 
 
@@ -341,7 +351,7 @@ def _server(choice: ModelChoice, ctx: Context):
                         proc.wait(timeout=10)
                     except subprocess.TimeoutExpired:
                         pass  # _force_kill_port handles port-bound orphans
-                if not _wait_for_port_free(BENCH_PORT, timeout=10):
+                if not _wait_for_port_free(BENCH_PORT, timeout=PORT_FREE_TIMEOUT_S):
                     _force_kill_port(BENCH_PORT)
         finally:
             if log_f is not None:

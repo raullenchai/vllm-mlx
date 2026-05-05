@@ -245,6 +245,58 @@ def test_direct_generate_path_uses_mlx_lm_generate(monkeypatch):
     ]
 
 
+def test_direct_stream_generate_yields_incremental_chunks(monkeypatch):
+    from vllm_mlx.engine.batched import BatchedEngine
+
+    mlx_lm = types.ModuleType("mlx_lm")
+    sample_utils = types.ModuleType("mlx_lm.sample_utils")
+
+    class FakeResponse:
+        def __init__(self, text, token, generation_tokens, finish_reason=None):
+            self.text = text
+            self.token = token
+            self.logprobs = None
+            self.prompt_tokens = 6
+            self.generation_tokens = generation_tokens
+            self.finish_reason = finish_reason
+
+    def fake_stream_generate(model, tokenizer, **kwargs):
+        assert model == "model"
+        assert kwargs["prompt"] == "prompt"
+        assert kwargs["max_tokens"] == 8
+        assert kwargs["sampler"] == ("sampler", 0.6, 0.95)
+        yield FakeResponse("o", 111, 1)
+        yield FakeResponse("k", 222, 2, "stop")
+
+    mlx_lm.stream_generate = fake_stream_generate
+    sample_utils.make_sampler = lambda temp, top_p: ("sampler", temp, top_p)
+    monkeypatch.setitem(sys.modules, "mlx_lm", mlx_lm)
+    monkeypatch.setitem(sys.modules, "mlx_lm.sample_utils", sample_utils)
+
+    engine = BatchedEngine.__new__(BatchedEngine)
+    engine._model = "model"
+
+    class FakeTokenizer:
+        pass
+
+    engine._tokenizer = FakeTokenizer()
+
+    outputs = list(
+        engine._run_direct_stream_generate(
+            prompt="prompt",
+            max_tokens=8,
+            temperature=0.6,
+            top_p=0.95,
+            stop=None,
+        )
+    )
+
+    assert [output.new_text for output in outputs] == ["o", "k"]
+    assert outputs[-1].text == "ok"
+    assert outputs[-1].completion_tokens == 2
+    assert outputs[-1].finished is True
+
+
 def test_jang_model_uses_standard_jang_loader(tmp_path, monkeypatch):
     _install_fake_mlx_lm(monkeypatch)
     (tmp_path / "config.json").write_text('{"model_type": "qwen3_5_moe"}')

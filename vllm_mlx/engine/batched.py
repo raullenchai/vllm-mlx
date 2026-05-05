@@ -655,6 +655,12 @@ class BatchedEngine(BaseEngine):
         images: list[str] | None = None,
         videos: list[str] | None = None,
     ) -> bool:
+        # TODO: Fix real batching for DeepSeek V4 JANGTQ instead of routing
+        # around it. The current mlx-lm BatchGenerator path corrupts DSV4
+        # JANGTQ output under rapid-mlx batching. A correct fix should compare
+        # BatchGenerator logits/output against mlx_lm.generate, then adapt cache
+        # offset handling, prompt-cache merge/extract, and RoPE position state
+        # until batched generation is bit-consistent with the direct path.
         return (
             not self._is_mllm
             and not images
@@ -720,6 +726,101 @@ class BatchedEngine(BaseEngine):
             finish_reason="stop",
         )
 
+    async def _direct_stream_generate(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        stop: list[str] | None,
+    ) -> AsyncIterator[GenerationOutput]:
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[GenerationOutput | Exception | None] = asyncio.Queue()
+
+        def enqueue(item: GenerationOutput | Exception | None) -> None:
+            loop.call_soon_threadsafe(queue.put_nowait, item)
+
+        def runner() -> None:
+            try:
+                for output in self._run_direct_stream_generate(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    stop=stop,
+                ):
+                    enqueue(output)
+            except Exception as e:
+                enqueue(e)
+            finally:
+                enqueue(None)
+
+        if self._model_load_executor is not None:
+            self._model_load_executor.submit(runner)
+        else:
+            loop.run_in_executor(None, runner)
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            if isinstance(item, Exception):
+                raise item
+            yield item
+
+    def _run_direct_stream_generate(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        stop: list[str] | None,
+    ):
+        from mlx_lm import stream_generate as mlx_stream_generate
+        from mlx_lm.sample_utils import make_sampler
+
+        sampler = make_sampler(temp=temperature, top_p=top_p) if temperature > 0 else None
+        kwargs = {
+            "prompt": prompt,
+            "max_tokens": max_tokens,
+        }
+        if sampler is not None:
+            kwargs["sampler"] = sampler
+
+        full_text = ""
+        token_ids: list[int] = []
+        emitted_stop = False
+        for response in mlx_stream_generate(self._model, self._tokenizer, **kwargs):
+            segment = response.text or ""
+            full_text += segment
+            token_ids.append(int(response.token))
+
+            finish_reason = response.finish_reason
+            if stop:
+                for stop_seq in stop:
+                    stop_at = full_text.find(stop_seq) if stop_seq else -1
+                    if stop_at >= 0:
+                        keep_len = max(0, stop_at - (len(full_text) - len(segment)))
+                        segment = segment[:keep_len]
+                        finish_reason = "stop"
+                        emitted_stop = True
+                        break
+
+            if segment or finish_reason:
+                yield GenerationOutput(
+                    text=clean_output_text(full_text),
+                    new_text=segment,
+                    tokens=list(token_ids),
+                    prompt_tokens=response.prompt_tokens,
+                    completion_tokens=response.generation_tokens,
+                    finished=bool(finish_reason),
+                    finish_reason=finish_reason,
+                    logprobs=response.logprobs,
+                )
+
+            if emitted_stop:
+                break
+
     async def stream_generate(
         self,
         prompt: str,
@@ -751,22 +852,14 @@ class BatchedEngine(BaseEngine):
             await self.start()
 
         if self._should_use_direct_generate(images, videos):
-            output = await self._direct_generate(
+            async for output in self._direct_stream_generate(
                 prompt=prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
                 stop=stop,
-            )
-            yield GenerationOutput(
-                text=output.text,
-                new_text=output.text,
-                tokens=output.tokens,
-                prompt_tokens=output.prompt_tokens,
-                completion_tokens=output.completion_tokens,
-                finished=True,
-                finish_reason=output.finish_reason,
-            )
+            ):
+                yield output
             return
 
         if self._is_mllm and self._mllm_scheduler:

@@ -1566,14 +1566,14 @@ Examples:
         "--model",
         type=str,
         default=None,
-        help="Model alias for check tier (default: qwen3.5-4b)",
+        help="Model alias for check tier (default: qwen3.5-35b)",
     )
     doctor_parser.add_argument(
         "--models",
         type=str,
         default=None,
         help="Comma-separated model aliases for full / benchmark tiers "
-        "(full default: qwen3.5-4b,qwen3.5-35b,qwen3.6-35b,gemma-4-26b; "
+        "(full default: qwen3.5-35b,qwen3.6-35b,gemma-4-26b; "
         "benchmark default: auto-discovered from local cache)",
     )
     doctor_parser.add_argument(

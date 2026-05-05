@@ -435,7 +435,9 @@ def _wait_for_server_ready(base_url: str, timeout_s: float = 600.0) -> None:
         except (OSError, urllib.error.URLError, TimeoutError) as e:
             last_error = str(e)
         time.sleep(0.25)
-    raise TimeoutError(f"Server did not become ready within {timeout_s:.0f}s: {last_error}")
+    raise TimeoutError(
+        f"Server did not become ready within {timeout_s:.0f}s: {last_error}"
+    )
 
 
 def _run_with_tui(app, host: str, host_display: str, port: int, log_level) -> None:

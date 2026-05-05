@@ -14,6 +14,7 @@ LLM engine), so text-only requests must also be routed through it.
 import asyncio
 import functools
 import logging
+import threading
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -601,6 +602,7 @@ class BatchedEngine(BaseEngine):
                 temperature=temperature,
                 top_p=top_p,
                 stop=stop,
+                prompt_progress_callback=kwargs.pop("prompt_progress_callback", None),
             )
 
         if self._is_mllm and self._mllm_scheduler:
@@ -675,6 +677,7 @@ class BatchedEngine(BaseEngine):
         temperature: float,
         top_p: float,
         stop: list[str] | None,
+        prompt_progress_callback=None,
     ) -> GenerationOutput:
         loop = asyncio.get_running_loop()
         runner = functools.partial(
@@ -684,6 +687,7 @@ class BatchedEngine(BaseEngine):
             temperature=temperature,
             top_p=top_p,
             stop=stop,
+            prompt_progress_callback=prompt_progress_callback,
         )
         if self._model_load_executor is not None:
             return await loop.run_in_executor(self._model_load_executor, runner)
@@ -696,11 +700,14 @@ class BatchedEngine(BaseEngine):
         temperature: float,
         top_p: float,
         stop: list[str] | None,
+        prompt_progress_callback=None,
     ) -> GenerationOutput:
         from mlx_lm import generate as mlx_generate
         from mlx_lm.sample_utils import make_sampler
 
-        sampler = make_sampler(temp=temperature, top_p=top_p) if temperature > 0 else None
+        sampler = (
+            make_sampler(temp=temperature, top_p=top_p) if temperature > 0 else None
+        )
         kwargs = {
             "prompt": prompt,
             "max_tokens": max_tokens,
@@ -708,6 +715,8 @@ class BatchedEngine(BaseEngine):
         }
         if sampler is not None:
             kwargs["sampler"] = sampler
+        if prompt_progress_callback is not None:
+            kwargs["prompt_progress_callback"] = prompt_progress_callback
 
         text = mlx_generate(self._model, self._tokenizer, **kwargs)
         if stop:
@@ -733,9 +742,11 @@ class BatchedEngine(BaseEngine):
         temperature: float,
         top_p: float,
         stop: list[str] | None,
+        prompt_progress_callback=None,
     ) -> AsyncIterator[GenerationOutput]:
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[GenerationOutput | Exception | None] = asyncio.Queue()
+        cancel_event = threading.Event()
 
         def enqueue(item: GenerationOutput | Exception | None) -> None:
             loop.call_soon_threadsafe(queue.put_nowait, item)
@@ -748,6 +759,8 @@ class BatchedEngine(BaseEngine):
                     temperature=temperature,
                     top_p=top_p,
                     stop=stop,
+                    prompt_progress_callback=prompt_progress_callback,
+                    cancel_event=cancel_event,
                 ):
                     enqueue(output)
             except Exception as e:
@@ -760,13 +773,16 @@ class BatchedEngine(BaseEngine):
         else:
             loop.run_in_executor(None, runner)
 
-        while True:
-            item = await queue.get()
-            if item is None:
-                break
-            if isinstance(item, Exception):
-                raise item
-            yield item
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                yield item
+        finally:
+            cancel_event.set()
 
     def _run_direct_stream_generate(
         self,
@@ -775,22 +791,37 @@ class BatchedEngine(BaseEngine):
         temperature: float,
         top_p: float,
         stop: list[str] | None,
+        prompt_progress_callback=None,
+        cancel_event: threading.Event | None = None,
     ):
         from mlx_lm import stream_generate as mlx_stream_generate
         from mlx_lm.sample_utils import make_sampler
 
-        sampler = make_sampler(temp=temperature, top_p=top_p) if temperature > 0 else None
+        sampler = (
+            make_sampler(temp=temperature, top_p=top_p) if temperature > 0 else None
+        )
         kwargs = {
             "prompt": prompt,
             "max_tokens": max_tokens,
         }
         if sampler is not None:
             kwargs["sampler"] = sampler
+        if prompt_progress_callback is not None or cancel_event is not None:
+
+            def _prompt_progress(processed: int, total: int) -> None:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise RuntimeError("Direct generation cancelled")
+                if prompt_progress_callback is not None:
+                    prompt_progress_callback(processed, total)
+
+            kwargs["prompt_progress_callback"] = _prompt_progress
 
         full_text = ""
         token_ids: list[int] = []
         emitted_stop = False
         for response in mlx_stream_generate(self._model, self._tokenizer, **kwargs):
+            if cancel_event is not None and cancel_event.is_set():
+                break
             segment = response.text or ""
             full_text += segment
             token_ids.append(int(response.token))
@@ -858,6 +889,7 @@ class BatchedEngine(BaseEngine):
                 temperature=temperature,
                 top_p=top_p,
                 stop=stop,
+                prompt_progress_callback=kwargs.pop("prompt_progress_callback", None),
             ):
                 yield output
             return

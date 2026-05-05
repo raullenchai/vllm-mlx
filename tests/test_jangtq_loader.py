@@ -1,6 +1,7 @@
 import contextlib
 import json
 import sys
+import threading
 import types
 
 
@@ -13,9 +14,7 @@ def _install_fake_mlx_lm(monkeypatch):
 def test_jangtq_model_uses_jang_tools_loader(tmp_path, monkeypatch):
     _install_fake_mlx_lm(monkeypatch)
     (tmp_path / "config.json").write_text('{"model_type": "deepseek_v4"}')
-    (tmp_path / "jang_config.json").write_text(
-        json.dumps({"weight_format": "mxtq"})
-    )
+    (tmp_path / "jang_config.json").write_text(json.dumps({"weight_format": "mxtq"}))
 
     calls = []
     jang_tools = types.ModuleType("jang_tools")
@@ -38,9 +37,7 @@ def test_jangtq_model_uses_jang_tools_loader(tmp_path, monkeypatch):
 def test_deepseek_v4_jangtq_loader_uses_tokenizer_patch(tmp_path, monkeypatch):
     _install_fake_mlx_lm(monkeypatch)
     (tmp_path / "config.json").write_text('{"model_type": "deepseek_v4"}')
-    (tmp_path / "jang_config.json").write_text(
-        json.dumps({"weight_format": "mxtq"})
-    )
+    (tmp_path / "jang_config.json").write_text(json.dumps({"weight_format": "mxtq"}))
 
     events = []
     jang_tools = types.ModuleType("jang_tools")
@@ -98,7 +95,9 @@ def test_jang_loader_applies_tokenizer_chat_template(tmp_path, monkeypatch):
 
     jang_tools = types.ModuleType("jang_tools")
     loader = types.ModuleType("jang_tools.loader")
-    tokenizer = types.SimpleNamespace(chat_template=None, bos_token=None, eos_token=None)
+    tokenizer = types.SimpleNamespace(
+        chat_template=None, bos_token=None, eos_token=None
+    )
 
     loader.load_jang_model = lambda model_path: ("jang-v2-model", tokenizer)
     monkeypatch.setitem(sys.modules, "jang_tools", jang_tools)
@@ -115,9 +114,7 @@ def test_jang_loader_applies_tokenizer_chat_template(tmp_path, monkeypatch):
 def test_deepseek_v4_jang_loader_uses_dsv4_chat_encoder(tmp_path, monkeypatch):
     _install_fake_mlx_lm(monkeypatch)
     (tmp_path / "config.json").write_text('{"model_type": "deepseek_v4"}')
-    (tmp_path / "jang_config.json").write_text(
-        json.dumps({"weight_format": "mxtq"})
-    )
+    (tmp_path / "jang_config.json").write_text(json.dumps({"weight_format": "mxtq"}))
     (tmp_path / "tokenizer_config.json").write_text(
         json.dumps({"chat_template": "hf-template"})
     )
@@ -153,12 +150,15 @@ def test_deepseek_v4_jang_loader_uses_dsv4_chat_encoder(tmp_path, monkeypatch):
 
     _, loaded_tokenizer = tokenizer_module.load_model_with_fallback(str(tmp_path))
 
-    assert loaded_tokenizer.apply_chat_template(
-        [{"role": "user", "content": "ok"}],
-        tokenize=False,
-        add_generation_prompt=True,
-        enable_thinking=True,
-    ) == "dsv4:chat:ok"
+    assert (
+        loaded_tokenizer.apply_chat_template(
+            [{"role": "user", "content": "ok"}],
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=True,
+        )
+        == "dsv4:chat:ok"
+    )
     assert loaded_tokenizer.apply_chat_template(
         [{"role": "user", "content": "ok"}],
         tokenize=True,
@@ -295,6 +295,87 @@ def test_direct_stream_generate_yields_incremental_chunks(monkeypatch):
     assert outputs[-1].text == "ok"
     assert outputs[-1].completion_tokens == 2
     assert outputs[-1].finished is True
+
+
+def test_direct_stream_generate_reports_prompt_progress(monkeypatch):
+    from vllm_mlx.engine.batched import BatchedEngine
+
+    mlx_lm = types.ModuleType("mlx_lm")
+    sample_utils = types.ModuleType("mlx_lm.sample_utils")
+    progress = []
+
+    class FakeResponse:
+        text = "o"
+        token = 111
+        logprobs = None
+        prompt_tokens = 6
+        generation_tokens = 1
+        finish_reason = "stop"
+
+    def fake_stream_generate(model, tokenizer, **kwargs):
+        kwargs["prompt_progress_callback"](3, 6)
+        yield FakeResponse()
+
+    mlx_lm.stream_generate = fake_stream_generate
+    sample_utils.make_sampler = lambda temp, top_p: None
+    monkeypatch.setitem(sys.modules, "mlx_lm", mlx_lm)
+    monkeypatch.setitem(sys.modules, "mlx_lm.sample_utils", sample_utils)
+
+    engine = BatchedEngine.__new__(BatchedEngine)
+    engine._model = "model"
+    engine._tokenizer = object()
+
+    outputs = list(
+        engine._run_direct_stream_generate(
+            prompt="prompt",
+            max_tokens=8,
+            temperature=0,
+            top_p=0.95,
+            stop=None,
+            prompt_progress_callback=lambda processed, total: progress.append(
+                (processed, total)
+            ),
+        )
+    )
+
+    assert progress == [(3, 6)]
+    assert outputs[0].new_text == "o"
+
+
+def test_direct_stream_generate_cancels_during_prompt_progress(monkeypatch):
+    from vllm_mlx.engine.batched import BatchedEngine
+
+    mlx_lm = types.ModuleType("mlx_lm")
+    sample_utils = types.ModuleType("mlx_lm.sample_utils")
+
+    def fake_stream_generate(model, tokenizer, **kwargs):
+        kwargs["prompt_progress_callback"](3, 6)
+        raise AssertionError("cancel should stop before decode")
+        yield
+
+    mlx_lm.stream_generate = fake_stream_generate
+    sample_utils.make_sampler = lambda temp, top_p: None
+    monkeypatch.setitem(sys.modules, "mlx_lm", mlx_lm)
+    monkeypatch.setitem(sys.modules, "mlx_lm.sample_utils", sample_utils)
+
+    engine = BatchedEngine.__new__(BatchedEngine)
+    engine._model = "model"
+    engine._tokenizer = object()
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    with contextlib.suppress(RuntimeError):
+        list(
+            engine._run_direct_stream_generate(
+                prompt="prompt",
+                max_tokens=8,
+                temperature=0,
+                top_p=0.95,
+                stop=None,
+                cancel_event=cancel_event,
+            )
+        )
+        raise AssertionError("expected cancellation")
 
 
 def test_jang_model_uses_standard_jang_loader(tmp_path, monkeypatch):

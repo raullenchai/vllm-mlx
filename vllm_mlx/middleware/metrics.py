@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 
@@ -13,6 +14,14 @@ logger = logging.getLogger(__name__)
 
 _TRACKED_PATHS = ("/v1/chat/completions", "/v1/completions")
 _MAX_BUFFER_BYTES = 4 * 1024 * 1024
+_current_request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "rapid_mlx_request_id",
+    default=None,
+)
+
+
+def get_current_request_id() -> str | None:
+    return _current_request_id.get()
 
 
 def _safe_json_loads(payload: str | bytes) -> dict | None:
@@ -73,6 +82,7 @@ class MetricsMiddleware:
 
         recorder = get_recorder()
         req_id = recorder.start(surface=path)
+        context_token = _current_request_id.set(req_id)
         is_chat = path == "/v1/chat/completions"
         sse_carry = b""
         json_buffer = bytearray()
@@ -84,6 +94,7 @@ class MetricsMiddleware:
         running_text_tokens = 0
         engine_gen_tps = 0.0
         engine_ttft: float | None = None
+        recorder_finished = False
 
         def poll_engine_stats() -> None:
             nonlocal engine_gen_tps, engine_ttft
@@ -160,7 +171,7 @@ class MetricsMiddleware:
                         handle_payload(payload)
 
         async def send_wrapper(message):
-            nonlocal is_sse
+            nonlocal is_sse, recorder_finished
             try:
                 if message["type"] == "http.response.start":
                     headers = message.get("headers") or []
@@ -179,6 +190,7 @@ class MetricsMiddleware:
                         json_buffer.extend(body[: _MAX_BUFFER_BYTES - len(json_buffer)])
                     poll_engine_stats()
                     if not more:
+                        recorder_finished = True
                         if not is_sse and json_buffer:
                             payload = _safe_json_loads(bytes(json_buffer))
                             if payload is not None:
@@ -212,9 +224,22 @@ class MetricsMiddleware:
         try:
             await self.app(scope, receive, send_wrapper)
         except Exception as exc:
-            recorder.finish(req_id, finish_reason="error", error=str(exc))
+            if not recorder_finished:
+                recorder_finished = True
+                recorder.finish(req_id, finish_reason="error", error=str(exc))
             raise
         finally:
+            if not recorder_finished:
+                recorder.finish(
+                    req_id,
+                    finish_reason=last_finish_reason or "cancelled",
+                    prompt_tokens=last_prompt_tokens,
+                    generated_tokens=last_generated_tokens,
+                    non_streaming=not is_sse,
+                    engine_gen_tps=engine_gen_tps if engine_gen_tps > 0 else None,
+                    engine_ttft=engine_ttft,
+                )
+            _current_request_id.reset(context_token)
             poller_done.set()
             try:
                 await poller_task

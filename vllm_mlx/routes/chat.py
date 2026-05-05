@@ -63,6 +63,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+def _make_prompt_progress_callback():
+    from ..middleware.metrics import get_current_request_id
+    from ..request_metrics import get_recorder
+
+    req_id = get_current_request_id()
+    if req_id is None:
+        return None
+
+    recorder = get_recorder()
+
+    def _callback(processed: int, total: int) -> None:
+        recorder.update(req_id, prompt_tokens=max(int(processed), int(total)))
+
+    return _callback
+
+
 _TOOL_INTENT_RE = re.compile(
     r"\b("
     r"let me|now let me|i'?ll|i will|starting with|"
@@ -316,6 +333,9 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
         "top_p": _resolve_top_p(request.top_p),
         "stop": request.stop,
     }
+    prompt_progress_callback = _make_prompt_progress_callback()
+    if prompt_progress_callback is not None:
+        chat_kwargs["prompt_progress_callback"] = prompt_progress_callback
 
     # Add multimodal content
     if has_media:

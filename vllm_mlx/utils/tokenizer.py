@@ -125,9 +125,7 @@ def _patch_deepseek_v4_jangtq_tokenizer(model_path: Path):
             if Path(name).resolve() == resolved_path:
                 tokenizer_json = resolved_path / "tokenizer.json"
                 if tokenizer_json.exists():
-                    return PreTrainedTokenizerFast(
-                        tokenizer_file=str(tokenizer_json)
-                    )
+                    return PreTrainedTokenizerFast(tokenizer_file=str(tokenizer_json))
         except (OSError, RuntimeError):
             pass
         return original_from_pretrained(name, *args, **kwargs)

@@ -4,6 +4,7 @@
 import gc
 import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -61,6 +62,40 @@ from ..service.helpers import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _make_prompt_progress_callback():
+    from ..middleware.metrics import get_current_request_id
+    from ..request_metrics import get_recorder
+
+    req_id = get_current_request_id()
+    if req_id is None:
+        return None
+
+    recorder = get_recorder()
+
+    def _callback(processed: int, total: int) -> None:
+        recorder.update(req_id, prompt_tokens=max(int(processed), int(total)))
+
+    return _callback
+
+
+_TOOL_INTENT_RE = re.compile(
+    r"\b("
+    r"let me|now let me|i'?ll|i will|starting with|"
+    r"create|write|edit|run|test|verify|fix|repair"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_deferred_tool_use(text: str | None) -> bool:
+    if not text:
+        return False
+    lowered = text.lower()
+    if '"path"' in lowered:
+        return True
+    return bool(_TOOL_INTENT_RE.search(text))
 
 
 @router.post(
@@ -293,11 +328,16 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 
     # Prepare kwargs
     chat_kwargs = {
-        "max_tokens": _resolve_max_tokens(request.max_tokens, request.enable_thinking),
+        "max_tokens": _resolve_max_tokens(
+            request.max_tokens, request.enable_thinking, engine
+        ),
         "temperature": _resolve_temperature(request.temperature),
         "top_p": _resolve_top_p(request.top_p),
         "stop": request.stop,
     }
+    prompt_progress_callback = _make_prompt_progress_callback()
+    if prompt_progress_callback is not None:
+        chat_kwargs["prompt_progress_callback"] = prompt_progress_callback
 
     # Add multimodal content
     if has_media:
@@ -508,6 +548,43 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 
     # Parse tool calls from output using configured parser
     cleaned_text, tool_calls = _parse_tool_calls_with_parser(output.text, request)
+
+    retry_messages = list(messages)
+    for retry_index in range(2):
+        if (
+            not request.tools
+            or tool_calls
+            or not _looks_like_deferred_tool_use(cleaned_text or output.text)
+        ):
+            break
+        logger.info(
+            "Tool intent without tool call detected; retrying (%d/2)",
+            retry_index + 1,
+        )
+        retry_messages = retry_messages + [
+            {"role": "assistant", "content": cleaned_text or output.text},
+            {
+                "role": "user",
+                "content": (
+                    "Call the appropriate tool now. Do not explain, do not describe "
+                    "what you will do, and do not output raw JSON as text. If the "
+                    "previous tool failed, repair it by calling another tool."
+                ),
+            },
+        ]
+        retry_output = await _wait_with_disconnect(
+            engine.chat(messages=retry_messages, **chat_kwargs),
+            raw_request,
+            timeout=timeout,
+        )
+        if retry_output is None:
+            break
+        retry_cleaned_text, retry_tool_calls = _parse_tool_calls_with_parser(
+            retry_output.text, request
+        )
+        output = retry_output
+        cleaned_text = retry_cleaned_text
+        tool_calls = retry_tool_calls
 
     # Validate tool call parameter values against schemas
     if tool_calls and request.tools:

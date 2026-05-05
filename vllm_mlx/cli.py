@@ -393,20 +393,21 @@ def serve_command(args):
     # Start server
     # Note: Metal shader warmup runs in the FastAPI lifespan hook (server.py)
     # so it works for all engine types.
-    print()
     host_display = "localhost" if args.host == "0.0.0.0" else args.host
-    print(f"  Ready: http://{host_display}:{args.port}/v1")
-    print(f"  Docs:  http://{host_display}:{args.port}/docs")
-    print()
 
     if getattr(args, "tui", False):
         _run_with_tui(
             app,
             host=args.host,
+            host_display=host_display,
             port=args.port,
             log_level=uvicorn_log_level,
         )
     else:
+        print()
+        print(f"  Ready: http://{host_display}:{args.port}/v1")
+        print(f"  Docs:  http://{host_display}:{args.port}/docs")
+        print()
         uvicorn.run(
             app,
             host=args.host,
@@ -416,11 +417,31 @@ def serve_command(args):
         )
 
 
-def _run_with_tui(app, host: str, port: int, log_level) -> None:
+def _wait_for_server_ready(base_url: str, timeout_s: float = 600.0) -> None:
+    import json
+    import time
+    import urllib.error
+    import urllib.request
+
+    deadline = time.monotonic() + timeout_s
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(f"{base_url}/health", timeout=1.0) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if payload.get("status") == "healthy" and payload.get("model_loaded"):
+                return
+            last_error = f"health={payload!r}"
+        except (OSError, urllib.error.URLError, TimeoutError) as e:
+            last_error = str(e)
+        time.sleep(0.25)
+    raise TimeoutError(f"Server did not become ready within {timeout_s:.0f}s: {last_error}")
+
+
+def _run_with_tui(app, host: str, host_display: str, port: int, log_level) -> None:
     """Run uvicorn in a background thread and the TUI in the foreground."""
     import os
     import threading
-    import time
 
     import uvicorn
 
@@ -439,16 +460,17 @@ def _run_with_tui(app, host: str, port: int, log_level) -> None:
     server_thread = threading.Thread(target=server.run, daemon=True)
     server_thread.start()
 
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-
     from .tui import run_monitor
 
     tui_host = "127.0.0.1" if host == "0.0.0.0" else host
+    base_url = f"http://{tui_host}:{port}"
     try:
-        run_monitor(f"http://{tui_host}:{port}", interval=1.0, pid=os.getpid())
+        _wait_for_server_ready(base_url)
+        print()
+        print(f"  Ready: http://{host_display}:{port}/v1")
+        print(f"  Docs:  http://{host_display}:{port}/docs")
+        print()
+        run_monitor(base_url, interval=1.0, pid=os.getpid())
     finally:
         server.should_exit = True
         server_thread.join(timeout=5)

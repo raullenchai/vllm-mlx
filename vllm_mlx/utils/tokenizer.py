@@ -56,6 +56,69 @@ def _register_vendored_archs() -> None:
 _VENDORED_MODEL_TYPES = {"deepseek_v4"}
 
 
+def _read_jang_config(model_name: str) -> dict | None:
+    """Return jang_config.json if the model declares JANG/JANGTQ weights."""
+    try:
+        local = Path(model_name)
+        if local.is_dir():
+            config_path = local / "jang_config.json"
+        else:
+            from huggingface_hub import hf_hub_download
+
+            config_path = Path(
+                hf_hub_download(repo_id=model_name, filename="jang_config.json")
+            )
+        if not config_path.exists():
+            return None
+        with open(config_path) as f:
+            return json.load(f)
+    except Exception as e:
+        logger.debug(f"_read_jang_config({model_name}) failed: {e}")
+        return None
+
+
+def _is_jang_model(model_name: str) -> bool:
+    return _read_jang_config(model_name) is not None
+
+
+def _resolve_model_path(model_name: str) -> Path:
+    local_path = Path(model_name)
+    if local_path.is_dir():
+        return local_path
+
+    from huggingface_hub import snapshot_download
+
+    return Path(snapshot_download(model_name))
+
+
+def _load_jang_model(model_name: str):
+    jang_config = _read_jang_config(model_name) or {}
+    model_path = _resolve_model_path(model_name)
+
+    if jang_config.get("weight_format") == "mxtq":
+        try:
+            from jang_tools.load_jangtq import load_jangtq_model
+        except ImportError as e:
+            raise RuntimeError(
+                "JANGTQ/MXTQ model detected, but jang-tools is not installed. "
+                'Install the JANG extra with: pip install "rapid-mlx[jang]"'
+            ) from e
+
+        logger.info(f"Loading JANGTQ/MXTQ model with jang-tools: {model_path}")
+        return load_jangtq_model(model_path)
+
+    try:
+        from jang_tools.loader import load_jang_model
+    except ImportError as e:
+        raise RuntimeError(
+            "JANG model detected, but jang-tools is not installed. "
+            'Install the JANG extra with: pip install "rapid-mlx[jang]"'
+        ) from e
+
+    logger.info(f"Loading JANG model with jang-tools: {model_path}")
+    return load_jang_model(model_path)
+
+
 def _is_vendored_arch_model(model_name: str) -> bool:
     """Return True if model's config.json declares a model_type we vendor."""
     try:
@@ -93,6 +156,9 @@ def load_model_with_fallback(model_name: str, tokenizer_config: dict = None):
 
     _register_vendored_archs()
     tokenizer_config = tokenizer_config or {}
+
+    if _is_jang_model(model_name):
+        return _load_jang_model(model_name)
 
     # Check if model needs fallback (e.g., Nemotron)
     if _needs_tokenizer_fallback(model_name):

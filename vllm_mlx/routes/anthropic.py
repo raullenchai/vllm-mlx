@@ -44,6 +44,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _should_start_in_thinking(
+    chat_template: str, enable_thinking: bool | None
+) -> bool:
+    """Return whether streaming should begin in an implicit thinking block.
+
+    Some thinking-capable chat templates include ``<think>`` in the generated
+    assistant prefix instead of emitting it as a normal output token.  In that
+    case the stream router needs to start in thinking mode so tokens before
+    ``</think>`` are emitted as Anthropic thinking deltas.
+
+    When thinking is explicitly disabled, however, the template marker is only
+    stale capability metadata for routing purposes: direct answer tokens should
+    be emitted as text.  Otherwise Claude Code receives a message with only a
+    thinking block and no text result.
+    """
+    if enable_thinking is False:
+        return False
+    return "<think>" in chat_template and "add_generation_prompt" in chat_template
+
+
 @router.post("/v1/messages")
 async def create_anthropic_message(
     request: Request,
@@ -340,8 +360,8 @@ async def _stream_anthropic_messages(
     _chat_template = ""
     if _tokenizer and hasattr(_tokenizer, "chat_template"):
         _chat_template = _tokenizer.chat_template or ""
-    _starts_thinking = (
-        "<think>" in _chat_template and "add_generation_prompt" in _chat_template
+    _starts_thinking = _should_start_in_thinking(
+        _chat_template, chat_kwargs.get("enable_thinking")
     )
     think_router = StreamingThinkRouter(start_in_thinking=_starts_thinking)
     prompt_tokens = 0

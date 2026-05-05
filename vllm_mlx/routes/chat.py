@@ -328,7 +328,9 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 
     # Prepare kwargs
     chat_kwargs = {
-        "max_tokens": _resolve_max_tokens(request.max_tokens, request.enable_thinking),
+        "max_tokens": _resolve_max_tokens(
+            request.max_tokens, request.enable_thinking, engine
+        ),
         "temperature": _resolve_temperature(request.temperature),
         "top_p": _resolve_top_p(request.top_p),
         "stop": request.stop,

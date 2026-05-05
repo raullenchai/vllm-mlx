@@ -105,6 +105,7 @@ async def create_anthropic_message(
         "max_tokens": _resolve_max_tokens(
             openai_request.max_tokens,
             getattr(openai_request, "enable_thinking", None),
+            engine,
         ),
         "temperature": openai_request.temperature,
         "top_p": openai_request.top_p,
@@ -301,6 +302,7 @@ async def _stream_anthropic_messages(
         "max_tokens": _resolve_max_tokens(
             openai_request.max_tokens,
             getattr(openai_request, "enable_thinking", None),
+            engine,
         ),
         "temperature": openai_request.temperature,
         "top_p": openai_request.top_p,

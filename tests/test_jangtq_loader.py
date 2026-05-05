@@ -378,6 +378,24 @@ def test_direct_stream_generate_cancels_during_prompt_progress(monkeypatch):
         raise AssertionError("expected cancellation")
 
 
+def test_direct_jang_default_max_tokens_matches_mlx_lm_default():
+    from vllm_mlx.config import reset_config
+    from vllm_mlx.service.helpers import _resolve_max_tokens
+
+    cfg = reset_config()
+    cfg.default_max_tokens = 32768
+
+    class FakeTokenizer:
+        _rapid_mlx_direct_generate = True
+
+    class FakeEngine:
+        is_mllm = False
+        tokenizer = FakeTokenizer()
+
+    assert _resolve_max_tokens(None, engine=FakeEngine()) == 256
+    assert _resolve_max_tokens(4096, engine=FakeEngine()) == 4096
+
+
 def test_jang_model_uses_standard_jang_loader(tmp_path, monkeypatch):
     _install_fake_mlx_lm(monkeypatch)
     (tmp_path / "config.json").write_text('{"model_type": "qwen3_5_moe"}')

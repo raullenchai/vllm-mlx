@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 # ── Fallback defaults ──────────────────────────────────────────────
 _FALLBACK_TEMPERATURE = 0.7
 _FALLBACK_TOP_P = 0.9
+_DIRECT_JANG_DEFAULT_MAX_TOKENS = 256
 
 # Tool-use system prompt (auto-injected when tools are provided and parser is active)
 _TOOL_USE_SYSTEM_SUFFIX = (
@@ -70,12 +71,26 @@ def _resolve_model_name(request_model: str | None) -> str:
     return request_model
 
 
+def _uses_direct_jang_generation(engine: BaseEngine | None) -> bool:
+    if engine is None or getattr(engine, "is_mllm", False):
+        return False
+    try:
+        tokenizer = getattr(engine, "tokenizer", None)
+    except Exception:
+        return False
+    return bool(getattr(tokenizer, "_rapid_mlx_direct_generate", False))
+
+
 def _resolve_max_tokens(
-    request_value: int | None, enable_thinking: bool | None = None
+    request_value: int | None,
+    enable_thinking: bool | None = None,
+    engine: BaseEngine | None = None,
 ) -> int:
     """Resolve max_tokens with thinking budget for reasoning models."""
     cfg = get_config()
     base = request_value if request_value is not None else cfg.default_max_tokens
+    if request_value is None and _uses_direct_jang_generation(engine):
+        base = min(base, _DIRECT_JANG_DEFAULT_MAX_TOKENS)
     if enable_thinking is False:
         return base
     if cfg.reasoning_parser_name and base > 0 and base < 4096:

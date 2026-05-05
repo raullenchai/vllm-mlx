@@ -683,6 +683,13 @@ async def stream_chat_completion(
         processor = StreamingPostProcessor(
             cfg,
             tools_requested=bool(request.tools),
+            # `kwargs` is the **kwargs from this function's signature; the
+            # route handler unpacks chat_kwargs (which sets
+            # "enable_thinking" when request.enable_thinking is not None
+            # or cfg.no_thinking is set). Pulled through as a name so
+            # StreamingPostProcessor can short-circuit the reasoning
+            # parser when the client explicitly disabled thinking
+            # (closes the empty-content streaming bug from PR #208).
             enable_thinking=kwargs.get("enable_thinking"),
             json_mode=bool(
                 request.response_format

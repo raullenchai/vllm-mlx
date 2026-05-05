@@ -14,9 +14,28 @@ were extracted, trust the tool parser's cleaned_text and only run the
 reasoning parser to recover reasoning_text from the raw output.
 """
 
+from types import SimpleNamespace
+
 from vllm_mlx.reasoning.qwen3_parser import Qwen3ReasoningParser
 from vllm_mlx.routes.chat import _finalize_content_and_reasoning
 from vllm_mlx.tool_parsers.hermes_tool_parser import HermesToolParser
+
+
+def _make_request_stub() -> SimpleNamespace:
+    """Match the shape of ChatCompletionRequest the parser may inspect.
+
+    HermesToolParser may walk request.tools / request.model on
+    schema-driven type-conversion paths; passing None lets a future
+    parser change pass `request=None` silently while users would crash
+    in production. SimpleNamespace gives the parser the same attribute
+    access surface it sees in the live route.
+    """
+    return SimpleNamespace(
+        model="test-model",
+        tools=None,
+        tool_choice=None,
+        messages=[],
+    )
 
 
 def _drive_chat_route_pipeline(
@@ -34,7 +53,7 @@ def _drive_chat_route_pipeline(
     """
     parser = HermesToolParser(tokenizer=None)
     parser.reset()
-    result = parser.extract_tool_calls(raw_output, request=None)
+    result = parser.extract_tool_calls(raw_output, request=_make_request_stub())
     cleaned_text = result.content or ""
     tool_calls = list(result.tool_calls) if result.tools_called else []
 

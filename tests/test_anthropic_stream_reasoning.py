@@ -113,6 +113,16 @@ async def test_reasoning_parser_stream_emits_text_chunks(patched_cfg):
     thinking and never flushed because </think> never appeared in the
     parser-cleaned stream).
     Post-fix: thinking → thinking_delta, content → text_delta.
+
+    Coverage proof: production code at routes/anthropic.py:355-364
+    instantiates a real Qwen3ReasoningParser via
+    `get_parser(cfg.reasoning_parser_name)()` whenever
+    `cfg.reasoning_parser_name` is truthy. Setting it to "qwen3" here
+    makes that branch run, so the test exercises the new
+    parser-then-emit-directly path. We additionally spy on
+    `Qwen3ReasoningParser.extract_reasoning_streaming` so a future
+    refactor that bypasses the parser will fail this test loudly
+    instead of silently passing via the no-parser fallback.
     """
     # Qwen3 chat template fragment that triggers _starts_thinking=True.
     chat_template = "<think>{% if add_generation_prompt %}...{% endif %}"
@@ -125,6 +135,19 @@ async def test_reasoning_parser_stream_emits_text_chunks(patched_cfg):
         "</think>",
         "The answer is 42.",
     ]
+    # Spy on the real Qwen3ReasoningParser to PROVE the patched branch
+    # actually instantiated it. If a future change makes the test fall
+    # through to the no-parser path, this counter stays at 0 and the
+    # assertion below fires — preventing silent test rot.
+    from vllm_mlx.reasoning import qwen3_parser as qwen3_module
+
+    call_count = {"streaming": 0}
+    real_streaming = qwen3_module.Qwen3ReasoningParser.extract_reasoning_streaming
+
+    def _counted_streaming(self, *args, **kwargs):
+        call_count["streaming"] += 1
+        return real_streaming(self, *args, **kwargs)
+
     engine = _FakeEngine(deltas, chat_template=chat_template)
     openai_request = SimpleNamespace(
         model="qwen3.5-test",
@@ -149,10 +172,25 @@ async def test_reasoning_parser_stream_emits_text_chunks(patched_cfg):
     )
     anthropic_request = SimpleNamespace(model="qwen3.5-test")
 
-    stream = anthropic_route._stream_anthropic_messages(
-        engine, openai_request, anthropic_request
+    with patch.object(
+        qwen3_module.Qwen3ReasoningParser,
+        "extract_reasoning_streaming",
+        _counted_streaming,
+    ):
+        stream = anthropic_route._stream_anthropic_messages(
+            engine, openai_request, anthropic_request
+        )
+        events = await _collect_stream(stream)
+
+    # Spy assertion: production code MUST have called the parser. If
+    # this is 0, the test silently fell through to the no-parser branch
+    # and the new fix path was never exercised.
+    assert call_count["streaming"] > 0, (
+        "Qwen3ReasoningParser.extract_reasoning_streaming was not called — "
+        "the test fell through to the no-parser branch and is not actually "
+        "exercising the #185 fix. Check that cfg.reasoning_parser_name is "
+        "still 'qwen3' and that get_parser() resolves it."
     )
-    events = await _collect_stream(stream)
 
     text = "".join(_text_chunks(events))
     thinking = "".join(_thinking_chunks(events))

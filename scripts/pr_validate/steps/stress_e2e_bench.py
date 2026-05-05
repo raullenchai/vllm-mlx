@@ -46,7 +46,17 @@ BASELINE_DIR = Path("harness/baselines")
 BENCH_PORT = 8451
 BENCH_THRESHOLD_PCT = 5.0
 SERVER_BOOT_TIMEOUT_S = 180
-SERVER_REQUEST_TIMEOUT_S = 60
+# Per-request timeout. Sized for the worst case in the matrix: cold-start
+# of a 27B-class model (~17 GB weights to mmap) immediately after the
+# previous server's lifespan finished writing its prefix cache to disk.
+# 60s was tuned for a 4B small-model matrix; raised to 180s when the
+# golden registry moved to real-capacity 27-35B models (PR #208).
+SERVER_REQUEST_TIMEOUT_S = 180
+# How long to wait for the previous server's port to free between back-
+# to-back model boots. SIGINT triggers a lifespan shutdown that writes
+# the prefix cache to disk — for large models this can run past the old
+# 10s budget. 30s covers a 35B model's cache flush comfortably.
+PORT_FREE_TIMEOUT_S = 30
 RAM_HEADROOM_GB = 8.0  # leave this much free for the OS + model load spike
 
 
@@ -341,7 +351,7 @@ def _server(choice: ModelChoice, ctx: Context):
                         proc.wait(timeout=10)
                     except subprocess.TimeoutExpired:
                         pass  # _force_kill_port handles port-bound orphans
-                if not _wait_for_port_free(BENCH_PORT, timeout=10):
+                if not _wait_for_port_free(BENCH_PORT, timeout=PORT_FREE_TIMEOUT_S):
                     _force_kill_port(BENCH_PORT)
         finally:
             if log_f is not None:
@@ -361,13 +371,22 @@ def _port_in_use(port: int) -> bool:
 
 
 def _wait_for_server(port: int, timeout_s: int) -> bool:
-    """Poll /v1/models until 200 or timeout. Each attempt tolerates
-    connection refused (still booting) and 5xx (still loading model)."""
+    """Poll /health/ready until 200 or timeout. Each attempt tolerates
+    connection refused (still booting) and 503 (engine loading +
+    warmup + prefix-cache load still in progress).
+
+    /health/ready returns 200 only after lifespan has finished
+    engine.start() + warmup + load_from_disk + MCP init. Polling it
+    (instead of /v1/models) means the first stress/bench request
+    isn't racing the cold-start work — what previously looked like a
+    "request timeout" was actually warmup latency leaking past the
+    moment the FastAPI app started accepting connections.
+    """
     import urllib.error
     import urllib.request
 
     deadline = time.monotonic() + timeout_s
-    url = f"http://127.0.0.1:{port}/v1/models"
+    url = f"http://127.0.0.1:{port}/health/ready"
     while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310
@@ -447,13 +466,18 @@ def _run_agent(
         **os.environ,
         "RAPID_MLX_BASE_URL": f"http://127.0.0.1:{BENCH_PORT}/v1",
     }
+    # 1200s (20 min) per agent script. Sized for the slowest model in the
+    # matrix — Gemma 4 26B routes through MLLMModel (mlx-vlm) which has
+    # higher per-token decode overhead than the qwen3.5/qwen3.6 path. 600s
+    # was enough for 27B-class qwen models but truncated gemma4 langchain
+    # mid-suite (observed in pr_validate against PR #208).
     proc = subprocess.run(  # noqa: S603
         ["python3.12", str(script)],
         capture_output=True,
         text=True,
         env=env,
         cwd=str(ctx.repo_root),
-        timeout=600,
+        timeout=1200,
     )
     log.write_text((proc.stdout or "") + (proc.stderr or ""))
     summary = _grep_last(proc.stdout, "passed") or _grep_last(proc.stdout, "FAIL")

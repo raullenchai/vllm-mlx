@@ -371,13 +371,22 @@ def _port_in_use(port: int) -> bool:
 
 
 def _wait_for_server(port: int, timeout_s: int) -> bool:
-    """Poll /v1/models until 200 or timeout. Each attempt tolerates
-    connection refused (still booting) and 5xx (still loading model)."""
+    """Poll /health/ready until 200 or timeout. Each attempt tolerates
+    connection refused (still booting) and 503 (engine loading +
+    warmup + prefix-cache load still in progress).
+
+    /health/ready returns 200 only after lifespan has finished
+    engine.start() + warmup + load_from_disk + MCP init. Polling it
+    (instead of /v1/models) means the first stress/bench request
+    isn't racing the cold-start work — what previously looked like a
+    "request timeout" was actually warmup latency leaking past the
+    moment the FastAPI app started accepting connections.
+    """
     import urllib.error
     import urllib.request
 
     deadline = time.monotonic() + timeout_s
-    url = f"http://127.0.0.1:{port}/v1/models"
+    url = f"http://127.0.0.1:{port}/health/ready"
     while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310

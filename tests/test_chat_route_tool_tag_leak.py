@@ -61,9 +61,13 @@ class TestToolTagLeakRegression:
     def test_unclosed_tool_call_does_not_leak(self):
         # Real Qwopus 27B output: model omitted </tool_call> closing tag.
         raw = '<tool_call>\n{"name": "terminal", "arguments": {"command": "echo test"}}'
-        content, tool_calls, _ = _simulate_chat_route_pipeline(raw)
+        content, tool_calls, reasoning = _simulate_chat_route_pipeline(raw)
         assert tool_calls and tool_calls[0]["name"] == "terminal"
         _assert_no_leak(content)
+        # Qwen3's implicit-think heuristic could otherwise reroute a bare
+        # tool_call into reasoning_content where it would also be visible
+        # to the user. Guard both sinks.
+        _assert_no_leak(reasoning)
 
     def test_unclosed_tool_call_with_thinking_does_not_leak(self):
         # The exact shape that fires in stress_no_leak — reasoning + tool_call.
@@ -75,6 +79,7 @@ class TestToolTagLeakRegression:
         assert tool_calls and tool_calls[0]["name"] == "terminal"
         assert reasoning and "terminal tool" in reasoning
         _assert_no_leak(content)
+        _assert_no_leak(reasoning)
 
     def test_well_formed_tool_call_still_passes(self):
         # Control: properly closed tag. Should still extract cleanly.

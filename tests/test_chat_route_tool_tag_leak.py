@@ -15,16 +15,22 @@ reasoning parser to recover reasoning_text from the raw output.
 """
 
 from vllm_mlx.reasoning.qwen3_parser import Qwen3ReasoningParser
+from vllm_mlx.routes.chat import _finalize_content_and_reasoning
 from vllm_mlx.tool_parsers.hermes_tool_parser import HermesToolParser
 
 
-def _simulate_chat_route_pipeline(
+def _drive_chat_route_pipeline(
     raw_output: str,
 ) -> tuple[str | None, list, str | None]:
-    """Mirror the post-parse content pipeline in routes/chat.py.
+    """Drive the REAL post-parse helper from routes/chat.py.
 
-    Returns (final_content, tool_calls, reasoning_text). final_content is what
-    the user receives in `choices[0].message.content`.
+    Wraps the production tool parser + reasoning parser around the
+    extracted ``_finalize_content_and_reasoning`` helper so the
+    regression suite tests the exact orchestration the route runs —
+    no parallel reimplementation that can silently drift from prod.
+
+    Returns (final_content, tool_calls, reasoning_text). final_content
+    is what the user receives in `choices[0].message.content`.
     """
     parser = HermesToolParser(tokenizer=None)
     parser.reset()
@@ -33,11 +39,12 @@ def _simulate_chat_route_pipeline(
     tool_calls = list(result.tool_calls) if result.tools_called else []
 
     reasoning_parser = Qwen3ReasoningParser(tokenizer=None)
-    if tool_calls:
-        reasoning_text, _ = reasoning_parser.extract_reasoning(raw_output)
-    else:
-        text_to_parse = cleaned_text or raw_output
-        reasoning_text, cleaned_text = reasoning_parser.extract_reasoning(text_to_parse)
+    cleaned_text, reasoning_text = _finalize_content_and_reasoning(
+        raw_text=raw_output,
+        cleaned_text=cleaned_text,
+        tool_calls=tool_calls,
+        reasoning_parser=reasoning_parser,
+    )
 
     final_content = cleaned_text if cleaned_text else None
     return final_content, tool_calls, reasoning_text
@@ -61,7 +68,7 @@ class TestToolTagLeakRegression:
     def test_unclosed_tool_call_does_not_leak(self):
         # Real Qwopus 27B output: model omitted </tool_call> closing tag.
         raw = '<tool_call>\n{"name": "terminal", "arguments": {"command": "echo test"}}'
-        content, tool_calls, reasoning = _simulate_chat_route_pipeline(raw)
+        content, tool_calls, reasoning = _drive_chat_route_pipeline(raw)
         assert tool_calls and tool_calls[0]["name"] == "terminal"
         _assert_no_leak(content)
         # Qwen3's implicit-think heuristic could otherwise reroute a bare
@@ -75,7 +82,7 @@ class TestToolTagLeakRegression:
             "<think>The user wants me to use the terminal tool.</think>\n"
             '<tool_call>\n{"name": "terminal", "arguments": {"command": "echo test"}}'
         )
-        content, tool_calls, reasoning = _simulate_chat_route_pipeline(raw)
+        content, tool_calls, reasoning = _drive_chat_route_pipeline(raw)
         assert tool_calls and tool_calls[0]["name"] == "terminal"
         assert reasoning and "terminal tool" in reasoning
         _assert_no_leak(content)
@@ -88,7 +95,7 @@ class TestToolTagLeakRegression:
             '<tool_call>\n{"name": "terminal", "arguments": {"command": "echo test"}}\n'
             "</tool_call>"
         )
-        content, tool_calls, reasoning = _simulate_chat_route_pipeline(raw)
+        content, tool_calls, reasoning = _drive_chat_route_pipeline(raw)
         assert tool_calls and tool_calls[0]["name"] == "terminal"
         assert reasoning and "terminal" in reasoning
         _assert_no_leak(content)
@@ -101,7 +108,7 @@ class TestToolTagLeakRegression:
         # parser call is expected to be None in this branch — that is
         # pre-existing behavior unrelated to this fix.
         raw = "<think>Just thinking.</think>The actual answer is 42."
-        content, tool_calls, _ = _simulate_chat_route_pipeline(raw)
+        content, tool_calls, _ = _drive_chat_route_pipeline(raw)
         assert not tool_calls
         assert content and "answer is 42" in content
         _assert_no_leak(content)

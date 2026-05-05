@@ -466,13 +466,18 @@ def _run_agent(
         **os.environ,
         "RAPID_MLX_BASE_URL": f"http://127.0.0.1:{BENCH_PORT}/v1",
     }
+    # 1200s (20 min) per agent script. Sized for the slowest model in the
+    # matrix — Gemma 4 26B routes through MLLMModel (mlx-vlm) which has
+    # higher per-token decode overhead than the qwen3.5/qwen3.6 path. 600s
+    # was enough for 27B-class qwen models but truncated gemma4 langchain
+    # mid-suite (observed in pr_validate against PR #208).
     proc = subprocess.run(  # noqa: S603
         ["python3.12", str(script)],
         capture_output=True,
         text=True,
         env=env,
         cwd=str(ctx.repo_root),
-        timeout=600,
+        timeout=1200,
     )
     log.write_text((proc.stdout or "") + (proc.stderr or ""))
     summary = _grep_last(proc.stdout, "passed") or _grep_last(proc.stdout, "FAIL")

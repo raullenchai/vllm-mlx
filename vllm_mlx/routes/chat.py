@@ -63,6 +63,42 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _finalize_content_and_reasoning(
+    raw_text: str,
+    cleaned_text: str,
+    tool_calls: list,
+    reasoning_parser,
+) -> tuple[str, str | None]:
+    """Compute final ``content`` + ``reasoning_text`` after tool parsing.
+
+    Pulled out of the request handler so the regression suite can drive
+    the EXACT same orchestration the production path uses, instead of
+    maintaining a parallel reimplementation that can silently drift.
+
+    Rule (drives the unclosed-`<tool_call>` leak fix in PR #208): when
+    the tool parser successfully extracted ``tool_calls`` its
+    ``cleaned_text`` is authoritative — both ``<think>`` and tool tags
+    are already stripped. Run the reasoning parser on the raw output
+    only to recover ``reasoning_text``, never to overwrite
+    ``cleaned_text`` (that path would re-introduce the tool tags the
+    parser stripped, since the reasoning parser only knows about
+    ``<think>``).
+
+    When no tool_calls fire, the reasoning parser is the only thing
+    that can pull ``<think>`` out — run it on cleaned_text (or raw
+    output if cleaning produced an empty string).
+    """
+    reasoning_text = None
+    if reasoning_parser is None:
+        return cleaned_text, reasoning_text
+    if tool_calls:
+        reasoning_text, _ = reasoning_parser.extract_reasoning(raw_text)
+    else:
+        text_to_parse = cleaned_text or raw_text
+        reasoning_text, cleaned_text = reasoning_parser.extract_reasoning(text_to_parse)
+    return cleaned_text, reasoning_text
+
+
 @router.post(
     "/v1/chat/completions",
     dependencies=[Depends(verify_api_key), Depends(check_rate_limit)],
@@ -515,25 +551,15 @@ async def create_chat_completion(request: ChatCompletionRequest, raw_request: Re
 
     # Extract reasoning content. extract_reasoning() is stateless (pure regex
     # on full text), so the singleton is safe here unlike the streaming variant.
-    #
-    # When the tool parser successfully extracted tool_calls, its `cleaned_text`
-    # is authoritative (it has already stripped both <think> and <tool_call>
-    # tags). We only need reasoning_text for the separate response field — we
-    # must NOT replace cleaned_text by re-running the reasoning parser on the
-    # raw output, because that would re-introduce the tool tags the parser
-    # stripped. (Bug repro: model emits an unclosed `<tool_call>` — Hermes
-    # lenient regex extracts the JSON and returns content=None, which becomes
-    # ""; the old `cleaned_text or output.text` then fed the raw text back to
-    # the reasoning parser, leaving `<tool_call>` in the user-facing content.)
-    reasoning_text = None
-    if cfg.reasoning_parser:
-        if tool_calls:
-            reasoning_text, _ = cfg.reasoning_parser.extract_reasoning(output.text)
-        else:
-            text_to_parse = cleaned_text or output.text
-            reasoning_text, cleaned_text = cfg.reasoning_parser.extract_reasoning(
-                text_to_parse
-            )
+    # The tool_calls vs no-tool_calls split is encapsulated in
+    # _finalize_content_and_reasoning so the regression test suite can exercise
+    # the same orchestration without re-implementing it.
+    cleaned_text, reasoning_text = _finalize_content_and_reasoning(
+        raw_text=output.text,
+        cleaned_text=cleaned_text,
+        tool_calls=tool_calls,
+        reasoning_parser=cfg.reasoning_parser,
+    )
 
     # Process response_format if specified (after reasoning parser cleaned the text)
     if response_format and not tool_calls:

@@ -169,6 +169,33 @@ def _apply_jang_tokenizer_metadata(model_path: Path, tokenizer):
     return tokenizer
 
 
+def _patch_deepseek_v4_jangtq_rope_offset():
+    """Allow jang-tools DSV4 RoPE to accept MLX scalar offsets from batching."""
+    try:
+        from jang_tools.dsv4 import mlx_model
+    except ImportError:
+        return
+
+    rope_cls = getattr(mlx_model, "DeepseekV4RoPE", None)
+    if rope_cls is None or getattr(rope_cls, "_rapid_mlx_offset_patch", False):
+        return
+
+    original_call = rope_cls.__call__
+
+    def patched_call(self, x, offset=0, inverse=False, positions=None):
+        if positions is None and not isinstance(offset, (int, float)):
+            try:
+                offset = int(offset.item())
+            except (AttributeError, TypeError, ValueError):
+                pass
+        return original_call(
+            self, x, offset=offset, inverse=inverse, positions=positions
+        )
+
+    rope_cls.__call__ = patched_call
+    rope_cls._rapid_mlx_offset_patch = True
+
+
 def _load_jang_model(model_name: str):
     jang_config = _read_jang_config(model_name) or {}
     model_path = _resolve_model_path(model_name)
@@ -185,6 +212,8 @@ def _load_jang_model(model_name: str):
         logger.info(f"Loading JANGTQ/MXTQ model with jang-tools: {model_path}")
         with _patch_deepseek_v4_jangtq_tokenizer(model_path):
             model, tokenizer = load_jangtq_model(model_path)
+        if _is_deepseek_v4_path(model_path):
+            _patch_deepseek_v4_jangtq_rope_offset()
         return model, _apply_jang_tokenizer_metadata(model_path, tokenizer)
 
     try:

@@ -111,6 +111,31 @@ def test_jang_loader_applies_tokenizer_chat_template(tmp_path, monkeypatch):
     assert tokenizer.eos_token == "</s>"
 
 
+def test_deepseek_v4_rope_offset_patch_converts_scalar_offset(monkeypatch):
+    class FakeOffset:
+        def item(self):
+            return 7
+
+    class FakeRoPE:
+        def __call__(self, x, offset=0, inverse=False, positions=None):
+            return offset
+
+    dsv4 = types.ModuleType("jang_tools.dsv4")
+    mlx_model = types.ModuleType("jang_tools.dsv4.mlx_model")
+    mlx_model.DeepseekV4RoPE = FakeRoPE
+    dsv4.mlx_model = mlx_model
+    monkeypatch.setitem(sys.modules, "jang_tools.dsv4", dsv4)
+    monkeypatch.setitem(sys.modules, "jang_tools.dsv4.mlx_model", mlx_model)
+
+    from vllm_mlx.utils.tokenizer import _patch_deepseek_v4_jangtq_rope_offset
+
+    _patch_deepseek_v4_jangtq_rope_offset()
+
+    rope = FakeRoPE()
+    assert rope("x", offset=FakeOffset()) == 7
+    assert rope("x", offset=3) == 3
+
+
 def test_jang_model_uses_standard_jang_loader(tmp_path, monkeypatch):
     _install_fake_mlx_lm(monkeypatch)
     (tmp_path / "config.json").write_text('{"model_type": "qwen3_5_moe"}')

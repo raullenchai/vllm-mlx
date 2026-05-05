@@ -9,6 +9,7 @@ directly from tokenizer.json.
 
 import json
 import logging
+from contextlib import contextmanager
 from pathlib import Path
 
 from .chat_templates import DEFAULT_CHATML_TEMPLATE, NEMOTRON_CHAT_TEMPLATE
@@ -91,6 +92,51 @@ def _resolve_model_path(model_name: str) -> Path:
     return Path(snapshot_download(model_name))
 
 
+def _is_deepseek_v4_path(model_path: Path) -> bool:
+    try:
+        with open(model_path / "config.json") as f:
+            config = json.load(f)
+        return config.get("model_type") == "deepseek_v4"
+    except Exception as e:
+        logger.debug(f"_is_deepseek_v4_path({model_path}) failed: {e}")
+        return False
+
+
+@contextmanager
+def _patch_deepseek_v4_jangtq_tokenizer(model_path: Path):
+    """Bypass transformers AutoConfig for DSV4 while jang-tools expands EOS ids."""
+    if not _is_deepseek_v4_path(model_path):
+        yield
+        return
+
+    try:
+        from transformers import AutoTokenizer, PreTrainedTokenizerFast
+    except ImportError:
+        yield
+        return
+
+    original_from_pretrained = AutoTokenizer.from_pretrained
+    resolved_path = model_path.resolve()
+
+    def from_pretrained(name, *args, **kwargs):
+        try:
+            if Path(name).resolve() == resolved_path:
+                tokenizer_json = resolved_path / "tokenizer.json"
+                if tokenizer_json.exists():
+                    return PreTrainedTokenizerFast(
+                        tokenizer_file=str(tokenizer_json)
+                    )
+        except (OSError, RuntimeError):
+            pass
+        return original_from_pretrained(name, *args, **kwargs)
+
+    AutoTokenizer.from_pretrained = from_pretrained
+    try:
+        yield
+    finally:
+        AutoTokenizer.from_pretrained = original_from_pretrained
+
+
 def _load_jang_model(model_name: str):
     jang_config = _read_jang_config(model_name) or {}
     model_path = _resolve_model_path(model_name)
@@ -105,7 +151,8 @@ def _load_jang_model(model_name: str):
             ) from e
 
         logger.info(f"Loading JANGTQ/MXTQ model with jang-tools: {model_path}")
-        return load_jangtq_model(model_path)
+        with _patch_deepseek_v4_jangtq_tokenizer(model_path):
+            return load_jangtq_model(model_path)
 
     try:
         from jang_tools.loader import load_jang_model

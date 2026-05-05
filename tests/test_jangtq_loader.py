@@ -34,6 +34,51 @@ def test_jangtq_model_uses_jang_tools_loader(tmp_path, monkeypatch):
     assert calls == [tmp_path]
 
 
+def test_deepseek_v4_jangtq_loader_uses_tokenizer_patch(tmp_path, monkeypatch):
+    _install_fake_mlx_lm(monkeypatch)
+    (tmp_path / "config.json").write_text('{"model_type": "deepseek_v4"}')
+    (tmp_path / "jang_config.json").write_text(
+        json.dumps({"weight_format": "mxtq"})
+    )
+
+    events = []
+    jang_tools = types.ModuleType("jang_tools")
+    load_jangtq = types.ModuleType("jang_tools.load_jangtq")
+
+    class FakePatch:
+        def __init__(self, model_path):
+            events.append(("init", model_path))
+
+        def __enter__(self):
+            events.append(("enter", None))
+
+        def __exit__(self, *exc):
+            events.append(("exit", None))
+
+    def fake_load_jangtq_model(model_path):
+        events.append(("load", model_path))
+        return "jang-model", "jang-tokenizer"
+
+    load_jangtq.load_jangtq_model = fake_load_jangtq_model
+    monkeypatch.setitem(sys.modules, "jang_tools", jang_tools)
+    monkeypatch.setitem(sys.modules, "jang_tools.load_jangtq", load_jangtq)
+
+    from vllm_mlx.utils import tokenizer
+
+    monkeypatch.setattr(tokenizer, "_patch_deepseek_v4_jangtq_tokenizer", FakePatch)
+
+    assert tokenizer.load_model_with_fallback(str(tmp_path)) == (
+        "jang-model",
+        "jang-tokenizer",
+    )
+    assert events == [
+        ("init", tmp_path),
+        ("enter", None),
+        ("load", tmp_path),
+        ("exit", None),
+    ]
+
+
 def test_jang_model_uses_standard_jang_loader(tmp_path, monkeypatch):
     _install_fake_mlx_lm(monkeypatch)
     (tmp_path / "config.json").write_text('{"model_type": "qwen3_5_moe"}')

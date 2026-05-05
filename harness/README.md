@@ -100,16 +100,22 @@ Override the model with `--model qwen3.6-35b` (will need its own baseline).
 
 ### `full` (~2-3 hr, 3 models × 11 agent profiles)
 
-Loops the check tier across `qwen3.5-35b`, `qwen3.6-35b`, `gemma-4-26b`
-(coverage rationale: Qwen 3.5 + Qwen 3.6 + Gemma's distinct chat
-template/tool format — Qwen and Gemma cover the two parser families
-real users hit). For each model, also runs all 11 agent profiles'
-auto-generated test plans.
+Loops the check tier across `qwen3.5-35b` and `qwen3.6-35b`
+(real-capacity Qwen lines — both 8-bit, both go through the Hermes
+parser path that most users hit). For each model, also runs all 11
+agent profiles' auto-generated test plans.
+
+> Gemma 4 was previously in the default list for orthogonal coverage
+> but was dropped after PR #208 validation showed it fails multiple
+> agent tests due to model-side instruction-following gaps (writes
+> essays for "Count to 5", refuses to call tools, drops multi-turn
+> context). It can still be passed explicitly via `--models` for
+> manual investigation.
 
 Override the model list:
 
 ```bash
-rapid-mlx doctor full --models qwen3.5-35b,gemma-4-26b
+rapid-mlx doctor full --models qwen3.5-35b,qwen3.6-35b
 ```
 
 ### `benchmark` (overnight, all local models)
@@ -122,7 +128,7 @@ scorecard markdown:
 HF_HUB_CACHE=... rapid-mlx doctor benchmark
 
 # Or be explicit (forces inclusion even if cache probe misses):
-rapid-mlx doctor benchmark --models qwen3.5-35b,qwen3.6-35b,gemma-4-26b
+rapid-mlx doctor benchmark --models qwen3.5-35b,qwen3.6-35b
 ```
 
 Output:
